@@ -1,0 +1,26 @@
+import type { PaymentRequest } from '../types';
+
+export const samplePaymentRequests: PaymentRequest[] = [
+  { id: 'pr-001', projectId: 'pj-002', projectName: '[유밥] 한국특허기술진흥원 승진자 과정', payeeType: '강사', payeeName: '김도현', amount: 1500000, dueDate: '2026-06-10', status: '지급요청' },
+  { id: 'pr-002', projectId: 'pj-006', projectName: '[넥센타이어] SHADOW TRACE 팀빌딩', payeeType: '강사', payeeName: '박준영', amount: 1200000, dueDate: '2026-06-12', status: '지급요청' },
+  { id: 'pr-003', projectId: 'pj-006', projectName: '[넥센타이어] SHADOW TRACE 팀빌딩', payeeType: '업체', payeeName: '소품제작소', amount: 2000000, dueDate: '2026-06-15', status: '지급대상', memo: '추리게임 소품 제작' },
+  { id: 'pr-004', projectId: 'pj-012', projectName: '[한솔] 리더십 진단 워크숍', payeeType: '강사', payeeName: '강태웅', amount: 1900000, dueDate: '2026-06-13', status: '지급요청' },
+  { id: 'pr-005', projectId: 'pj-001', projectName: '[태림페이퍼] 2026 중간관리자 교육', payeeType: '강사', payeeName: '김도현', amount: 1500000, dueDate: '2026-06-20', status: '지급대상' },
+  { id: 'pr-006', projectId: 'pj-001', projectName: '[태림페이퍼] 2026 중간관리자 교육', payeeType: '강사', payeeName: '박준영', amount: 1200000, dueDate: '2026-06-20', status: '지급대상' },
+  { id: 'pr-007', projectId: 'pj-003', projectName: '[유밥] 제이브이엠 전사워크숍', payeeType: '강사', payeeName: '박준영', amount: 1200000, dueDate: '2026-07-02', status: '지급대상' },
+  { id: 'pr-008', projectId: 'pj-003', projectName: '[유밥] 제이브이엠 전사워크숍', payeeType: '강사', payeeName: '배유진', amount: 1350000, dueDate: '2026-07-02', status: '지급대상' },
+  { id: 'pr-009', projectId: 'pj-005', projectName: '[GS칼텍스] 영업 시니어 노하우 워크숍', payeeType: '강사', payeeName: '정우성', amount: 1600000, dueDate: '2026-06-25', status: '지급대상' },
+  { id: 'pr-010', projectId: 'pj-007', projectName: '[강원공무원교육원] 신입공무원 생성형 AI 과정', payeeType: '강사', payeeName: '이서연', amount: 1800000, dueDate: '2026-07-01', status: '지급대상' },
+  { id: 'pr-011', projectId: 'pj-009', projectName: '[KHNP] 교수진 AI 웹앱 실습 과정', payeeType: '강사', payeeName: '송재호', amount: 2000000, dueDate: '2026-07-08', status: '지급대상' },
+  { id: 'pr-012', projectId: 'pj-011', projectName: '[삼성전자] 파트장 조직활성화 과정', payeeType: '강사', payeeName: '김도현', amount: 3000000, dueDate: '2026-06-30', status: '지급대상' },
+  { id: 'pr-013', projectId: 'pj-011', projectName: '[삼성전자] 파트장 조직활성화 과정', payeeType: '강사', payeeName: '윤서아', amount: 3000000, dueDate: '2026-06-30', status: '지급대상' },
+  { id: 'pr-014', projectId: 'pj-015', projectName: '[한국사학진흥재단] 조직문화 워크숍', payeeType: '강사', payeeName: '윤서아', amount: 1400000, dueDate: '2026-06-22', status: '지급대상' },
+  { id: 'pr-015', projectId: 'pj-020', projectName: '[SAM.SOTTA] AI Master Builder 공개과정', payeeType: '강사', payeeName: '송재호', amount: 2000000, dueDate: '2026-07-05', status: '지급대상' },
+  { id: 'pr-016', projectId: 'pj-020', projectName: '[SAM.SOTTA] AI Master Builder 공개과정', payeeType: '강사', payeeName: '이서연', amount: 1800000, dueDate: '2026-07-05', status: '지급대상' },
+  { id: 'pr-017', projectId: 'pj-020', projectName: '[SAM.SOTTA] AI Master Builder 공개과정', payeeType: '업체', payeeName: '수료증인쇄', amount: 600000, dueDate: '2026-07-10', status: '지급대상', memo: '수료증/굿즈 제작' },
+  { id: 'pr-018', projectId: 'pj-010', projectName: '[서울대] 임원 리더십 특강', payeeType: '강사', payeeName: '강태웅', amount: 1900000, dueDate: '2026-05-10', status: '지급완료' },
+  { id: 'pr-019', projectId: 'pj-018', projectName: '[L&F] 리더십 전환 워크숍', payeeType: '강사', payeeName: '김도현', amount: 1500000, dueDate: '2026-05-15', status: '지급완료' },
+  { id: 'pr-020', projectId: 'pj-014', projectName: '[영상물등급위원회] 교육훈련 과정', payeeType: '강사', payeeName: '한가람', amount: 1100000, dueDate: '2026-05-20', status: '지급완료' },
+  { id: 'pr-021', projectId: 'pj-002', projectName: '[유밥] 한국특허기술진흥원 승진자 과정', payeeType: '업체', payeeName: '교재인쇄소', amount: 800000, dueDate: '2026-06-14', status: '지급대상', memo: '교재 인쇄' },
+  { id: 'pr-022', projectId: 'pj-019', projectName: '[디토닉] 핵심가치 내재화 워크숍', payeeType: '강사', payeeName: '미정', amount: 1800000, dueDate: '2026-07-05', status: '보류', memo: '프로젝트 보류' },
+];
