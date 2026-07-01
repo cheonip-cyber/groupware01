@@ -31,25 +31,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<GroupwareProfile | null>(null);
 
   const loadProfile = useCallback(async (userId: string, email: string) => {
-    // 최초 로그인 시 groupware.users에 본인 레코드가 없으면 셀프 등록 (RLS: users_insert_self)
-    const { data: existing } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    // groupware.users 행은 이제 DB 트리거(on_auth_user_created)가 auth.users 생성 시
+    // 자동으로 만들어준다(SECURITY DEFINER, RLS 우회). 클라이언트는 조회만 하면 되고,
+    // 트리거 반영 타이밍 대비 짧게 재시도한다.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { data: existing, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (existing) {
-      setProfile(existing as GroupwareProfile);
-      return;
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error('프로필 조회 실패:', error.message);
+        return;
+      }
+      if (existing) {
+        setProfile(existing as GroupwareProfile);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 400));
     }
-
-    const { data: created, error } = await supabase
-      .from('users')
-      .insert({ id: userId, email, name: email.split('@')[0] })
-      .select('*')
-      .single();
-
-    if (!error && created) setProfile(created as GroupwareProfile);
+    // eslint-disable-next-line no-console
+    console.error(`groupware.users 프로필을 찾을 수 없습니다 (email: ${email}). 트리거 동작을 확인해주세요.`);
   }, []);
 
   useEffect(() => {
