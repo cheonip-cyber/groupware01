@@ -18,9 +18,20 @@ export function Section({ title, children }: { title: string; children: React.Re
   );
 }
 
-export function ActionButton({ onClick, children, done, tone = 'blue' }:
-  { onClick: () => void; children: React.ReactNode; done?: boolean; tone?: 'blue' | 'emerald' | 'slate' }) {
-  if (done) return <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">✓ 완료됨</span>;
+export function ActionButton({ onClick, children, done, tone = 'blue', onUndo }:
+  { onClick: () => void; children: React.ReactNode; done?: boolean; tone?: 'blue' | 'emerald' | 'slate'; onUndo?: () => void }) {
+  if (done) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">✓ 완료됨</span>
+        {onUndo && (
+          <button onClick={onUndo} className="text-xs text-slate-400 underline hover:text-red-500">
+            취소
+          </button>
+        )}
+      </span>
+    );
+  }
   const toneCls = {
     blue: 'bg-blue-600 hover:bg-blue-700', emerald: 'bg-emerald-600 hover:bg-emerald-700', slate: 'bg-slate-700 hover:bg-slate-800',
   }[tone];

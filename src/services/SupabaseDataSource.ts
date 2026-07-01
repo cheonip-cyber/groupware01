@@ -6,7 +6,7 @@
 // ⚠️ 알려진 한계(문서화):
 // - prepItems 개별 체크 상태는 DB에 저장되지 않음(Notion 원본이 태그 목록이라 항목별 완료여부 없음).
 //   토글 시 화면에는 즉시 반영되나 새로고침하면 초기화됨(추후 별도 테이블로 보완 가능).
-// - reportCompleted, clientRequest, history(변경이력)는 DB 대응 필드가 없어 항상 기본값(false/빈 배열).
+// - clientRequest, history(변경이력)는 DB 대응 필드가 없어 항상 기본값(undefined/빈 배열).
 // - trainerFeeBudget 등 4개 예산 카테고리는 project_costs.category(강사비/인건비/교육비/대관비/기타)를
 //   근사 매핑하여 집계한 값이다(1:1 대응 아님).
 // =============================================================
@@ -101,7 +101,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 
     taxInvoiceIssued: !!row.is_tax_invoice_issued,
     statementSubmitted: !!row.is_statement_submitted,
-    reportCompleted: false, // DB 대응 필드 없음(근사 불가) — 항상 false
+    reportCompleted: !!row.is_report_completed,
     paymentRequested: paymentStatus === '지급요청' || paymentStatus === '지급완료',
     paymentCompleted: paymentStatus === '지급완료',
     collectionCompleted: !!row.client_payment_received,
@@ -176,12 +176,15 @@ class SupabaseDataSource implements DataSource {
 
     if (patch.taxInvoiceIssued !== undefined) dbPatch.is_tax_invoice_issued = patch.taxInvoiceIssued;
     if (patch.statementSubmitted !== undefined) dbPatch.is_statement_submitted = patch.statementSubmitted;
+    if (patch.reportCompleted !== undefined) dbPatch.is_report_completed = patch.reportCompleted;
     if (patch.collectionCompleted !== undefined) dbPatch.client_payment_received = patch.collectionCompleted;
     if (patch.collectionDoneDate !== undefined) dbPatch.client_payment_date = patch.collectionDoneDate;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
 
+    // 결산완료 처리 시 전체 진행상태를 '종료'로 승격, 취소 시 '보고/정산' 단계로 되돌림
     if (patch.settlementStatus === '결산완료') dbPatch.status = '종료(수익화완료)';
+    else if (patch.settlementStatus === '정산중') dbPatch.status = '보고/정산';
     else if (patch.projectStatus !== undefined) dbPatch.status = projectStatusToDbStatus(patch.projectStatus);
 
     // prepItems 토글은 DB 미지원(설계상 한계) — 로컬 상태만 반영, 서버 저장 생략

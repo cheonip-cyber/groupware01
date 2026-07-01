@@ -8,15 +8,16 @@ export function SettlementTab({ project, onUpdate }:
   { project: Project; onUpdate: (patch: Partial<Project>) => void }) {
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
 
-  const handleStatementDone = () =>
-    onUpdate({ statementSubmitted: true });
-  const handleReportDone = () =>
-    onUpdate({ reportCompleted: true });
+  const handleReportDone = () => onUpdate({ reportCompleted: true });
+  const handleReportUndo = () => onUpdate({ reportCompleted: false });
+
+  const handleStatementDone = () => onUpdate({ statementSubmitted: true });
+  const handleStatementUndo = () => onUpdate({ statementSubmitted: false });
+
   const handleSettlementDone = () =>
-    onUpdate({
-      settlementStatus: '결산완료',
-      projectStatus: '완료',
-    });
+    onUpdate({ settlementStatus: '결산완료', projectStatus: '완료' });
+  const handleSettlementUndo = () =>
+    onUpdate({ settlementStatus: '정산중', projectStatus: '보고/정산' });
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -24,7 +25,12 @@ export function SettlementTab({ project, onUpdate }:
         <Field label="보고서 작성">
           <div className="flex items-center gap-2">
             <YesNo value={project.reportCompleted} />
-            <ActionButton done={project.reportCompleted} tone="blue" onClick={handleReportDone}>
+            <ActionButton
+              done={project.reportCompleted}
+              tone="blue"
+              onClick={handleReportDone}
+              onUndo={handleReportUndo}
+            >
               보고서 작성완료 처리
             </ActionButton>
           </div>
@@ -32,7 +38,12 @@ export function SettlementTab({ project, onUpdate }:
         <Field label="거래명세서 제출">
           <div className="flex items-center gap-2">
             <YesNo value={project.statementSubmitted} />
-            <ActionButton done={project.statementSubmitted} tone="blue" onClick={handleStatementDone}>
+            <ActionButton
+              done={project.statementSubmitted}
+              tone="blue"
+              onClick={handleStatementDone}
+              onUndo={handleStatementUndo}
+            >
               거래명세서 제출완료 처리
             </ActionButton>
           </div>
@@ -59,6 +70,7 @@ export function SettlementTab({ project, onUpdate }:
             done={project.settlementStatus === '결산완료'}
             tone="emerald"
             onClick={handleSettlementDone}
+            onUndo={handleSettlementUndo}
           >
             결산완료 처리
           </ActionButton>

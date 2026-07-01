@@ -21,7 +21,13 @@ export function RevenueTab({ project, onUpdate }:
         <Field label="세금계산서 발행">
           <div className="flex items-center gap-2">
             <span className={project.taxInvoiceIssued ? 'text-emerald-600' : 'text-slate-400'}>{project.taxInvoiceIssued ? '발행완료' : '미발행'}</span>
-            <ActionButton done={project.taxInvoiceIssued} onClick={() => onUpdate({ taxInvoiceIssued: true, revenueStatus: '세금계산서 발행완료' })}>세금계산서 발행완료 처리</ActionButton>
+            <ActionButton
+              done={project.taxInvoiceIssued}
+              onClick={() => onUpdate({ taxInvoiceIssued: true })}
+              onUndo={() => onUpdate({ taxInvoiceIssued: false })}
+            >
+              세금계산서 발행완료 처리
+            </ActionButton>
           </div>
         </Field>
         <Field label="수금 예정일">{formatDate(project.collectionDueDate)}</Field>
@@ -29,8 +35,14 @@ export function RevenueTab({ project, onUpdate }:
         <Field label="수금 상태">
           <div className="flex items-center gap-2">
             <span className={project.collectionCompleted ? 'text-emerald-600' : 'text-slate-400'}>{project.collectionCompleted ? '수금완료' : '수금대기'}</span>
-            <ActionButton tone="emerald" done={project.collectionCompleted}
-              onClick={() => onUpdate({ collectionCompleted: true, revenueStatus: '수금완료', collectionDoneDate: new Date().toISOString().slice(0, 10) })}>수금완료 처리</ActionButton>
+            <ActionButton
+              tone="emerald"
+              done={project.collectionCompleted}
+              onClick={() => onUpdate({ collectionCompleted: true, collectionDoneDate: new Date().toISOString().slice(0, 10) })}
+              onUndo={() => onUpdate({ collectionCompleted: false, collectionDoneDate: undefined })}
+            >
+              수금완료 처리
+            </ActionButton>
           </div>
         </Field>
       </Section>
