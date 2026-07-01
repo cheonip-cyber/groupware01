@@ -90,6 +90,8 @@ export interface Project extends NotionSyncFields {
   totalAmount: number;
   collectionDueDate?: string;
   collectionDoneDate?: string;
+  taxInvoiceDate?: string;
+  revenueMonth?: string;
 
   // 예산/비용
   trainerFeeBudget: number;

@@ -7,6 +7,15 @@
 import type { Project, Instructor, Client, PaymentRequest, SyncStatus } from '../types';
 import { sampleProjects, sampleInstructors, sampleClients, samplePaymentRequests } from '../data/sampleData';
 
+export interface NewProjectCostInput {
+  category: '강사비' | '인건비' | '교육비' | '대관비' | '기타';
+  payeeType?: 'instructor' | 'company' | 'etc';
+  payeeId?: string;
+  payeeName: string;
+  budgetAmount: number;
+  isCardPayment?: boolean;
+}
+
 export interface DataSource {
   getProjects(): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
@@ -15,6 +24,7 @@ export interface DataSource {
   getClients(): Promise<Client[]>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
+  addProjectCost(projectId: string, input: NewProjectCostInput): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
 }
 
@@ -49,6 +59,19 @@ class SampleDataSource implements DataSource {
     if (idx < 0) return undefined;
     this.payments[idx] = { ...this.payments[idx], ...patch };
     return clone(this.payments[idx]);
+  }
+
+  async addProjectCost(projectId: string, input: import('./dataSource').NewProjectCostInput) {
+    await delay(60);
+    this.payments.push({
+      id: `pr-sample-${Date.now()}`,
+      projectId,
+      payeeType: input.payeeType === 'instructor' ? '강사' : input.payeeType === 'company' ? '업체' : '기타',
+      payeeName: input.payeeName,
+      amount: input.budgetAmount,
+      dueDate: '',
+      status: '지급대상',
+    });
   }
 
   async getSyncStatus(): Promise<SyncStatus> {

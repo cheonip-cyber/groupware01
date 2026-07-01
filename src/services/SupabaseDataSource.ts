@@ -88,6 +88,8 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     totalAmount: finalEstimate,
     collectionDueDate: undefined,
     collectionDoneDate: row.client_payment_date ?? undefined,
+    taxInvoiceDate: row.tax_invoice_date ?? undefined,
+    revenueMonth: row.revenue_month ?? undefined,
 
     trainerFeeBudget: sumBy('trainer'),
     operationBudget: sumBy('operation'),
@@ -175,6 +177,7 @@ class SupabaseDataSource implements DataSource {
     const dbPatch: Record<string, unknown> = {};
 
     if (patch.taxInvoiceIssued !== undefined) dbPatch.is_tax_invoice_issued = patch.taxInvoiceIssued;
+    if (patch.taxInvoiceDate !== undefined) dbPatch.tax_invoice_date = patch.taxInvoiceDate;
     if (patch.statementSubmitted !== undefined) dbPatch.is_statement_submitted = patch.statementSubmitted;
     if (patch.reportCompleted !== undefined) dbPatch.is_report_completed = patch.reportCompleted;
     if (patch.collectionCompleted !== undefined) dbPatch.client_payment_received = patch.collectionCompleted;
@@ -227,23 +230,58 @@ class SupabaseDataSource implements DataSource {
     }));
   }
 
+  // 지급기한: 요청사항 4 — "시행일(session_1_date) 기준 익월 말일 지급"
+  private computePaymentDueDate(sessionDate?: string | null): string {
+    if (!sessionDate) return '';
+    const d = new Date(sessionDate);
+    if (isNaN(d.getTime())) return '';
+    const due = new Date(d.getFullYear(), d.getMonth() + 2, 0); // 익월의 마지막 날
+    return due.toISOString().slice(0, 10);
+  }
+
+  private async buildPaymentRequests(rows: any[]): Promise<PaymentRequest[]> {
+    const instructorIds = [...new Set(rows.filter((r) => r.payee_type === 'instructor' && r.payee_id).map((r) => r.payee_id))];
+    const companyIds = [...new Set(rows.filter((r) => r.payee_type === 'company' && r.payee_id).map((r) => r.payee_id))];
+
+    const [{ data: instructors }, { data: companies }] = await Promise.all([
+      instructorIds.length
+        ? supabase.from('instructors').select('id, bank_name, account_number').in('id', instructorIds)
+        : Promise.resolve({ data: [] as any[] }),
+      companyIds.length
+        ? supabase.from('companies').select('id, bank_name, account_number').in('id', companyIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const instructorMap = new Map((instructors ?? []).map((i: any) => [i.id, i]));
+    const companyMap = new Map((companies ?? []).map((c: any) => [c.id, c]));
+
+    return rows.map((r: any) => {
+      const acct = r.payee_type === 'instructor' ? instructorMap.get(r.payee_id) : r.payee_type === 'company' ? companyMap.get(r.payee_id) : null;
+      const accountInfo = acct && acct.bank_name && acct.account_number ? `${acct.bank_name} ${acct.account_number}` : undefined;
+      return {
+        id: String(r.id),
+        projectId: String(r.project_id),
+        projectName: r.projects?.project_name ?? undefined,
+        payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
+        payeeName: r.payee_name ?? '',
+        amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
+        dueDate: r.status === '지급완료' ? (r.paid_month ?? '') : this.computePaymentDueDate(r.projects?.session_1_date),
+        status: r.status,
+        memo: r.remarks ?? undefined,
+        payeeAccountInfo: accountInfo,
+        infoConfirmed: !!r.payment_info_confirmed,
+        vendorTaxInvoiceReceived: !!r.vendor_tax_invoice_received,
+        vendorTaxInvoiceDate: r.vendor_tax_invoice_date ?? undefined,
+      } as PaymentRequest;
+    });
+  }
+
   async getPaymentRequests(): Promise<PaymentRequest[]> {
     const { data, error } = await supabase
       .from('project_costs')
-      .select('*, projects(project_name)')
+      .select('*, projects(project_name, session_1_date)')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return (data ?? []).map((r: any) => ({
-      id: String(r.id),
-      projectId: String(r.project_id),
-      projectName: r.projects?.project_name ?? undefined,
-      payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
-      payeeName: r.payee_name ?? '',
-      amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
-      dueDate: r.paid_month ?? '',
-      status: r.status,
-      memo: r.remarks ?? undefined,
-    }));
+    return this.buildPaymentRequests(data ?? []);
   }
 
   async updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined> {
@@ -252,25 +290,43 @@ class SupabaseDataSource implements DataSource {
       dbPatch.status = patch.status;
       if (patch.status === '지급완료') dbPatch.paid_month = new Date().toISOString().slice(0, 7);
     }
+    if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
+    if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
+    if (patch.vendorTaxInvoiceDate !== undefined) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate;
+
     if (Object.keys(dbPatch).length > 0) {
       const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(id));
       if (error) throw error;
     }
     const { data: r, error: fetchErr } = await supabase
-      .from('project_costs').select('*, projects(project_name)').eq('id', Number(id)).maybeSingle();
+      .from('project_costs').select('*, projects(project_name, session_1_date)').eq('id', Number(id)).maybeSingle();
     if (fetchErr) throw fetchErr;
     if (!r) return undefined;
-    return {
-      id: String(r.id),
-      projectId: String(r.project_id),
-      projectName: r.projects?.project_name ?? undefined,
-      payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
-      payeeName: r.payee_name ?? '',
-      amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
-      dueDate: r.paid_month ?? '',
-      status: r.status,
-      memo: r.remarks ?? undefined,
-    };
+    const [built] = await this.buildPaymentRequests([r]);
+    return built;
+  }
+
+  async addProjectCost(projectId: string, input: {
+    category: '강사비' | '인건비' | '교육비' | '대관비' | '기타';
+    payeeType?: 'instructor' | 'company' | 'etc';
+    payeeId?: string;
+    payeeName: string;
+    budgetAmount: number;
+    isCardPayment?: boolean;
+  }): Promise<void> {
+    const { error } = await supabase.from('project_costs').insert({
+      project_id: Number(projectId),
+      category: input.category,
+      payee_type: input.payeeType && input.payeeType !== 'etc' ? input.payeeType : null,
+      payee_id: input.payeeId ? Number(input.payeeId) : null,
+      payee_name: input.payeeName,
+      budget_amount: input.budgetAmount,
+      is_card_payment: input.isCardPayment ?? false,
+      is_payable: !(input.isCardPayment ?? false),
+      is_cost_recognized: true,
+      status: '미지급',
+    });
+    if (error) throw error;
   }
 
   async getSyncStatus(): Promise<SyncStatus> {

@@ -10,6 +10,11 @@ export interface PaymentRequest {
   dueDate: string;
   status: PaymentStatus;
   memo?: string;
+  // 지급 절차 관련 (요청사항: 지급정보 확인 → 매입세금계산서 확인(업체) → 지급요청)
+  payeeAccountInfo?: string;
+  infoConfirmed?: boolean;
+  vendorTaxInvoiceReceived?: boolean;
+  vendorTaxInvoiceDate?: string;
 }
 
 export interface SyncStatus {

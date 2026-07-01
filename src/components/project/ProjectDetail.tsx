@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import type { Project, PaymentRequest, PrepItem } from '../../types';
+import type { NewProjectCostInput } from '../../services/dataSource';
 import { OverviewTab } from './tabs/OverviewTab';
 import { OperationTab } from './tabs/OperationTab';
 import { RevenueTab } from './tabs/RevenueTab';
@@ -13,17 +14,22 @@ import { StatusBadge } from '../common/StatusBadge';
 import { projectStatusStyle } from '../../utils/statusConfig';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
 
-const TABS = ['개요', '운영', '매출', '예산/비용', '지급', '정산/결산', '히스토리'] as const;
+// 순서: 요청사항 4 — "정산/결산 컬럼 이후 순서로 지급 배치"
+const TABS = ['개요', '운영', '매출', '예산/비용', '정산/결산', '지급', '히스토리'] as const;
 type Tab = typeof TABS[number];
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, instructors, paymentRequests, loading, updateProject, updatePaymentRequest } = useAppData();
+  const {
+    projects, instructors, paymentRequests, loading,
+    updateProject, updatePaymentRequest, addProjectCost,
+  } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
   const [saving, setSaving] = useState(false);
 
   const project = projects.find((p) => p.id === id);
+  const projectRequests = paymentRequests.filter((r) => r.projectId === id);
 
   useEffect(() => {
     if (!loading && !project) navigate('/projects', { replace: true });
@@ -48,6 +54,12 @@ export function ProjectDetail() {
   const handleUpdateRequest = async (rid: string, patch: Partial<PaymentRequest>) => {
     setSaving(true);
     await updatePaymentRequest(rid, patch);
+    setSaving(false);
+  };
+
+  const handleAddCost = async (input: NewProjectCostInput) => {
+    setSaving(true);
+    await addProjectCost(project.id, input);
     setSaving(false);
   };
 
@@ -98,11 +110,13 @@ export function ProjectDetail() {
           {activeTab === '개요' && <OverviewTab project={project} instructors={instructors} />}
           {activeTab === '운영' && <OperationTab project={project} onTogglePrep={handleTogglePrep} />}
           {activeTab === '매출' && <RevenueTab project={project} onUpdate={handleUpdate} />}
-          {activeTab === '예산/비용' && <BudgetTab project={project} />}
-          {activeTab === '지급' && (
-            <PaymentTab project={project} requests={paymentRequests} onUpdateRequest={handleUpdateRequest} />
+          {activeTab === '예산/비용' && (
+            <BudgetTab project={project} requests={projectRequests} instructors={instructors} onAddCost={handleAddCost} />
           )}
-          {activeTab === '정산/결산' && <SettlementTab project={project} onUpdate={handleUpdate} />}
+          {activeTab === '정산/결산' && <SettlementTab project={project} requests={projectRequests} onUpdate={handleUpdate} />}
+          {activeTab === '지급' && (
+            <PaymentTab project={project} requests={projectRequests} onUpdateRequest={handleUpdateRequest} />
+          )}
           {activeTab === '히스토리' && <HistoryTab project={project} />}
         </div>
       </div>
