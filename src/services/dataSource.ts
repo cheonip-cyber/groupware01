@@ -58,4 +58,6 @@ class SampleDataSource implements DataSource {
 }
 
 // ── 활성 데이터 소스 (여기만 교체) ─────────────────────────
-export const dataSource: DataSource = new SampleDataSource();
+// 샘플 모드로 되돌리려면 아래 줄로 교체: export const dataSource: DataSource = new SampleDataSource();
+import { supabaseDataSource } from './SupabaseDataSource';
+export const dataSource: DataSource = supabaseDataSource;
