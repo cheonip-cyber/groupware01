@@ -7,4 +7,8 @@ export interface Instructor {
   defaultFee: number;
   accountInfo?: string;
   memo?: string;
+  // 지급정보 확인 팝업용 세부정보
+  bankName?: string;
+  accountNumber?: string;
+  residentNumber?: string;
 }

@@ -1,28 +1,39 @@
+import type { ReactNode } from 'react';
 import type { Project, PaymentRequest } from '../../../types';
 import { Section, Field, ActionButton } from './_shared';
 import { StatusBadge } from '../../common/StatusBadge';
 import { MoneyText } from '../../common/MoneyText';
 import { settlementStatusStyle } from '../../../utils/statusConfig';
-import { CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, ArrowRight } from 'lucide-react';
 
-// 확인 상태 배지 (완료/미완료/부분) 공용 컴포넌트
-function CheckRow({ label, state, detail }: { label: string; state: 'done' | 'pending' | 'partial'; detail?: string }) {
+// 확인 상태 배지 (완료/미완료/부분) — 클릭 시 토글 가능(onToggle 제공 시)
+function CheckRow({ label, state, detail, onToggle, hint }: {
+  label: string; state: 'done' | 'pending' | 'partial'; detail?: string; onToggle?: () => void; hint?: ReactNode;
+}) {
   const cfg = {
     done: { icon: <CheckCircle2 className="h-4 w-4 text-emerald-600" />, text: '완료', cls: 'text-emerald-600' },
     partial: { icon: <Clock className="h-4 w-4 text-amber-500" />, text: '일부 완료', cls: 'text-amber-600' },
     pending: { icon: <XCircle className="h-4 w-4 text-slate-300" />, text: '미완료', cls: 'text-slate-400' },
   }[state];
   return (
-    <div className="flex items-center justify-between border-b border-slate-50 px-1 py-2.5 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className={`flex items-center gap-1.5 text-sm font-medium ${cfg.cls}`}>
-        {cfg.icon}{cfg.text}{detail && <span className="text-xs font-normal text-slate-400">({detail})</span>}
-      </span>
+    <div className="border-b border-slate-50 px-1 py-2.5 last:border-0">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-slate-600">{label}</span>
+        {onToggle ? (
+          <button onClick={onToggle} className={`flex items-center gap-1.5 text-sm font-medium hover:underline ${cfg.cls}`}>
+            {cfg.icon}{cfg.text}{detail && <span className="text-xs font-normal text-slate-400">({detail})</span>}
+          </button>
+        ) : (
+          <span className={`flex items-center gap-1.5 text-sm font-medium ${cfg.cls}`}>
+            {cfg.icon}{cfg.text}{detail && <span className="text-xs font-normal text-slate-400">({detail})</span>}
+          </span>
+        )}
+      </div>
+      {hint && <p className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">{hint}</p>}
     </div>
   );
 }
 
-// 요청사항: "시행일 기준 익월 말일" 지급 기한 도래 여부
 function computeDueMonthInfo(sessionDate?: string): { dueLabel: string; isDueMonth: boolean } | null {
   if (!sessionDate) return null;
   const d = new Date(sessionDate);
@@ -43,7 +54,6 @@ export function SettlementTab({ project, requests, onUpdate }:
   const handleSettlementUndo = () =>
     onUpdate({ settlementStatus: '정산중', projectStatus: '보고/정산' });
 
-  // 지급업체(업체) 매입세금계산서 발행 확인
   const vendorRows = requests.filter((r) => r.payeeType === '업체');
   const vendorAllDone = vendorRows.length > 0 && vendorRows.every((r) => r.vendorTaxInvoiceReceived);
   const vendorSomeDone = vendorRows.some((r) => r.vendorTaxInvoiceReceived);
@@ -55,12 +65,27 @@ export function SettlementTab({ project, requests, onUpdate }:
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="정산 확인 상태">
-        <CheckRow label="고객사 세금계산서 발행" state={project.taxInvoiceIssued ? 'done' : 'pending'} />
-        <CheckRow label="고객사 수금" state={project.collectionCompleted ? 'done' : 'pending'} />
+        <CheckRow
+          label="제안서 제출"
+          state={project.proposalSubmitted ? 'done' : 'pending'}
+          onToggle={() => onUpdate({ proposalSubmitted: !project.proposalSubmitted })}
+        />
+        <CheckRow
+          label="거래명세서 제출"
+          state={project.statementSubmitted ? 'done' : 'pending'}
+          onToggle={() => onUpdate({ statementSubmitted: !project.statementSubmitted })}
+        />
+        <CheckRow label="고객사 세금계산서 발행" state={project.taxInvoiceIssued ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
+        <CheckRow label="고객사 수금" state={project.collectionCompleted ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
         <CheckRow
           label="지급업체 매입세금계산서 발행"
           state={vendorState}
           detail={vendorRows.length > 0 ? `${vendorRows.filter((r) => r.vendorTaxInvoiceReceived).length}/${vendorRows.length}건` : '해당없음'}
+          hint={
+            <span className="flex items-center gap-1">
+              <ArrowRight className="h-3 w-3" /> 지급 탭 &gt; 각 업체 항목 펼치기에서 설정
+            </span>
+          }
         />
         {dueInfo && (
           <CheckRow

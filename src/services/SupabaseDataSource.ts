@@ -12,7 +12,7 @@
 // =============================================================
 import { supabase } from './supabaseClient';
 import type { DataSource } from './dataSource';
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus, PrepItem } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, SyncStatus, PrepItem, Company } from '../types';
 import {
   dbStatusToProjectStatus, projectStatusToDbStatus,
   deriveRevenueStatus, derivePaymentStatus, deriveSettlementStatus,
@@ -103,6 +103,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 
     taxInvoiceIssued: !!row.is_tax_invoice_issued,
     statementSubmitted: !!row.is_statement_submitted,
+    proposalSubmitted: !!row.is_proposal_submitted,
     reportCompleted: !!row.is_report_completed,
     paymentRequested: paymentStatus === '지급요청' || paymentStatus === '지급완료',
     paymentCompleted: paymentStatus === '지급완료',
@@ -177,11 +178,12 @@ class SupabaseDataSource implements DataSource {
     const dbPatch: Record<string, unknown> = {};
 
     if (patch.taxInvoiceIssued !== undefined) dbPatch.is_tax_invoice_issued = patch.taxInvoiceIssued;
-    if (patch.taxInvoiceDate !== undefined) dbPatch.tax_invoice_date = patch.taxInvoiceDate;
+    if ('taxInvoiceDate' in patch) dbPatch.tax_invoice_date = patch.taxInvoiceDate ?? null;
     if (patch.statementSubmitted !== undefined) dbPatch.is_statement_submitted = patch.statementSubmitted;
+    if (patch.proposalSubmitted !== undefined) dbPatch.is_proposal_submitted = patch.proposalSubmitted;
     if (patch.reportCompleted !== undefined) dbPatch.is_report_completed = patch.reportCompleted;
     if (patch.collectionCompleted !== undefined) dbPatch.client_payment_received = patch.collectionCompleted;
-    if (patch.collectionDoneDate !== undefined) dbPatch.client_payment_date = patch.collectionDoneDate;
+    if ('collectionDoneDate' in patch) dbPatch.client_payment_date = patch.collectionDoneDate ?? null;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
 
@@ -213,6 +215,25 @@ class SupabaseDataSource implements DataSource {
       defaultFee: Number(r.fee_basis ?? 0),
       accountInfo: r.bank_name && r.account_number ? `${r.bank_name} ${r.account_number}` : undefined,
       memo: undefined,
+      bankName: r.bank_name ?? undefined,
+      accountNumber: r.account_number ?? undefined,
+      residentNumber: r.resident_number ?? undefined,
+    }));
+  }
+
+  async getCompanies(): Promise<Company[]> {
+    const { data, error } = await supabase.from('companies').select('*').eq('is_active', true);
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      id: String(r.id),
+      companyName: r.company_name,
+      ceoName: r.ceo_name ?? undefined,
+      businessNumber: r.business_number ?? undefined,
+      bankName: r.bank_name ?? undefined,
+      accountNumber: r.account_number ?? undefined,
+      taxType: r.tax_type ?? undefined,
+      managerContact: r.manager_contact ?? undefined,
+      email: r.email ?? undefined,
     }));
   }
 
@@ -237,6 +258,16 @@ class SupabaseDataSource implements DataSource {
     if (isNaN(d.getTime())) return '';
     const due = new Date(d.getFullYear(), d.getMonth() + 2, 0); // 익월의 마지막 날
     return due.toISOString().slice(0, 10);
+  }
+
+  // DB(project_costs.status: 미지급/지급요청/지급완료) ↔ 프론트(PaymentStatus: 지급대상/지급요청/지급완료/보류) 매핑
+  private static dbCostStatusToFrontend(s: string): PaymentRequest['status'] {
+    if (s === '미지급') return '지급대상';
+    return s as PaymentRequest['status'];
+  }
+  private static frontendStatusToDbCostStatus(s: string): string {
+    if (s === '지급대상') return '미지급';
+    return s;
   }
 
   private async buildPaymentRequests(rows: any[]): Promise<PaymentRequest[]> {
@@ -265,7 +296,7 @@ class SupabaseDataSource implements DataSource {
         payeeName: r.payee_name ?? '',
         amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
         dueDate: r.status === '지급완료' ? (r.paid_month ?? '') : this.computePaymentDueDate(r.projects?.session_1_date),
-        status: r.status,
+        status: SupabaseDataSource.dbCostStatusToFrontend(r.status),
         memo: r.remarks ?? undefined,
         payeeAccountInfo: accountInfo,
         infoConfirmed: !!r.payment_info_confirmed,
@@ -287,12 +318,12 @@ class SupabaseDataSource implements DataSource {
   async updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined> {
     const dbPatch: Record<string, unknown> = {};
     if (patch.status !== undefined) {
-      dbPatch.status = patch.status;
+      dbPatch.status = SupabaseDataSource.frontendStatusToDbCostStatus(patch.status);
       if (patch.status === '지급완료') dbPatch.paid_month = new Date().toISOString().slice(0, 7);
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
-    if (patch.vendorTaxInvoiceDate !== undefined) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate;
+    if ('vendorTaxInvoiceDate' in patch) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate ?? null;
 
     if (Object.keys(dbPatch).length > 0) {
       const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(id));
@@ -304,6 +335,11 @@ class SupabaseDataSource implements DataSource {
     if (!r) return undefined;
     const [built] = await this.buildPaymentRequests([r]);
     return built;
+  }
+
+  async deleteProjectCost(id: string): Promise<void> {
+    const { error } = await supabase.from('project_costs').delete().eq('id', Number(id));
+    if (error) throw error;
   }
 
   async addProjectCost(projectId: string, input: {

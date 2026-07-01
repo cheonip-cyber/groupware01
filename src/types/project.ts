@@ -107,6 +107,7 @@ export interface Project extends NotionSyncFields {
   // 진행 플래그
   taxInvoiceIssued: boolean;
   statementSubmitted: boolean;
+  proposalSubmitted: boolean;
   reportCompleted: boolean;
   paymentRequested: boolean;
   paymentCompleted: boolean;

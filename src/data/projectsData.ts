@@ -84,6 +84,7 @@ const make = (s: Seed): Project => {
     profitRate,
     taxInvoiceIssued: s.taxInvoiceIssued ?? false,
     statementSubmitted: s.statementSubmitted ?? false,
+    proposalSubmitted: true,
     reportCompleted: s.reportCompleted ?? false,
     paymentRequested: s.paymentRequested ?? false,
     paymentCompleted: s.paymentCompleted ?? false,

@@ -22,8 +22,8 @@ export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
-    projects, instructors, paymentRequests, loading,
-    updateProject, updatePaymentRequest, addProjectCost,
+    projects, instructors, companies, paymentRequests, loading,
+    updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
   } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
   const [saving, setSaving] = useState(false);
@@ -60,6 +60,12 @@ export function ProjectDetail() {
   const handleAddCost = async (input: NewProjectCostInput) => {
     setSaving(true);
     await addProjectCost(project.id, input);
+    setSaving(false);
+  };
+
+  const handleDeleteCost = async (costId: string) => {
+    setSaving(true);
+    await deleteProjectCost(costId);
     setSaving(false);
   };
 
@@ -111,7 +117,14 @@ export function ProjectDetail() {
           {activeTab === '운영' && <OperationTab project={project} onTogglePrep={handleTogglePrep} />}
           {activeTab === '매출' && <RevenueTab project={project} onUpdate={handleUpdate} />}
           {activeTab === '예산/비용' && (
-            <BudgetTab project={project} requests={projectRequests} instructors={instructors} onAddCost={handleAddCost} />
+            <BudgetTab
+              project={project}
+              requests={projectRequests}
+              instructors={instructors}
+              companies={companies}
+              onAddCost={handleAddCost}
+              onDeleteCost={handleDeleteCost}
+            />
           )}
           {activeTab === '정산/결산' && <SettlementTab project={project} requests={projectRequests} onUpdate={handleUpdate} />}
           {activeTab === '지급' && (

@@ -4,7 +4,7 @@
 // 추후: NotionDataSource / SupabaseDataSource 를 같은 인터페이스로
 //       구현하고 activeDataSource 만 바꾸면 전체 앱이 그대로 동작한다.
 // =============================================================
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, SyncStatus, Company } from '../types';
 import { sampleProjects, sampleInstructors, sampleClients, samplePaymentRequests } from '../data/sampleData';
 
 export interface NewProjectCostInput {
@@ -21,10 +21,12 @@ export interface DataSource {
   getProject(id: string): Promise<Project | undefined>;
   updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined>;
   getInstructors(): Promise<Instructor[]>;
+  getCompanies(): Promise<Company[]>;
   getClients(): Promise<Client[]>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
   addProjectCost(projectId: string, input: NewProjectCostInput): Promise<void>;
+  deleteProjectCost(id: string): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
 }
 
@@ -72,6 +74,13 @@ class SampleDataSource implements DataSource {
       dueDate: '',
       status: '지급대상',
     });
+  }
+
+  async getCompanies() { await delay(); return []; }
+
+  async deleteProjectCost(id: string) {
+    await delay(60);
+    this.payments = this.payments.filter((p) => p.id !== id);
   }
 
   async getSyncStatus(): Promise<SyncStatus> {

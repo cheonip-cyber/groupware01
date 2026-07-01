@@ -1,44 +1,175 @@
-import { useState } from 'react';
-import type { Project, PaymentRequest, Instructor } from '../../../types';
+import { useMemo, useState } from 'react';
+import type { Project, PaymentRequest, Instructor, Company } from '../../../types';
 import type { NewProjectCostInput } from '../../../services/dataSource';
 import { Section, Field } from './_shared';
 import { MoneyText } from '../../common/MoneyText';
 import { EmptyState } from '../../common/EmptyState';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2, Info, X } from 'lucide-react';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
-export function BudgetTab({ project, requests, instructors, onAddCost }: {
+// 강사/업체 검색형 선택 + 세부정보 확인 팝업
+function PayeePicker({
+  payeeType, instructors, companies, selectedId, onSelect,
+}: {
+  payeeType: 'instructor' | 'company';
+  instructors: Instructor[];
+  companies: Company[];
+  selectedId: string;
+  onSelect: (id: string, name: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [showDetail, setShowDetail] = useState(false);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (payeeType === 'instructor') {
+      return instructors
+        .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.phone ?? '').includes(q))
+        .slice(0, 8);
+    }
+    // 업체: 업체명 또는 대표자명으로 검색
+    return companies
+      .filter((c) => !q || c.companyName.toLowerCase().includes(q) || (c.ceoName ?? '').toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [query, payeeType, instructors, companies]);
+
+  const selected = payeeType === 'instructor'
+    ? instructors.find((i) => i.id === selectedId)
+    : companies.find((c) => c.id === selectedId);
+
+  // 동명이인/강사-업체 중복 여부 힌트
+  const dupWarning = useMemo(() => {
+    if (!selected) return null;
+    const name = payeeType === 'instructor' ? (selected as Instructor).name : (selected as Company).companyName;
+    const sameNameInstructor = instructors.filter((i) => i.name === name).length;
+    const sameNameCompany = companies.filter((c) => c.companyName === name).length;
+    if (sameNameInstructor > 1 || sameNameCompany > 1) return '동일한 이름이 여러 건 존재합니다 — 세부정보로 반드시 확인하세요.';
+    if (sameNameInstructor > 0 && sameNameCompany > 0) return '같은 이름이 강사·업체 양쪽에 모두 존재합니다 — 대상 확인 필요.';
+    return null;
+  }, [selected, payeeType, instructors, companies]);
+
+  return (
+    <div className="col-span-2 relative">
+      {selected ? (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          <span className="flex-1 truncate font-medium text-slate-800">
+            {payeeType === 'instructor' ? (selected as Instructor).name : (selected as Company).companyName}
+          </span>
+          <button type="button" onClick={() => setShowDetail(true)} className="text-slate-400 hover:text-blue-600" title="세부정보 확인">
+            <Info className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => onSelect('', '')} className="text-slate-400 hover:text-red-500" title="선택 해제">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={payeeType === 'instructor' ? '강사명/연락처 검색' : '업체명/대표자명 검색'}
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
+          />
+          {query && (
+            <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
+              {results.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-400">검색 결과 없음</div>
+              ) : results.map((r: any) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => { onSelect(r.id, payeeType === 'instructor' ? r.name : r.companyName); setQuery(''); }}
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="font-medium text-slate-800">{payeeType === 'instructor' ? r.name : r.companyName}</span>
+                  <span className="text-xs text-slate-400">
+                    {payeeType === 'instructor' ? (r.phone ?? '') : (r.ceoName ? `대표 ${r.ceoName}` : '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {dupWarning && <p className="mt-1 text-[11px] text-amber-600">⚠ {dupWarning}</p>}
+
+      {showDetail && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setShowDetail(false)}>
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-sm font-bold text-slate-800">세부정보 확인</h4>
+              <button onClick={() => setShowDetail(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+            </div>
+            <dl className="space-y-2 text-sm">
+              {payeeType === 'instructor' ? (
+                <>
+                  <Row label="이름" value={(selected as Instructor).name} />
+                  <Row label="연락처" value={(selected as Instructor).phone} />
+                  <Row label="이메일" value={(selected as Instructor).email} />
+                  <Row label="은행" value={(selected as Instructor).bankName} />
+                  <Row label="계좌번호" value={(selected as Instructor).accountNumber} sensitive />
+                  <Row label="주민등록번호" value={(selected as Instructor).residentNumber} sensitive />
+                </>
+              ) : (
+                <>
+                  <Row label="업체명" value={(selected as Company).companyName} />
+                  <Row label="대표자명" value={(selected as Company).ceoName} />
+                  <Row label="사업자번호" value={(selected as Company).businessNumber} />
+                  <Row label="과세유형" value={(selected as Company).taxType} />
+                  <Row label="은행" value={(selected as Company).bankName} />
+                  <Row label="계좌번호" value={(selected as Company).accountNumber} sensitive />
+                  <Row label="담당자 연락처" value={(selected as Company).managerContact} />
+                </>
+              )}
+            </dl>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value, sensitive }: { label: string; value?: string; sensitive?: boolean }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-50 py-1.5 last:border-0">
+      <dt className="text-xs text-slate-400">{label}</dt>
+      <dd className={`text-sm ${sensitive ? 'font-mono' : ''} text-slate-700`}>{value || '-'}</dd>
+    </div>
+  );
+}
+
+export function BudgetTab({ project, requests, instructors, companies, onAddCost, onDeleteCost }: {
   project: Project;
   requests: PaymentRequest[];
   instructors: Instructor[];
+  companies: Company[];
   onAddCost: (input: NewProjectCostInput) => Promise<void>;
+  onDeleteCost: (id: string) => Promise<void>;
 }) {
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('강사비');
   const [payeeType, setPayeeType] = useState<'instructor' | 'company' | 'etc'>('instructor');
-  const [instructorId, setInstructorId] = useState('');
+  const [payeeId, setPayeeId] = useState('');
   const [payeeName, setPayeeName] = useState('');
   const [amount, setAmount] = useState('');
   const [isCard, setIsCard] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
-    setCategory('강사비'); setPayeeType('instructor'); setInstructorId('');
+    setCategory('강사비'); setPayeeType('instructor'); setPayeeId('');
     setPayeeName(''); setAmount(''); setIsCard(false); setOpen(false);
   };
 
   const handleSubmit = async () => {
-    const finalPayeeName = payeeType === 'instructor'
-      ? (instructors.find((i) => i.id === instructorId)?.name ?? payeeName)
-      : payeeName;
+    const finalPayeeName = payeeType === 'etc' ? payeeName : payeeName;
     if (!finalPayeeName || !amount) return;
     setSaving(true);
     await onAddCost({
       category,
       payeeType,
-      payeeId: payeeType === 'instructor' ? instructorId : undefined,
+      payeeId: payeeType !== 'etc' ? payeeId : undefined,
       payeeName: finalPayeeName,
       budgetAmount: Number(amount),
       isCardPayment: isCard,
@@ -79,24 +210,33 @@ export function BudgetTab({ project, requests, instructors, onAddCost }: {
 
         {open && (
           <div className="border-b border-slate-100 bg-slate-50 p-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <select value={category} onChange={(e) => setCategory(e.target.value as typeof category)} className={inputCls}>
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-              <select value={payeeType} onChange={(e) => setPayeeType(e.target.value as typeof payeeType)} className={inputCls}>
+              <select
+                value={payeeType}
+                onChange={(e) => { setPayeeType(e.target.value as typeof payeeType); setPayeeId(''); setPayeeName(''); }}
+                className={inputCls}
+              >
                 <option value="instructor">강사</option>
                 <option value="company">업체</option>
-                <option value="etc">기타</option>
+                <option value="etc">기타(직접입력)</option>
               </select>
-              {payeeType === 'instructor' ? (
-                <select value={instructorId} onChange={(e) => setInstructorId(e.target.value)} className={`${inputCls} col-span-2`}>
-                  <option value="">강사 선택</option>
-                  {instructors.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                </select>
-              ) : (
-                <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="지급대상명"
+
+              {payeeType === 'etc' ? (
+                <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="지급대상명 직접 입력"
                   className={`${inputCls} col-span-2`} />
+              ) : (
+                <PayeePicker
+                  payeeType={payeeType}
+                  instructors={instructors}
+                  companies={companies}
+                  selectedId={payeeId}
+                  onSelect={(id, name) => { setPayeeId(id); setPayeeName(name); }}
+                />
               )}
+
               <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="예산금액"
                 className={inputCls} />
               <label className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -105,7 +245,7 @@ export function BudgetTab({ project, requests, instructors, onAddCost }: {
               </label>
             </div>
             <div className="mt-3 flex gap-2">
-              <button onClick={handleSubmit} disabled={saving}
+              <button onClick={handleSubmit} disabled={saving || !payeeName || !amount}
                 className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
                 {saving ? '저장 중…' : '저장'}
               </button>
@@ -121,6 +261,7 @@ export function BudgetTab({ project, requests, instructors, onAddCost }: {
               <th className="px-3 py-2.5 font-medium">지급대상</th>
               <th className="px-3 py-2.5 text-right font-medium">예산금액</th>
               <th className="px-3 py-2.5 font-medium">상태</th>
+              <th className="px-3 py-2.5 font-medium">삭제</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-50">
               {requests.map((r) => (
@@ -129,6 +270,15 @@ export function BudgetTab({ project, requests, instructors, onAddCost }: {
                   <td className="px-3 py-2.5 font-medium text-slate-800">{r.payeeName}</td>
                   <td className="px-3 py-2.5 text-right"><MoneyText value={r.amount} /></td>
                   <td className="px-3 py-2.5 text-xs text-slate-500">{r.status}</td>
+                  <td className="px-3 py-2.5">
+                    <button
+                      onClick={() => { if (confirm(`'${r.payeeName}' 예산 항목을 삭제할까요?`)) onDeleteCost(r.id); }}
+                      className="text-slate-400 hover:text-red-500"
+                      title="삭제 (관리자 권한 필요)"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
