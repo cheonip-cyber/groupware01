@@ -13,7 +13,6 @@ const items = [
   { to: '/payments', label: '지급관리', icon: CreditCard },
   { to: '/settlement', label: '정산/결산', icon: ClipboardCheck },
   { to: '/instructors', label: '강사관리', icon: Users },
-  { to: '/clients', label: '고객사/거래처', icon: Building2 },
   { to: '/companies', label: '업체관리', icon: Building2 },
   { to: '/reports', label: '리포트', icon: BarChart3 },
   { to: '/settings', label: '설정', icon: Settings },

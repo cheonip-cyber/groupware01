@@ -14,6 +14,7 @@ export interface NewProjectCostInput {
   payeeName: string;
   budgetAmount: number;
   isCardPayment?: boolean;
+  remarks?: string;
 }
 
 export interface DataSource {
@@ -26,6 +27,7 @@ export interface DataSource {
   deleteInstructor(id: string): Promise<void>;
   getCompanies(): Promise<Company[]>;
   addCompany(input: Omit<Company, 'id'>): Promise<void>;
+  updateCompany(id: string, patch: Partial<Company>): Promise<void>;
   deleteCompany(id: string): Promise<void>;
   getClients(): Promise<Client[]>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
@@ -102,6 +104,7 @@ class SampleDataSource implements DataSource {
     this.instructors = this.instructors.filter((i) => i.id !== id);
   }
   async addCompany() { await delay(60); }
+  async updateCompany() { await delay(60); }
   async deleteCompany() { await delay(60); }
 
   async deleteProjectCost(id: string) {

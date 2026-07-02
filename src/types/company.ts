@@ -8,4 +8,5 @@ export interface Company {
   taxType?: '과세' | '면세';
   managerContact?: string;
   email?: string;
+  businessDescription?: string;
 }

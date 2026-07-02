@@ -154,12 +154,13 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   const [payeeId, setPayeeId] = useState('');
   const [payeeName, setPayeeName] = useState('');
   const [amount, setAmount] = useState('');
+  const [remarks, setRemarks] = useState('');
   const [isCard, setIsCard] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const resetForm = () => {
     setCategory('강사비'); setPayeeType('instructor'); setPayeeId('');
-    setPayeeName(''); setAmount(''); setIsCard(false); setOpen(false);
+    setPayeeName(''); setAmount(''); setRemarks(''); setIsCard(false); setOpen(false);
   };
 
   const handleSubmit = async () => {
@@ -173,6 +174,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
       payeeName: finalPayeeName,
       budgetAmount: Number(amount),
       isCardPayment: isCard,
+      remarks: remarks || undefined,
     });
     setSaving(false);
     resetForm();
@@ -239,6 +241,8 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
 
               <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="예산금액"
                 className={inputCls} />
+              <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="세부내용(관련 내용 작성)"
+                className={`${inputCls} sm:col-span-2`} />
               <label className="flex items-center gap-1.5 text-xs text-slate-600">
                 <input type="checkbox" checked={isCard} onChange={(e) => setIsCard(e.target.checked)} />
                 카드결제(지급요청 제외)

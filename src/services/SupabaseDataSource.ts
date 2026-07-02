@@ -274,6 +274,7 @@ class SupabaseDataSource implements DataSource {
       taxType: r.tax_type ?? undefined,
       managerContact: r.manager_contact ?? undefined,
       email: r.email ?? undefined,
+      businessDescription: r.business_description ?? undefined,
     }));
   }
 
@@ -287,8 +288,24 @@ class SupabaseDataSource implements DataSource {
       tax_type: input.taxType ?? null,
       manager_contact: input.managerContact ?? null,
       email: input.email ?? null,
+      business_description: input.businessDescription ?? null,
       is_active: true,
     });
+    if (error) throw error;
+  }
+
+  async updateCompany(id: string, patch: Partial<Company>): Promise<void> {
+    const dbPatch: Record<string, any> = {};
+    if (patch.companyName !== undefined) dbPatch.company_name = patch.companyName;
+    if (patch.ceoName !== undefined) dbPatch.ceo_name = patch.ceoName || null;
+    if (patch.businessNumber !== undefined) dbPatch.business_number = patch.businessNumber || null;
+    if (patch.bankName !== undefined) dbPatch.bank_name = patch.bankName || null;
+    if (patch.accountNumber !== undefined) dbPatch.account_number = patch.accountNumber || null;
+    if (patch.taxType !== undefined) dbPatch.tax_type = patch.taxType || null;
+    if (patch.managerContact !== undefined) dbPatch.manager_contact = patch.managerContact || null;
+    if (patch.email !== undefined) dbPatch.email = patch.email || null;
+    if (patch.businessDescription !== undefined) dbPatch.business_description = patch.businessDescription || null;
+    const { error } = await supabase.from('companies').update(dbPatch).eq('id', Number(id));
     if (error) throw error;
   }
 
@@ -409,6 +426,7 @@ class SupabaseDataSource implements DataSource {
     payeeName: string;
     budgetAmount: number;
     isCardPayment?: boolean;
+    remarks?: string;
   }): Promise<void> {
     const { error } = await supabase.from('project_costs').insert({
       project_id: Number(projectId),
@@ -421,6 +439,7 @@ class SupabaseDataSource implements DataSource {
       is_payable: !(input.isCardPayment ?? false),
       is_cost_recognized: true,
       status: '미지급',
+      remarks: input.remarks ?? null,
     });
     if (error) throw error;
   }

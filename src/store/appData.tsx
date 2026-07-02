@@ -21,6 +21,7 @@ interface AppDataValue {
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
   deleteInstructor: (id: string) => Promise<void>;
   addCompany: (input: Omit<Company, 'id'>) => Promise<void>;
+  updateCompany: (id: string, patch: Partial<Company>) => Promise<void>;
   deleteCompany: (id: string) => Promise<void>;
 }
 
@@ -93,6 +94,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCompanies(await dataSource.getCompanies());
   }, []);
 
+  const updateCompany = useCallback(async (id: string, patch: Partial<Company>) => {
+    await dataSource.updateCompany(id, patch);
+    setCompanies(await dataSource.getCompanies());
+  }, []);
+
   const deleteCompany = useCallback(async (id: string) => {
     await dataSource.deleteCompany(id);
     setCompanies(await dataSource.getCompanies());
@@ -102,7 +108,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
       refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
-      addInstructor, updateInstructor, deleteInstructor, addCompany, deleteCompany,
+      addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
     }}>
       {children}
     </Ctx.Provider>

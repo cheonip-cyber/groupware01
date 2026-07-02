@@ -9,7 +9,6 @@ import { BudgetPage } from './components/pages/BudgetPage';
 import { PaymentsPage } from './components/pages/PaymentsPage';
 import { SettlementPage } from './components/pages/SettlementPage';
 import { InstructorsPage } from './components/pages/InstructorsPage';
-import { ClientsPage } from './components/pages/ClientsPage';
 import { CompaniesPage } from './components/pages/CompaniesPage';
 import { ReportsPage } from './components/pages/ReportsPage';
 import { SettingsPage } from './components/pages/SettingsPage';
@@ -61,7 +60,6 @@ export default function App() {
           <Route path="/payments" element={<PaymentsPage />} />
           <Route path="/settlement" element={<SettlementPage />} />
           <Route path="/instructors" element={<InstructorsPage />} />
-          <Route path="/clients" element={<ClientsPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
