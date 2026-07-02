@@ -1,16 +1,31 @@
 import { useState } from 'react';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
-import { MoneyText } from '../common/MoneyText';
-import { Users, Plus, Trash2 } from 'lucide-react';
+import { Users, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
+import type { Instructor } from '../../types';
+
+type SensitiveForm = {
+  name: string;
+  phone: string;
+  residentNumber: string;
+  address: string;
+  bankName: string;
+  accountNumber: string;
+};
+
+const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', address: '', bankName: '', accountNumber: '' };
 
 export function InstructorsPage() {
-  const { instructors, loading, addInstructor, deleteInstructor } = useAppData();
+  const { instructors, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', expertise: '', defaultFee: '' });
+  const [form, setForm] = useState<SensitiveForm>(emptyForm);
 
-  const resetForm = () => { setForm({ name: '', phone: '', email: '', expertise: '', defaultFee: '' }); setOpen(false); };
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<SensitiveForm>(emptyForm);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const resetForm = () => { setForm(emptyForm); setOpen(false); };
 
   const handleAdd = async () => {
     if (!form.name) return;
@@ -18,9 +33,12 @@ export function InstructorsPage() {
     await addInstructor({
       name: form.name,
       phone: form.phone || undefined,
-      email: form.email || undefined,
-      expertise: form.expertise ? form.expertise.split(',').map((s) => s.trim()).filter(Boolean) : [],
-      defaultFee: form.defaultFee ? Number(form.defaultFee) : 0,
+      expertise: [],
+      defaultFee: 0,
+      residentNumber: form.residentNumber || undefined,
+      address: form.address || undefined,
+      bankName: form.bankName || undefined,
+      accountNumber: form.accountNumber || undefined,
     });
     setSaving(false);
     resetForm();
@@ -31,9 +49,38 @@ export function InstructorsPage() {
     await deleteInstructor(id);
   };
 
+  const startEdit = (i: Instructor) => {
+    setEditingId(i.id);
+    setEditForm({
+      name: i.name,
+      phone: i.phone ?? '',
+      residentNumber: i.residentNumber ?? '',
+      address: i.address ?? '',
+      bankName: i.bankName ?? '',
+      accountNumber: i.accountNumber ?? '',
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditForm(emptyForm); };
+
+  const saveEdit = async (id: string) => {
+    setEditSaving(true);
+    await updateInstructor(id, {
+      name: editForm.name,
+      phone: editForm.phone || undefined,
+      residentNumber: editForm.residentNumber || undefined,
+      address: editForm.address || undefined,
+      bankName: editForm.bankName || undefined,
+      accountNumber: editForm.accountNumber || undefined,
+    });
+    setEditSaving(false);
+    cancelEdit();
+  };
+
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
 
   const inputCls = 'rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400';
+  const editInputCls = 'w-full rounded-md border border-slate-200 px-2 py-1 text-xs font-mono outline-none focus:border-blue-400';
 
   return (
     <Card>
@@ -50,12 +97,13 @@ export function InstructorsPage() {
 
       {open && (
         <div className="border-b border-slate-100 bg-slate-50 p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
             <input placeholder="이름*" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} className={inputCls} />
             <input placeholder="연락처" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} className={inputCls} />
-            <input placeholder="이메일" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} className={inputCls} />
-            <input placeholder="전문분야(쉼표구분)" value={form.expertise} onChange={(e) => setForm((s) => ({ ...s, expertise: e.target.value }))} className={inputCls} />
-            <input placeholder="기본 강사료" type="number" value={form.defaultFee} onChange={(e) => setForm((s) => ({ ...s, defaultFee: e.target.value }))} className={inputCls} />
+            <input placeholder="주민등록번호" value={form.residentNumber} onChange={(e) => setForm((s) => ({ ...s, residentNumber: e.target.value }))} className={inputCls} />
+            <input placeholder="주소" value={form.address} onChange={(e) => setForm((s) => ({ ...s, address: e.target.value }))} className={inputCls} />
+            <input placeholder="은행" value={form.bankName} onChange={(e) => setForm((s) => ({ ...s, bankName: e.target.value }))} className={inputCls} />
+            <input placeholder="계좌번호" value={form.accountNumber} onChange={(e) => setForm((s) => ({ ...s, accountNumber: e.target.value }))} className={inputCls} />
           </div>
           <div className="mt-3 flex gap-2">
             <button onClick={handleAdd} disabled={saving || !form.name}
@@ -71,31 +119,63 @@ export function InstructorsPage() {
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="px-5 py-2.5 font-medium">이름</th>
-            <th className="px-3 py-2.5 font-medium">전문분야</th>
             <th className="px-3 py-2.5 font-medium">연락처</th>
-            <th className="px-3 py-2.5 text-right font-medium">기본 강사료</th>
-            <th className="px-3 py-2.5 font-medium">삭제</th>
+            <th className="px-3 py-2.5 font-medium">주민등록번호</th>
+            <th className="px-3 py-2.5 font-medium">주소</th>
+            <th className="px-3 py-2.5 font-medium">계좌정보</th>
+            <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {instructors.map((i) => (
-              <tr key={i.id} className="hover:bg-slate-50">
-                <td className="px-5 py-3 font-semibold text-slate-800">{i.name}</td>
-                <td className="px-3 py-3">
-                  <div className="flex flex-wrap gap-1">
-                    {i.expertise.map((e) => (
-                      <span key={e} className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700">{e}</span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-3 py-3 text-slate-500">{i.phone || '-'}</td>
-                <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={i.defaultFee} /></td>
-                <td className="px-3 py-3">
-                  <button onClick={() => handleDelete(i.id, i.name)} className="text-slate-400 hover:text-red-500" title="삭제(관리자 권한 필요)">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {instructors.map((i) => {
+              const isEditing = editingId === i.id;
+              if (isEditing) {
+                return (
+                  <tr key={i.id} className="bg-blue-50/40">
+                    <td className="px-5 py-2"><input className={editInputCls + ' font-sans'} value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} /></td>
+                    <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.phone} onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))} /></td>
+                    <td className="px-3 py-2"><input className={editInputCls} value={editForm.residentNumber} onChange={(e) => setEditForm((s) => ({ ...s, residentNumber: e.target.value }))} /></td>
+                    <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.address} onChange={(e) => setEditForm((s) => ({ ...s, address: e.target.value }))} /></td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1">
+                        <input placeholder="은행" className={editInputCls + ' font-sans'} value={editForm.bankName} onChange={(e) => setEditForm((s) => ({ ...s, bankName: e.target.value }))} />
+                        <input placeholder="계좌번호" className={editInputCls} value={editForm.accountNumber} onChange={(e) => setEditForm((s) => ({ ...s, accountNumber: e.target.value }))} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1.5">
+                        <button onClick={() => saveEdit(i.id)} disabled={editSaving} className="text-green-600 hover:text-green-700" title="저장">
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button onClick={cancelEdit} className="text-slate-400 hover:text-slate-600" title="취소">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={i.id} className="hover:bg-slate-50">
+                  <td className="px-5 py-3 font-semibold text-slate-800">{i.name}</td>
+                  <td className="px-3 py-3 text-slate-500">{i.phone || '-'}</td>
+                  <td className="px-3 py-3 font-mono text-xs text-slate-500">{i.residentNumber || '-'}</td>
+                  <td className="px-3 py-3 text-slate-500">{i.address || '-'}</td>
+                  <td className="px-3 py-3 font-mono text-xs text-slate-500">
+                    {i.bankName && i.accountNumber ? `${i.bankName} ${i.accountNumber}` : '-'}
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex gap-1.5">
+                      <button onClick={() => startEdit(i)} className="text-slate-400 hover:text-blue-500" title="편집">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(i.id, i.name)} className="text-slate-400 hover:text-red-500" title="삭제(관리자 권한 필요)">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

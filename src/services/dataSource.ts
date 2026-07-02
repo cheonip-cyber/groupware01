@@ -22,6 +22,7 @@ export interface DataSource {
   updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined>;
   getInstructors(): Promise<Instructor[]>;
   addInstructor(input: Omit<Instructor, 'id'>): Promise<void>;
+  updateInstructor(id: string, patch: Partial<Instructor>): Promise<void>;
   deleteInstructor(id: string): Promise<void>;
   getCompanies(): Promise<Company[]>;
   addCompany(input: Omit<Company, 'id'>): Promise<void>;
@@ -89,6 +90,12 @@ class SampleDataSource implements DataSource {
   async addInstructor(input: Omit<Instructor, 'id'>) {
     await delay(60);
     this.instructors.push({ ...input, id: `in-sample-${Date.now()}` });
+  }
+  async updateInstructor(id: string, patch: Partial<Instructor>) {
+    await delay(60);
+    const idx = this.instructors.findIndex((i) => i.id === id);
+    if (idx < 0) return;
+    this.instructors[idx] = { ...this.instructors[idx], ...patch };
   }
   async deleteInstructor(id: string) {
     await delay(60);

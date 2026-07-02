@@ -18,6 +18,7 @@ interface AppDataValue {
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
+  updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
   deleteInstructor: (id: string) => Promise<void>;
   addCompany: (input: Omit<Company, 'id'>) => Promise<void>;
   deleteCompany: (id: string) => Promise<void>;
@@ -77,6 +78,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setInstructors(await dataSource.getInstructors());
   }, []);
 
+  const updateInstructor = useCallback(async (id: string, patch: Partial<Instructor>) => {
+    await dataSource.updateInstructor(id, patch);
+    setInstructors(await dataSource.getInstructors());
+  }, []);
+
   const deleteInstructor = useCallback(async (id: string) => {
     await dataSource.deleteInstructor(id);
     setInstructors(await dataSource.getInstructors());
@@ -96,7 +102,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
       refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
-      addInstructor, deleteInstructor, addCompany, deleteCompany,
+      addInstructor, updateInstructor, deleteInstructor, addCompany, deleteCompany,
     }}>
       {children}
     </Ctx.Provider>

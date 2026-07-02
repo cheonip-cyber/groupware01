@@ -223,6 +223,7 @@ class SupabaseDataSource implements DataSource {
       bankName: r.bank_name ?? undefined,
       accountNumber: r.account_number ?? undefined,
       residentNumber: r.resident_number ?? undefined,
+      address: r.address ?? undefined,
     }));
   }
 
@@ -235,8 +236,23 @@ class SupabaseDataSource implements DataSource {
       fee_basis: input.defaultFee ?? null,
       bank_name: input.bankName ?? null,
       account_number: input.accountNumber ?? null,
+      resident_number: input.residentNumber ?? null,
+      address: input.address ?? null,
       is_active: true,
     });
+    if (error) throw error;
+  }
+
+  async updateInstructor(id: string, patch: Partial<Instructor>): Promise<void> {
+    const dbPatch: Record<string, any> = {};
+    if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.phone !== undefined) dbPatch.contact = patch.phone || null;
+    if (patch.email !== undefined) dbPatch.email = patch.email || null;
+    if (patch.residentNumber !== undefined) dbPatch.resident_number = patch.residentNumber || null;
+    if (patch.address !== undefined) dbPatch.address = patch.address || null;
+    if (patch.bankName !== undefined) dbPatch.bank_name = patch.bankName || null;
+    if (patch.accountNumber !== undefined) dbPatch.account_number = patch.accountNumber || null;
+    const { error } = await supabase.from('instructors').update(dbPatch).eq('id', Number(id));
     if (error) throw error;
   }
 

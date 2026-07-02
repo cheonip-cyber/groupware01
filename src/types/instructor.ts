@@ -11,4 +11,5 @@ export interface Instructor {
   bankName?: string;
   accountNumber?: string;
   residentNumber?: string;
+  address?: string;
 }
