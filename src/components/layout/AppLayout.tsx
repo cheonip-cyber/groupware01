@@ -7,6 +7,7 @@ const titleMap: Record<string, string> = {
   '/': 'Dashboard', '/projects': '프로젝트', '/revenue': '매출/계약', '/budget': '예산/비용',
   '/payments': '지급관리', '/settlement': '정산/결산', '/instructors': '강사관리',
   '/clients': '고객사/거래처', '/reports': '리포트', '/settings': '설정',
+  '/admin/card': '카드사용 관리', '/admin/sga': '판관비 관리',
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
