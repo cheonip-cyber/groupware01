@@ -12,7 +12,7 @@
 // =============================================================
 import { supabase } from './supabaseClient';
 import type { DataSource } from './dataSource';
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus, PrepItem, Company } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, SyncStatus, PrepItem, Company, NotionFieldMapping } from '../types';
 import {
   dbStatusToProjectStatus, projectStatusToDbStatus,
   deriveRevenueStatus, derivePaymentStatus, deriveSettlementStatus,
@@ -362,6 +362,52 @@ class SupabaseDataSource implements DataSource {
       is_cost_recognized: true,
       status: '미지급',
     });
+    if (error) throw error;
+  }
+
+  // ---------- Notion 연동 매핑 관리 (관리자화면 > Notion 연동 관리) ----------
+  async getNotionFieldMappings(): Promise<NotionFieldMapping[]> {
+    const { data, error } = await supabase
+      .from('notion_field_mappings')
+      .select('*')
+      .order('id', { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      id: String(r.id),
+      entityType: r.entity_type,
+      supabaseColumn: r.supabase_column,
+      notionPropertyName: r.notion_property_name,
+      dataType: r.data_type,
+      syncDirection: r.sync_direction,
+      isActive: !!r.is_active,
+    }));
+  }
+
+  async addNotionFieldMapping(input: Omit<NotionFieldMapping, 'id'>): Promise<void> {
+    const { error } = await supabase.from('notion_field_mappings').insert({
+      entity_type: input.entityType,
+      supabase_column: input.supabaseColumn,
+      notion_property_name: input.notionPropertyName,
+      data_type: input.dataType,
+      sync_direction: input.syncDirection,
+      is_active: input.isActive,
+    });
+    if (error) throw error;
+  }
+
+  async updateNotionFieldMapping(id: string, patch: Partial<NotionFieldMapping>): Promise<void> {
+    const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.notionPropertyName !== undefined) dbPatch.notion_property_name = patch.notionPropertyName;
+    if (patch.dataType !== undefined) dbPatch.data_type = patch.dataType;
+    if (patch.syncDirection !== undefined) dbPatch.sync_direction = patch.syncDirection;
+    if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
+    if (patch.supabaseColumn !== undefined) dbPatch.supabase_column = patch.supabaseColumn;
+    const { error } = await supabase.from('notion_field_mappings').update(dbPatch).eq('id', Number(id));
+    if (error) throw error;
+  }
+
+  async deleteNotionFieldMapping(id: string): Promise<void> {
+    const { error } = await supabase.from('notion_field_mappings').delete().eq('id', Number(id));
     if (error) throw error;
   }
 

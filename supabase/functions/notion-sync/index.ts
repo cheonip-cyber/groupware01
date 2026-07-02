@@ -1,10 +1,9 @@
 // =============================================================
-// notion-sync Edge Function
-// - action=push : Postgres 트리거가 호출 (Supabase → Notion, 값이 다를 때만 반영)
-// - action=pull : pg_cron이 주기 호출 (Notion → Supabase, 최근 수정분만 조회)
-// 매핑 대상: groupware.projects ↔ Notion "Project" 데이터소스
-// 매핑 제외(문서화): tax_invoice_date, revenue_month, is_report_completed,
-//   payment_info_confirmed, vendor_tax_invoice_*, client_payment_* (Notion에 대응 필드 없음)
+// notion-sync Edge Function (v2 — 매핑표 기반 동적 동기화)
+// - 필드 매핑을 코드에 하드코딩하지 않고 groupware.notion_field_mappings 테이블에서 읽음
+// - 관리자화면(설정 > Notion 연동 관리)에서 필드명/타입/방향/사용여부를 코드 수정 없이 변경 가능
+// - 매핑된 Notion 속성을 찾지 못하거나 타입이 다르면: 조용히 false/null로 덮어쓰지 않고
+//   해당 필드만 건너뛰고 notion_sync_log에 명확히 에러 기록 (기존 v1의 가장 위험했던 버그 수정)
 // =============================================================
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -33,52 +32,55 @@ async function notionFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
-// ---------- 필드 매핑 (양방향 대응 필드만) ----------
-type ProjectRow = Record<string, any>;
-
-function projectToNotionProperties(p: ProjectRow) {
-  const dateProp = (v: string | null) => (v ? { date: { start: v } } : { date: null });
-  const textProp = (v: string | null) => ({ rich_text: v ? [{ text: { content: String(v).slice(0, 1900) } }] : [] });
-  return {
-    '작업': { title: [{ text: { content: p.project_name ?? '' } }] },
-    '진행 상태': { status: { name: p.status } },
-    ...(p.priority ? { '우선순위': { select: { name: p.priority } } } : {}),
-    '세금계산서 발행': { checkbox: !!p.is_tax_invoice_issued },
-    '거래명세서 제출': { checkbox: !!p.is_statement_submitted },
-    '제안서 제출': { checkbox: !!p.is_proposal_submitted },
-    '교육일자(1차수)': dateProp(p.session_1_date),
-    '교육일자(2차수)': dateProp(p.session_2_date),
-    '제안 마감일': dateProp(p.proposal_due_date),
-    '제안 제출일': dateProp(p.proposal_submitted_date),
-    ...(p.initial_estimate != null ? { '최초견적': { number: Number(p.initial_estimate) } } : {}),
-    ...(p.final_estimate != null ? { '현재/최종견적': { number: Number(p.final_estimate) } } : {}),
-    '진행사항(주요내용)': textProp(p.progress_notes),
-    '기타사항': textProp(p.etc_notes),
-  };
+interface FieldMapping {
+  id: number;
+  entity_type: string;
+  supabase_column: string;
+  notion_property_name: string;
+  data_type: 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text';
+  sync_direction: 'both' | 'to_notion_only' | 'from_notion_only' | 'disabled';
 }
 
-function notionPageToProjectPatch(page: any) {
-  const pr = page.properties ?? {};
-  const title = pr['작업']?.title?.[0]?.plain_text ?? null;
-  const status = pr['진행 상태']?.status?.name ?? null;
-  const priority = pr['우선순위']?.select?.name ?? null;
-  const richText = (p: any) => (p?.rich_text ?? []).map((t: any) => t.plain_text).join('') || null;
-  return {
-    project_name: title,
-    status,
-    priority,
-    is_tax_invoice_issued: !!pr['세금계산서 발행']?.checkbox,
-    is_statement_submitted: !!pr['거래명세서 제출']?.checkbox,
-    is_proposal_submitted: !!pr['제안서 제출']?.checkbox,
-    session_1_date: pr['교육일자(1차수)']?.date?.start ?? null,
-    session_2_date: pr['교육일자(2차수)']?.date?.start ?? null,
-    proposal_due_date: pr['제안 마감일']?.date?.start ?? null,
-    proposal_submitted_date: pr['제안 제출일']?.date?.start ?? null,
-    initial_estimate: pr['최초견적']?.number ?? null,
-    final_estimate: pr['현재/최종견적']?.number ?? null,
-    progress_notes: richText(pr['진행사항(주요내용)']),
-    etc_notes: richText(pr['기타사항']),
-  };
+async function getActiveMappings(entityType: string): Promise<FieldMapping[]> {
+  const { data, error } = await supabase
+    .from('notion_field_mappings')
+    .select('*')
+    .eq('entity_type', entityType)
+    .eq('is_active', true);
+  if (error) throw error;
+  return (data ?? []) as FieldMapping[];
+}
+
+const NOTION_TYPE_NAME: Record<FieldMapping['data_type'], string> = {
+  title: 'title', status: 'status', select: 'select', checkbox: 'checkbox', date: 'date', number: 'number', rich_text: 'rich_text',
+};
+
+function buildNotionPropertyValue(value: any, dataType: FieldMapping['data_type']) {
+  switch (dataType) {
+    case 'title': return { title: [{ text: { content: String(value ?? '') } }] };
+    case 'status': return { status: { name: value } };
+    case 'select': return value ? { select: { name: value } } : { select: null };
+    case 'checkbox': return { checkbox: !!value };
+    case 'date': return value ? { date: { start: value } } : { date: null };
+    case 'number': return value != null ? { number: Number(value) } : { number: null };
+    case 'rich_text': return { rich_text: value ? [{ text: { content: String(value).slice(0, 1900) } }] : [] };
+  }
+}
+
+function readNotionPropertyValue(pageProperties: any, mapping: FieldMapping): { value?: any; missing?: boolean; typeMismatch?: boolean } {
+  const prop = pageProperties?.[mapping.notion_property_name];
+  if (prop === undefined) return { missing: true };
+  if (prop.type !== NOTION_TYPE_NAME[mapping.data_type]) return { typeMismatch: true };
+
+  switch (mapping.data_type) {
+    case 'title': return { value: prop.title?.[0]?.plain_text ?? null };
+    case 'status': return { value: prop.status?.name ?? null };
+    case 'select': return { value: prop.select?.name ?? null };
+    case 'checkbox': return { value: !!prop.checkbox };
+    case 'date': return { value: prop.date?.start ?? null };
+    case 'number': return { value: prop.number ?? null };
+    case 'rich_text': return { value: (prop.rich_text ?? []).map((t: any) => t.plain_text).join('') || null };
+  }
 }
 
 const norm = (v: unknown) => (v === null || v === undefined ? '' : String(v));
@@ -87,15 +89,13 @@ async function logSync(entityId: number | null, direction: 'to_notion' | 'from_n
   await supabase.from('notion_sync_log').insert({ entity_type: 'project', entity_id: entityId, direction, status, message });
 }
 
-// ---------- PUSH: Supabase → Notion ----------
 async function pushProject(id: number) {
+  const mappings = await getActiveMappings('project');
+  const pushMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'to_notion_only');
+
   const { data: row, error } = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
   if (error || !row) return { skipped: true, reason: 'row not found' };
-
-  if (!row.notion_page_id) {
-    // 아직 Notion과 연결되지 않은 프로젝트(레거시 이관분 등)는 이번 단계에서 자동 생성하지 않음(후속 과제)
-    return { skipped: true, reason: 'no notion_page_id linked' };
-  }
+  if (!row.notion_page_id) return { skipped: true, reason: 'no notion_page_id linked' };
 
   let page: any;
   try {
@@ -106,28 +106,50 @@ async function pushProject(id: number) {
     return { error: String(e) };
   }
 
-  const current = notionPageToProjectPatch(page);
-  const target = {
-    project_name: row.project_name, status: row.status, priority: row.priority,
-    is_tax_invoice_issued: !!row.is_tax_invoice_issued, is_statement_submitted: !!row.is_statement_submitted,
-    is_proposal_submitted: !!row.is_proposal_submitted, session_1_date: row.session_1_date, session_2_date: row.session_2_date,
-    proposal_due_date: row.proposal_due_date, proposal_submitted_date: row.proposal_submitted_date,
-    initial_estimate: row.initial_estimate, final_estimate: row.final_estimate,
-    progress_notes: row.progress_notes, etc_notes: row.etc_notes,
-  };
-  const changed = Object.keys(target).some((k) => norm((target as any)[k]) !== norm((current as any)[k]));
+  const properties: Record<string, any> = {};
+  const fieldErrors: string[] = [];
+  let anyChanged = false;
 
-  if (!changed) {
-    await supabase.from('projects').update({ sync_status: 'synced', last_synced_at: new Date().toISOString(), sync_error: null }).eq('id', id);
-    return { skipped: true, reason: 'no diff' };
+  for (const m of pushMappings) {
+    const target = (row as any)[m.supabase_column];
+    const current = readNotionPropertyValue(page.properties, m);
+
+    if (current.missing) {
+      fieldErrors.push(`속성 없음: "${m.notion_property_name}" (매핑설정에서 이름 확인 필요)`);
+      continue;
+    }
+    if (current.typeMismatch) {
+      fieldErrors.push(`타입 불일치: "${m.notion_property_name}" (설정=${m.data_type}, 실제=${page.properties[m.notion_property_name]?.type})`);
+      continue;
+    }
+    if (norm(target) !== norm(current.value)) {
+      properties[m.notion_property_name] = buildNotionPropertyValue(target, m.data_type);
+      anyChanged = true;
+    }
+  }
+
+  if (fieldErrors.length > 0) {
+    await logSync(id, 'to_notion', 'error', fieldErrors.join(' / '));
+  }
+
+  if (!anyChanged) {
+    await supabase.from('projects').update({
+      sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+      sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
+      last_synced_at: new Date().toISOString(),
+    }).eq('id', id);
+    return { skipped: true, reason: 'no diff', fieldErrors };
   }
 
   try {
-    const properties = projectToNotionProperties(row);
     await notionFetch(`/pages/${row.notion_page_id}`, { method: 'PATCH', body: JSON.stringify({ properties }) });
-    await supabase.from('projects').update({ sync_status: 'synced', last_synced_at: new Date().toISOString(), sync_error: null }).eq('id', id);
-    await logSync(id, 'to_notion', 'success', 'pushed');
-    return { pushed: true };
+    await supabase.from('projects').update({
+      sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+      sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
+      last_synced_at: new Date().toISOString(),
+    }).eq('id', id);
+    await logSync(id, 'to_notion', 'success', `pushed (${Object.keys(properties).join(', ')})`);
+    return { pushed: true, fields: Object.keys(properties), fieldErrors };
   } catch (e) {
     await supabase.from('projects').update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
     await logSync(id, 'to_notion', 'error', String(e));
@@ -135,9 +157,11 @@ async function pushProject(id: number) {
   }
 }
 
-// ---------- PULL: Notion → Supabase ----------
 async function pullProjects() {
-  const since = new Date(Date.now() - 3 * 60 * 1000).toISOString(); // 3분 전(폴링 주기 1분 대비 여유)
+  const mappings = await getActiveMappings('project');
+  const pullMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'from_notion_only');
+
+  const since = new Date(Date.now() - 3 * 60 * 1000).toISOString();
   const result = await notionFetch(`/databases/${PROJECT_DB_ID}/query`, {
     method: 'POST',
     body: JSON.stringify({
@@ -150,38 +174,43 @@ async function pullProjects() {
 
   for (const page of result.results ?? []) {
     try {
-      const patch = notionPageToProjectPatch(page);
+      const patch: Record<string, any> = {};
+      const fieldErrors: string[] = [];
+
+      for (const m of pullMappings) {
+        const read = readNotionPropertyValue(page.properties, m);
+        if (read.missing) { fieldErrors.push(`속성 없음: "${m.notion_property_name}"`); continue; }
+        if (read.typeMismatch) { fieldErrors.push(`타입 불일치: "${m.notion_property_name}"`); continue; }
+        patch[m.supabase_column] = read.value;
+      }
+
       const { data: existing } = await supabase.from('projects').select('id, *').eq('notion_page_id', page.id).maybeSingle();
 
       if (existing) {
-        const target = { ...patch };
-        const currentOnDb = {
-          project_name: existing.project_name, status: existing.status, priority: existing.priority,
-          is_tax_invoice_issued: !!existing.is_tax_invoice_issued, is_statement_submitted: !!existing.is_statement_submitted,
-          is_proposal_submitted: !!existing.is_proposal_submitted, session_1_date: existing.session_1_date,
-          session_2_date: existing.session_2_date, proposal_due_date: existing.proposal_due_date,
-          proposal_submitted_date: existing.proposal_submitted_date, initial_estimate: existing.initial_estimate,
-          final_estimate: existing.final_estimate, progress_notes: existing.progress_notes, etc_notes: existing.etc_notes,
-        };
-        const changed = Object.keys(target).some((k) => norm((target as any)[k]) !== norm((currentOnDb as any)[k]));
-        if (!changed) { skipped++; continue; }
+        const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
+        if (!changed && fieldErrors.length === 0) { skipped++; continue; }
 
         await supabase.from('projects').update({
-          ...patch, last_synced_at: new Date().toISOString(), sync_status: 'synced', sync_error: null,
+          ...patch,
+          last_synced_at: new Date().toISOString(),
+          sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+          sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
         }).eq('id', existing.id);
-        await logSync(existing.id, 'from_notion', 'success', 'updated from notion');
+        await logSync(existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
         updated++;
       } else {
+        if (!patch.project_name) { skipped++; continue; }
         const { data: inserted, error: insErr } = await supabase.from('projects').insert({
           ...patch,
           notion_page_id: page.id,
           notion_url: page.url,
           is_master: true,
-          sync_status: 'synced',
+          sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+          sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
           last_synced_at: new Date().toISOString(),
         }).select('id').single();
         if (insErr) throw insErr;
-        await logSync(inserted!.id, 'from_notion', 'success', 'created from notion');
+        await logSync(inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
         created++;
       }
     } catch (e) {

@@ -4,7 +4,7 @@
 // 추후: NotionDataSource / SupabaseDataSource 를 같은 인터페이스로
 //       구현하고 activeDataSource 만 바꾸면 전체 앱이 그대로 동작한다.
 // =============================================================
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus, Company } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, SyncStatus, Company, NotionFieldMapping } from '../types';
 import { sampleProjects, sampleInstructors, sampleClients, samplePaymentRequests } from '../data/sampleData';
 
 export interface NewProjectCostInput {
@@ -28,6 +28,11 @@ export interface DataSource {
   addProjectCost(projectId: string, input: NewProjectCostInput): Promise<void>;
   deleteProjectCost(id: string): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
+  // Notion 연동 매핑 관리 (관리자 전용)
+  getNotionFieldMappings(): Promise<NotionFieldMapping[]>;
+  addNotionFieldMapping(input: Omit<NotionFieldMapping, 'id'>): Promise<void>;
+  updateNotionFieldMapping(id: string, patch: Partial<NotionFieldMapping>): Promise<void>;
+  deleteNotionFieldMapping(id: string): Promise<void>;
 }
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -82,6 +87,11 @@ class SampleDataSource implements DataSource {
     await delay(60);
     this.payments = this.payments.filter((p) => p.id !== id);
   }
+
+  async getNotionFieldMappings() { await delay(); return []; }
+  async addNotionFieldMapping() { await delay(60); }
+  async updateNotionFieldMapping() { await delay(60); }
+  async deleteNotionFieldMapping() { await delay(60); }
 
   async getSyncStatus(): Promise<SyncStatus> {
     await delay(60);
