@@ -54,11 +54,23 @@ export function RevenueTab({ project, onUpdate }:
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="계약 / 금액">
-        <Field label="최초 견적"><MoneyText value={project.initialEstimate} /></Field>
-        <Field label="최종 계약금액"><MoneyText value={project.contractAmount} className="font-semibold" /></Field>
-        <Field label="공급가액"><MoneyText value={project.supplyAmount} /></Field>
+        <Field label="제안금액"><MoneyText value={project.initialEstimate} /></Field>
+        <Field label="VAT 구분">
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.vatType === '별도' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+              {project.vatType ?? '포함'}
+            </span>
+            <button
+              onClick={() => onUpdate({ vatType: project.vatType === '별도' ? '포함' : '별도' })}
+              className="text-xs text-slate-400 underline hover:text-blue-600"
+            >
+              {project.vatType === '별도' ? '"포함"으로 변경' : '"별도"로 변경'}
+            </button>
+          </div>
+        </Field>
+        <Field label="공급가액 (VAT 제외)"><MoneyText value={project.supplyAmount} /></Field>
         <Field label="VAT"><MoneyText value={project.vat} /></Field>
-        <Field label="총액"><MoneyText value={project.totalAmount} className="font-semibold" /></Field>
+        <Field label="최종 계약금액 (VAT 포함 실수령액)"><MoneyText value={project.contractAmount} className="font-semibold" /></Field>
         <Field label="매출 월">{project.revenueMonth || '-'}</Field>
       </Section>
       <Section title="세금계산서 / 수금">

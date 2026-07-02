@@ -92,6 +92,7 @@ export interface Project extends NotionSyncFields {
   collectionDoneDate?: string;
   taxInvoiceDate?: string;
   revenueMonth?: string;
+  vatType?: '포함' | '별도';
 
   // 예산/비용
   trainerFeeBudget: number;

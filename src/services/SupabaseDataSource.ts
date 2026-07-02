@@ -41,8 +41,11 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
   const actualCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.actual_payment_amount ?? 0) : 0), 0);
   const costForProfit = actualCost > 0 ? actualCost : expectedCost;
   const finalEstimate = Number(row.final_estimate ?? 0);
-  const expectedProfit = finalEstimate - costForProfit;
-  const profitRate = finalEstimate > 0 ? Number(((expectedProfit / finalEstimate) * 100).toFixed(1)) : 0;
+  const totalAmount = Number(row.total_amount ?? finalEstimate); // VAT 포함/별도 반영된 실제 계약금액
+  const supplyAmount = Number(row.supply_amount ?? 0); // 공급가액(VAT 제외, 실매출 기준)
+  // 이익/이익률은 부가세를 제외한 공급가액(실매출) 기준으로 산정 — VAT는 세무상 통과 금액이라 손익에 포함하지 않음
+  const expectedProfit = supplyAmount - costForProfit;
+  const profitRate = supplyAmount > 0 ? Number(((expectedProfit / supplyAmount) * 100).toFixed(1)) : 0;
 
   const sumBy = (bucket: string) => costs
     .filter((c) => budgetBucket(c.category) === bucket)
@@ -82,10 +85,11 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     settlementStatus: deriveSettlementStatus(row.status),
 
     initialEstimate: Number(row.initial_estimate ?? finalEstimate),
-    contractAmount: finalEstimate,
-    supplyAmount: Number(row.supply_amount ?? 0),
+    contractAmount: totalAmount,
+    supplyAmount,
     vat: Number(row.vat ?? 0),
-    totalAmount: finalEstimate,
+    totalAmount,
+    vatType: row.vat_type === '별도' ? '별도' : '포함',
     collectionDueDate: undefined,
     collectionDoneDate: row.client_payment_date ?? undefined,
     taxInvoiceDate: row.tax_invoice_date ?? undefined,
@@ -179,6 +183,7 @@ class SupabaseDataSource implements DataSource {
 
     if (patch.taxInvoiceIssued !== undefined) dbPatch.is_tax_invoice_issued = patch.taxInvoiceIssued;
     if ('taxInvoiceDate' in patch) dbPatch.tax_invoice_date = patch.taxInvoiceDate ?? null;
+    if (patch.vatType !== undefined) dbPatch.vat_type = patch.vatType;
     if (patch.statementSubmitted !== undefined) dbPatch.is_statement_submitted = patch.statementSubmitted;
     if (patch.proposalSubmitted !== undefined) dbPatch.is_proposal_submitted = patch.proposalSubmitted;
     if (patch.reportCompleted !== undefined) dbPatch.is_report_completed = patch.reportCompleted;
