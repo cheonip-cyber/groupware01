@@ -10,6 +10,7 @@ import { PaymentsPage } from './components/pages/PaymentsPage';
 import { SettlementPage } from './components/pages/SettlementPage';
 import { InstructorsPage } from './components/pages/InstructorsPage';
 import { ClientsPage } from './components/pages/ClientsPage';
+import { CompaniesPage } from './components/pages/CompaniesPage';
 import { ReportsPage } from './components/pages/ReportsPage';
 import { SettingsPage } from './components/pages/SettingsPage';
 import { AdminCardPage } from './components/admin/AdminCardPage';
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/settlement" element={<SettlementPage />} />
           <Route path="/instructors" element={<InstructorsPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/card" element={<RequireAdmin><AdminCardPage /></RequireAdmin>} />

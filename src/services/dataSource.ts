@@ -21,7 +21,11 @@ export interface DataSource {
   getProject(id: string): Promise<Project | undefined>;
   updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined>;
   getInstructors(): Promise<Instructor[]>;
+  addInstructor(input: Omit<Instructor, 'id'>): Promise<void>;
+  deleteInstructor(id: string): Promise<void>;
   getCompanies(): Promise<Company[]>;
+  addCompany(input: Omit<Company, 'id'>): Promise<void>;
+  deleteCompany(id: string): Promise<void>;
   getClients(): Promise<Client[]>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
@@ -82,6 +86,16 @@ class SampleDataSource implements DataSource {
   }
 
   async getCompanies() { await delay(); return []; }
+  async addInstructor(input: Omit<Instructor, 'id'>) {
+    await delay(60);
+    this.instructors.push({ ...input, id: `in-sample-${Date.now()}` });
+  }
+  async deleteInstructor(id: string) {
+    await delay(60);
+    this.instructors = this.instructors.filter((i) => i.id !== id);
+  }
+  async addCompany() { await delay(60); }
+  async deleteCompany() { await delay(60); }
 
   async deleteProjectCost(id: string) {
     await delay(60);

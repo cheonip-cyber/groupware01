@@ -17,6 +17,10 @@ interface AppDataValue {
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
+  addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
+  deleteInstructor: (id: string) => Promise<void>;
+  addCompany: (input: Omit<Company, 'id'>) => Promise<void>;
+  deleteCompany: (id: string) => Promise<void>;
 }
 
 const Ctx = createContext<AppDataValue | null>(null);
@@ -68,10 +72,31 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setPaymentRequests(pr);
   }, []);
 
+  const addInstructor = useCallback(async (input: Omit<Instructor, 'id'>) => {
+    await dataSource.addInstructor(input);
+    setInstructors(await dataSource.getInstructors());
+  }, []);
+
+  const deleteInstructor = useCallback(async (id: string) => {
+    await dataSource.deleteInstructor(id);
+    setInstructors(await dataSource.getInstructors());
+  }, []);
+
+  const addCompany = useCallback(async (input: Omit<Company, 'id'>) => {
+    await dataSource.addCompany(input);
+    setCompanies(await dataSource.getCompanies());
+  }, []);
+
+  const deleteCompany = useCallback(async (id: string) => {
+    await dataSource.deleteCompany(id);
+    setCompanies(await dataSource.getCompanies());
+  }, []);
+
   return (
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
       refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
+      addInstructor, deleteInstructor, addCompany, deleteCompany,
     }}>
       {children}
     </Ctx.Provider>

@@ -221,6 +221,25 @@ class SupabaseDataSource implements DataSource {
     }));
   }
 
+  async addInstructor(input: Omit<Instructor, 'id'>): Promise<void> {
+    const { error } = await supabase.from('instructors').insert({
+      name: input.name,
+      contact: input.phone ?? null,
+      email: input.email ?? null,
+      lecture_topics: input.expertise ?? [],
+      fee_basis: input.defaultFee ?? null,
+      bank_name: input.bankName ?? null,
+      account_number: input.accountNumber ?? null,
+      is_active: true,
+    });
+    if (error) throw error;
+  }
+
+  async deleteInstructor(id: string): Promise<void> {
+    const { error } = await supabase.from('instructors').delete().eq('id', Number(id));
+    if (error) throw error;
+  }
+
   async getCompanies(): Promise<Company[]> {
     const { data, error } = await supabase.from('companies').select('*').eq('is_active', true);
     if (error) throw error;
@@ -235,6 +254,26 @@ class SupabaseDataSource implements DataSource {
       managerContact: r.manager_contact ?? undefined,
       email: r.email ?? undefined,
     }));
+  }
+
+  async addCompany(input: Omit<Company, 'id'>): Promise<void> {
+    const { error } = await supabase.from('companies').insert({
+      company_name: input.companyName,
+      ceo_name: input.ceoName ?? null,
+      business_number: input.businessNumber ?? null,
+      bank_name: input.bankName ?? null,
+      account_number: input.accountNumber ?? null,
+      tax_type: input.taxType ?? null,
+      manager_contact: input.managerContact ?? null,
+      email: input.email ?? null,
+      is_active: true,
+    });
+    if (error) throw error;
+  }
+
+  async deleteCompany(id: string): Promise<void> {
+    const { error } = await supabase.from('companies').delete().eq('id', Number(id));
+    if (error) throw error;
   }
 
   async getClients(): Promise<Client[]> {

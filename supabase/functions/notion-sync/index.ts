@@ -1,15 +1,14 @@
-// =============================================================
-// notion-sync Edge Function (v2 — 매핑표 기반 동적 동기화)
-// - 필드 매핑을 코드에 하드코딩하지 않고 groupware.notion_field_mappings 테이블에서 읽음
-// - 관리자화면(설정 > Notion 연동 관리)에서 필드명/타입/방향/사용여부를 코드 수정 없이 변경 가능
-// - 매핑된 Notion 속성을 찾지 못하거나 타입이 다르면: 조용히 false/null로 덮어쓰지 않고
-//   해당 필드만 건너뛰고 notion_sync_log에 명확히 에러 기록 (기존 v1의 가장 위험했던 버그 수정)
-// =============================================================
+// notion-sync Edge Function (v3 - multi-entity, mapping-table driven)
+// Supports: project, instructor (companies intentionally NOT synced - no Notion source)
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
 const NOTION_VERSION = '2022-06-28';
-const PROJECT_DB_ID = '2eaa43d0-87d9-81bf-b2ff-cab0c0ee5549';
+
+const ENTITY_CONFIG: Record<string, { table: string; databaseId: string }> = {
+  project: { table: 'projects', databaseId: '2eaa43d0-87d9-81bf-b2ff-cab0c0ee5549' },
+  instructor: { table: 'instructors', databaseId: 'a8c32f5f-99cc-4769-a560-f32c83259c9d' },
+};
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -32,12 +31,14 @@ async function notionFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
+type DataType = 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text' | 'multi_select' | 'email' | 'phone_number';
+
 interface FieldMapping {
   id: number;
   entity_type: string;
   supabase_column: string;
   notion_property_name: string;
-  data_type: 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text';
+  data_type: DataType;
   sync_direction: 'both' | 'to_notion_only' | 'from_notion_only' | 'disabled';
 }
 
@@ -51,11 +52,12 @@ async function getActiveMappings(entityType: string): Promise<FieldMapping[]> {
   return (data ?? []) as FieldMapping[];
 }
 
-const NOTION_TYPE_NAME: Record<FieldMapping['data_type'], string> = {
-  title: 'title', status: 'status', select: 'select', checkbox: 'checkbox', date: 'date', number: 'number', rich_text: 'rich_text',
+const NOTION_TYPE_NAME: Record<DataType, string> = {
+  title: 'title', status: 'status', select: 'select', checkbox: 'checkbox', date: 'date', number: 'number',
+  rich_text: 'rich_text', multi_select: 'multi_select', email: 'email', phone_number: 'phone_number',
 };
 
-function buildNotionPropertyValue(value: any, dataType: FieldMapping['data_type']) {
+function buildNotionPropertyValue(value: any, dataType: DataType) {
   switch (dataType) {
     case 'title': return { title: [{ text: { content: String(value ?? '') } }] };
     case 'status': return { status: { name: value } };
@@ -64,6 +66,9 @@ function buildNotionPropertyValue(value: any, dataType: FieldMapping['data_type'
     case 'date': return value ? { date: { start: value } } : { date: null };
     case 'number': return value != null ? { number: Number(value) } : { number: null };
     case 'rich_text': return { rich_text: value ? [{ text: { content: String(value).slice(0, 1900) } }] : [] };
+    case 'multi_select': return { multi_select: (Array.isArray(value) ? value : []).map((v: string) => ({ name: v })) };
+    case 'email': return { email: value || null };
+    case 'phone_number': return { phone_number: value || null };
   }
 }
 
@@ -80,20 +85,29 @@ function readNotionPropertyValue(pageProperties: any, mapping: FieldMapping): { 
     case 'date': return { value: prop.date?.start ?? null };
     case 'number': return { value: prop.number ?? null };
     case 'rich_text': return { value: (prop.rich_text ?? []).map((t: any) => t.plain_text).join('') || null };
+    case 'multi_select': return { value: (prop.multi_select ?? []).map((o: any) => o.name) };
+    case 'email': return { value: prop.email ?? null };
+    case 'phone_number': return { value: prop.phone_number ?? null };
   }
 }
 
-const norm = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+const norm = (v: unknown) => {
+  if (Array.isArray(v)) return JSON.stringify([...v].sort());
+  return v === null || v === undefined ? '' : String(v);
+};
 
-async function logSync(entityId: number | null, direction: 'to_notion' | 'from_notion', status: 'success' | 'error', message: string) {
-  await supabase.from('notion_sync_log').insert({ entity_type: 'project', entity_id: entityId, direction, status, message });
+async function logSync(entityType: string, entityId: number | null, direction: 'to_notion' | 'from_notion', status: 'success' | 'error', message: string) {
+  await supabase.from('notion_sync_log').insert({ entity_type: entityType, entity_id: entityId, direction, status, message });
 }
 
-async function pushProject(id: number) {
-  const mappings = await getActiveMappings('project');
+async function pushEntity(entityType: string, id: number) {
+  const cfg = ENTITY_CONFIG[entityType];
+  if (!cfg) return { error: `unknown entity_type: ${entityType}` };
+
+  const mappings = await getActiveMappings(entityType);
   const pushMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'to_notion_only');
 
-  const { data: row, error } = await supabase.from('projects').select('*').eq('id', id).maybeSingle();
+  const { data: row, error } = await supabase.from(cfg.table).select('*').eq('id', id).maybeSingle();
   if (error || !row) return { skipped: true, reason: 'row not found' };
   if (!row.notion_page_id) return { skipped: true, reason: 'no notion_page_id linked' };
 
@@ -101,8 +115,8 @@ async function pushProject(id: number) {
   try {
     page = await notionFetch(`/pages/${row.notion_page_id}`);
   } catch (e) {
-    await supabase.from('projects').update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
-    await logSync(id, 'to_notion', 'error', String(e));
+    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
+    await logSync(entityType, id, 'to_notion', 'error', String(e));
     return { error: String(e) };
   }
 
@@ -128,12 +142,10 @@ async function pushProject(id: number) {
     }
   }
 
-  if (fieldErrors.length > 0) {
-    await logSync(id, 'to_notion', 'error', fieldErrors.join(' / '));
-  }
+  if (fieldErrors.length > 0) await logSync(entityType, id, 'to_notion', 'error', fieldErrors.join(' / '));
 
   if (!anyChanged) {
-    await supabase.from('projects').update({
+    await supabase.from(cfg.table).update({
       sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
       sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
       last_synced_at: new Date().toISOString(),
@@ -143,26 +155,30 @@ async function pushProject(id: number) {
 
   try {
     await notionFetch(`/pages/${row.notion_page_id}`, { method: 'PATCH', body: JSON.stringify({ properties }) });
-    await supabase.from('projects').update({
+    await supabase.from(cfg.table).update({
       sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
       sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
       last_synced_at: new Date().toISOString(),
     }).eq('id', id);
-    await logSync(id, 'to_notion', 'success', `pushed (${Object.keys(properties).join(', ')})`);
+    await logSync(entityType, id, 'to_notion', 'success', `pushed (${Object.keys(properties).join(', ')})`);
     return { pushed: true, fields: Object.keys(properties), fieldErrors };
   } catch (e) {
-    await supabase.from('projects').update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
-    await logSync(id, 'to_notion', 'error', String(e));
+    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
+    await logSync(entityType, id, 'to_notion', 'error', String(e));
     return { error: String(e) };
   }
 }
 
-async function pullProjects() {
-  const mappings = await getActiveMappings('project');
+async function pullEntity(entityType: string) {
+  const cfg = ENTITY_CONFIG[entityType];
+  if (!cfg) return { error: `unknown entity_type: ${entityType}` };
+
+  const mappings = await getActiveMappings(entityType);
   const pullMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'from_notion_only');
+  const titleMapping = mappings.find((m) => m.data_type === 'title');
 
   const since = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-  const result = await notionFetch(`/databases/${PROJECT_DB_ID}/query`, {
+  const result = await notionFetch(`/databases/${cfg.databaseId}/query`, {
     method: 'POST',
     body: JSON.stringify({
       filter: { timestamp: 'last_edited_time', last_edited_time: { on_or_after: since } },
@@ -184,41 +200,40 @@ async function pullProjects() {
         patch[m.supabase_column] = read.value;
       }
 
-      const { data: existing } = await supabase.from('projects').select('id, *').eq('notion_page_id', page.id).maybeSingle();
+      const { data: existing } = await supabase.from(cfg.table).select('id, *').eq('notion_page_id', page.id).maybeSingle();
 
       if (existing) {
         const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
         if (!changed && fieldErrors.length === 0) { skipped++; continue; }
 
-        await supabase.from('projects').update({
-          ...patch,
-          last_synced_at: new Date().toISOString(),
+        await supabase.from(cfg.table).update({
+          ...patch, last_synced_at: new Date().toISOString(),
           sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
           sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
         }).eq('id', existing.id);
-        await logSync(existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
+        await logSync(entityType, existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
         updated++;
       } else {
-        if (!patch.project_name) { skipped++; continue; }
-        const { data: inserted, error: insErr } = await supabase.from('projects').insert({
+        const titleValue = titleMapping ? patch[titleMapping.supabase_column] : null;
+        if (!titleValue) { skipped++; continue; }
+        const { data: inserted, error: insErr } = await supabase.from(cfg.table).insert({
           ...patch,
           notion_page_id: page.id,
-          notion_url: page.url,
-          is_master: true,
+          ...(entityType === 'project' ? { notion_url: page.url, is_master: true } : {}),
           sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
           sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
           last_synced_at: new Date().toISOString(),
         }).select('id').single();
         if (insErr) throw insErr;
-        await logSync(inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
+        await logSync(entityType, inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
         created++;
       }
     } catch (e) {
       errored++;
-      await logSync(null, 'from_notion', 'error', String(e));
+      await logSync(entityType, null, 'from_notion', 'error', String(e));
     }
   }
-  return { scanned: (result.results ?? []).length, created, updated, skipped, errored };
+  return { entityType, scanned: (result.results ?? []).length, created, updated, skipped, errored };
 }
 
 Deno.serve(async (req: Request) => {
@@ -229,14 +244,20 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action ?? 'pull';
+    const entityType = body.entityType ?? 'project';
 
     if (action === 'push') {
-      const result = await pushProject(Number(body.projectId));
+      const result = await pushEntity(entityType, Number(body.entityId ?? body.projectId));
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
     }
     if (action === 'pull') {
-      const result = await pullProjects();
+      const result = await pullEntity(entityType);
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (action === 'pull_all') {
+      const results = [];
+      for (const et of Object.keys(ENTITY_CONFIG)) results.push(await pullEntity(et));
+      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
     }
     return new Response(JSON.stringify({ error: 'unknown action' }), { status: 400 });
   } catch (e) {
