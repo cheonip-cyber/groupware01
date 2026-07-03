@@ -4,7 +4,7 @@ import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard, Wallet, RefreshCw, AlertTriangle } from 'lucide-react';
+import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search } from 'lucide-react';
 
 interface CardTxn {
   id: string;
@@ -43,6 +43,8 @@ export function AdminCardPage() {
   const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
   const [recurring, setRecurring] = useState<RecurringSetting[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [month, setMonth] = useState(''); // YYYY-MM ('' = 전체)
 
   const load = async () => {
     setLoading(true);
@@ -71,10 +73,15 @@ export function AdminCardPage() {
   useEffect(() => { load(); }, []);
 
   const categories = useMemo(() => [...new Set(cardTxns.map((t) => t.category_name ?? '미분류'))], [cardTxns]);
-  const filteredTxns = useMemo(
-    () => (categoryFilter ? cardTxns.filter((t) => t.category_name === categoryFilter) : cardTxns),
-    [cardTxns, categoryFilter],
-  );
+  const filteredTxns = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return cardTxns.filter((t) => {
+      if (categoryFilter && t.category_name !== categoryFilter) return false;
+      if (month && !(t.transaction_date ?? '').startsWith(month)) return false;
+      if (q && !`${t.merchant_name ?? ''} ${t.purpose ?? ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [cardTxns, categoryFilter, search, month]);
   const duplicateRiskTxns = useMemo(
     () => cardTxns.filter((t) => (t.category_name ?? '').includes(DUPLICATE_RISK_KEYWORD)),
     [cardTxns],
@@ -125,11 +132,21 @@ export function AdminCardPage() {
           title={`카드 사용내역 (${filteredTxns.length}건)`}
           icon={<CreditCard className="h-4 w-4 text-slate-400" />}
           action={
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
-              <option value="">전체 카테고리</option>
-              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="가맹점·용도 검색"
+                  className="w-40 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
+              </span>
+              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
+              {month && <button onClick={() => setMonth('')} className="text-[11px] text-slate-400 underline">해제</button>}
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+                <option value="">전체 카테고리</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </span>
           }
         />
         {filteredTxns.length === 0 ? <EmptyState title="내역이 없습니다" /> : (
