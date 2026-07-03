@@ -10,6 +10,7 @@ import { BudgetTab } from './tabs/BudgetTab';
 import { PaymentTab } from './tabs/PaymentTab';
 import { SettlementTab } from './tabs/SettlementTab';
 import { HistoryTab } from './tabs/HistoryTab';
+import { GroupSection } from './GroupSection';
 import { StatusBadge } from '../common/StatusBadge';
 import { projectStatusStyle } from '../../utils/statusConfig';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
@@ -23,7 +24,7 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const {
     projects, instructors, companies, paymentRequests, loading,
-    updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
+    refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
   } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
   const [saving, setSaving] = useState(false);
@@ -113,7 +114,12 @@ export function ProjectDetail() {
 
         {/* 탭 콘텐츠 */}
         <div className="p-4 lg:p-6">
-          {activeTab === '개요' && <OverviewTab project={project} instructors={instructors} />}
+          {activeTab === '개요' && (
+            <div className="space-y-4">
+              <GroupSection project={project} allProjects={projects} onChanged={refresh} />
+              <OverviewTab project={project} instructors={instructors} />
+            </div>
+          )}
           {activeTab === '운영' && <OperationTab project={project} onTogglePrep={handleTogglePrep} />}
           {activeTab === '매출' && <RevenueTab project={project} onUpdate={handleUpdate} />}
           {activeTab === '예산/비용' && (
