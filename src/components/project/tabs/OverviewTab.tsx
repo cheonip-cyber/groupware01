@@ -23,11 +23,19 @@ export function OverviewTab({ project, instructors }: { project: Project; instru
         <Field label="우선순위"><StatusBadge label={project.priority} style={priorityStyle[project.priority]} /></Field>
         <Field label="강사">{trainers.length ? trainers.map((t) => t.name).join(', ') : <span className="text-red-500">미확정</span>}</Field>
         <Field label="Notion 원본">
-          <a href={project.notionUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
-            노션 원본 열기 <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          {project.notionUrl ? (
+            <a href={project.notionUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+              노션 원본 열기 <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <span className="text-slate-400">노션 미연동 (과거/수기 프로젝트)</span>
+          )}
         </Field>
-        <Field label="동기화 상태">{project.syncStatus === 'synced' ? '동기화됨' : project.syncStatus}</Field>
+        <Field label="동기화 상태">
+          {project.syncStatus === 'error' ? (
+            <span className="text-xs text-red-600">동기화 오류: {project.syncError ?? '원인 미상 (관리자 문의)'}</span>
+          ) : project.syncStatus === 'synced' ? '동기화됨' : project.notionPageId ? project.syncStatus : '해당 없음'}
+        </Field>
       </Section>
     </div>
   );

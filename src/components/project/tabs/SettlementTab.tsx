@@ -62,13 +62,25 @@ export function SettlementTab({ project, requests, onUpdate }:
 
   const dueInfo = computeDueMonthInfo(project.startDate);
 
+  // Notion 연동 프로젝트: '제안서 제출'과 '진행 상태'는 Notion이 원천(from_notion_only 매핑).
+  // 여기서 수정해도 다음 Notion pull 때 되돌아가므로 편집을 잠그고 Notion으로 유도한다.
+  const notionLocked = !!project.notionPageId;
+  const notionEditHint = (
+    <span>
+      Notion 원천 항목 — {project.notionUrl
+        ? <a href={project.notionUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Notion에서 수정</a>
+        : 'Notion에서 수정'}
+    </span>
+  );
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="정산 확인 상태">
         <CheckRow
           label="제안서 제출"
           state={project.proposalSubmitted ? 'done' : 'pending'}
-          onToggle={() => onUpdate({ proposalSubmitted: !project.proposalSubmitted })}
+          onToggle={notionLocked ? undefined : () => onUpdate({ proposalSubmitted: !project.proposalSubmitted })}
+          hint={notionLocked ? notionEditHint : undefined}
         />
         <CheckRow
           label="거래명세서 제출"
@@ -112,14 +124,24 @@ export function SettlementTab({ project, requests, onUpdate }:
           <span className={`font-bold ${profitTone}`}>{project.profitRate}%</span>
         </Field>
         <Field label="결산 완료">
-          <ActionButton
-            done={project.settlementStatus === '결산완료'}
-            tone="emerald"
-            onClick={handleSettlementDone}
-            onUndo={handleSettlementUndo}
-          >
-            결산완료 처리
-          </ActionButton>
+          {notionLocked ? (
+            <span className="text-xs text-slate-500">
+              {project.settlementStatus === '결산완료' ? '✓ 완료됨 · ' : ''}
+              진행 상태는 Notion 원천입니다. {project.notionUrl
+                ? <a href={project.notionUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Notion</a>
+                : 'Notion'}
+              에서 <span className="font-medium">종료(수익화 완료)</span>로 변경하면 자동 반영됩니다.
+            </span>
+          ) : (
+            <ActionButton
+              done={project.settlementStatus === '결산완료'}
+              tone="emerald"
+              onClick={handleSettlementDone}
+              onUndo={handleSettlementUndo}
+            >
+              결산완료 처리
+            </ActionButton>
+          )}
         </Field>
       </Section>
     </div>

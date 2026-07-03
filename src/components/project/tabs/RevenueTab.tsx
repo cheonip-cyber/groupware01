@@ -60,12 +60,20 @@ export function RevenueTab({ project, onUpdate }:
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.vatType === '별도' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
               {project.vatType ?? '포함'}
             </span>
-            <button
-              onClick={() => onUpdate({ vatType: project.vatType === '별도' ? '포함' : '별도' })}
-              className="text-xs text-slate-400 underline hover:text-blue-600"
-            >
-              {project.vatType === '별도' ? '"포함"으로 변경' : '"별도"로 변경'}
-            </button>
+            {project.notionPageId ? (
+              <span className="text-[11px] text-slate-400">
+                Notion 원천 항목 — {project.notionUrl
+                  ? <a href={project.notionUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Notion에서 수정</a>
+                  : 'Notion에서 수정'}
+              </span>
+            ) : (
+              <button
+                onClick={() => onUpdate({ vatType: project.vatType === '별도' ? '포함' : '별도' })}
+                className="text-xs text-slate-400 underline hover:text-blue-600"
+              >
+                {project.vatType === '별도' ? '"포함"으로 변경' : '"별도"로 변경'}
+              </button>
+            )}
           </div>
         </Field>
         <Field label="공급가액 (VAT 제외)"><MoneyText value={project.supplyAmount} /></Field>
