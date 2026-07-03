@@ -169,7 +169,7 @@ export function SettingsPage() {
           <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
             <p className="text-sm font-semibold text-emerald-800">Supabase 연동 모드 (groupware 스키마)</p>
             <p className="mt-1 text-xs text-emerald-600">
-              Notion ⇄ Supabase ⇄ 대시보드가 실시간으로 연동되어 있습니다.
+              Notion → Supabase 동기화는 약 2분 주기, 대시보드 → Notion 반영(실행결과 체크박스)은 약 1분 주기로 자동 실행됩니다.
             </p>
           </div>
           <div>

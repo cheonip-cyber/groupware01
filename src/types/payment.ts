@@ -15,6 +15,8 @@ export interface PaymentRequest {
   infoConfirmed?: boolean;
   vendorTaxInvoiceReceived?: boolean;
   vendorTaxInvoiceDate?: string;
+  /** 지급완료 시 기록되는 지급월(YYYY-MM). 소급 처리를 위해 사용자가 선택 가능 */
+  paidMonth?: string;
 }
 
 export interface SyncStatus {

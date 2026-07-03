@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
@@ -11,6 +12,9 @@ export function PaymentsPage() {
   const { paymentRequests, loading, updatePaymentRequest } = useAppData();
   const pending = paymentRequests.filter((r) => r.status === '지급대상' || r.status === '지급요청');
   const done = paymentRequests.filter((r) => r.status === '지급완료');
+  // 지급월 소급 선택: 월말 마감 이후 처리 시 실제 지급월과 어긋나는 문제 방지 (기본값: 이번 달)
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const [payMonth, setPayMonth] = useState<Record<string, string>>({});
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
 
@@ -42,8 +46,17 @@ export function PaymentsPage() {
                       className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">지급요청 생성</button>
                   )}
                   {r.status === '지급요청' && (
-                    <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료' })}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료 처리</button>
+                    <span className="flex items-center gap-1.5">
+                      <input type="month" value={payMonth[r.id] ?? nowMonth} max={nowMonth}
+                        onChange={(e) => setPayMonth((s) => ({ ...s, [r.id]: e.target.value }))}
+                        title="지급월 (소급 처리 시 변경)"
+                        className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs text-slate-600 outline-none focus:border-blue-400" />
+                      <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료 처리</button>
+                    </span>
+                  )}
+                  {r.status === '지급완료' && r.paidMonth && (
+                    <span className="text-xs text-slate-400">지급월 {r.paidMonth}</span>
                   )}
                 </td>
               </tr>
