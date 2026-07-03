@@ -1,66 +1,118 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useAppData } from '../../store/appData';
+import { useAuth } from '../../auth/AuthContext';
 import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { paymentStatusStyle } from '../../utils/statusConfig';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard } from 'lucide-react';
+import { calcWithholding, maskResidentNumber } from '../../utils/withholding';
+import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
+import { CreditCard, Search, Download, X, ShieldCheck } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
+import type { PaymentRequest } from '../../types';
 
 export function PaymentsPage() {
   const { paymentRequests, loading, updatePaymentRequest } = useAppData();
-  const pending = paymentRequests.filter((r) => r.status === '지급대상' || r.status === '지급요청');
-  const done = paymentRequests.filter((r) => r.status === '지급완료');
-  // 지급월 소급 선택: 월말 마감 이후 처리 시 실제 지급월과 어긋나는 문제 방지 (기본값: 이번 달)
+  const { isAdmin } = useAuth();
   const nowMonth = new Date().toISOString().slice(0, 7);
+
+  const [search, setSearch] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');       // 지급예정월(YYYY-MM) 필터
   const [payMonth, setPayMonth] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMonth, setBulkMonth] = useState(nowMonth);
+  const [detail, setDetail] = useState<PaymentRequest | null>(null);
+  const [dlMonth, setDlMonth] = useState(nowMonth);
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return paymentRequests.filter((r) => {
+      if (q && !`${r.payeeName} ${r.projectName ?? ''}`.toLowerCase().includes(q)) return false;
+      if (monthFilter && !(r.dueDate ?? '').startsWith(monthFilter)) return false;
+      return true;
+    });
+  }, [paymentRequests, search, monthFilter]);
+
+  const pending = visible.filter((r) => r.status === '지급대상' || r.status === '지급요청');
+  const done = visible.filter((r) => r.status === '지급완료');
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
 
-  const Table = ({ rows }: { rows: typeof paymentRequests }) => (
+  const toggleSelect = (id: string) =>
+    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const bulkComplete = async () => {
+    const targets = pending.filter((r) => r.status === '지급요청' && selected.has(r.id));
+    for (const r of targets) await updatePaymentRequest(r.id, { status: '지급완료', paidMonth: bulkMonth });
+    setSelected(new Set());
+  };
+
+  const requestable = (r: PaymentRequest) => r.infoConfirmed; // 지급정보 확인 후에만 지급요청 가능
+
+  const Table = ({ rows, selectable }: { rows: PaymentRequest[]; selectable?: boolean }) => (
     rows.length === 0 ? <EmptyState title="해당 지급 건이 없습니다" /> : (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-            <th className="px-5 py-2.5 font-medium">지급처</th>
+            {selectable && <th className="w-8 px-3 py-2.5" />}
+            <th className="px-3 py-2.5 font-medium">지급처</th>
             <th className="px-3 py-2.5 font-medium">유형</th>
             <th className="px-3 py-2.5 font-medium">프로젝트</th>
-            <th className="px-3 py-2.5 text-right font-medium">금액</th>
+            <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
+            <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
             <th className="px-3 py-2.5 font-medium">지급예정일</th>
             <th className="px-3 py-2.5 font-medium">상태</th>
             <th className="px-3 py-2.5 font-medium">처리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50">
-                <td className="px-5 py-3 font-medium text-slate-800">{r.payeeName}</td>
-                <td className="px-3 py-3 text-slate-500">{r.payeeType}</td>
-                <td className="px-3 py-3 text-xs text-slate-500 max-w-[200px] truncate">{r.projectName}</td>
-                <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
-                <td className="px-3 py-3 text-slate-500">{formatDate(r.dueDate)}</td>
-                <td className="px-3 py-3"><StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" /></td>
-                <td className="px-3 py-3 flex gap-1">
-                  {r.status === '지급대상' && (
-                    <button onClick={() => updatePaymentRequest(r.id, { status: '지급요청' })}
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">지급요청 생성</button>
+            {rows.map((r) => {
+              const net = r.payeeType === '강사' ? calcWithholding(r.amount).netAmount : r.amount;
+              return (
+                <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setDetail(r)}>
+                  {selectable && (
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      {r.status === '지급요청' && (
+                        <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="h-4 w-4" />
+                      )}
+                    </td>
                   )}
-                  {r.status === '지급요청' && (
-                    <span className="flex items-center gap-1.5">
-                      <input type="month" value={payMonth[r.id] ?? nowMonth} max={nowMonth}
-                        onChange={(e) => setPayMonth((s) => ({ ...s, [r.id]: e.target.value }))}
-                        title="지급월 (소급 처리 시 변경)"
-                        className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs text-slate-600 outline-none focus:border-blue-400" />
-                      <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
-                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료 처리</button>
-                    </span>
-                  )}
-                  {r.status === '지급완료' && r.paidMonth && (
-                    <span className="text-xs text-slate-400">지급월 {r.paidMonth}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  <td className="px-3 py-3 font-medium text-slate-800">
+                    {r.payeeName}
+                    {!r.bankName && <span className="ml-1.5 text-[11px] text-red-500">계좌없음</span>}
+                    {r.infoConfirmed && <ShieldCheck className="ml-1.5 inline h-3.5 w-3.5 text-emerald-500" />}
+                  </td>
+                  <td className="px-3 py-3 text-slate-500">{r.payeeType}</td>
+                  <td className="max-w-[200px] truncate px-3 py-3 text-xs text-slate-500">{r.projectName}</td>
+                  <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
+                  <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={net} /></td>
+                  <td className="px-3 py-3 text-slate-500">{formatDate(r.dueDate)}</td>
+                  <td className="px-3 py-3"><StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" /></td>
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                    {r.status === '지급대상' && (
+                      <button onClick={() => updatePaymentRequest(r.id, { status: '지급요청' })}
+                        disabled={!requestable(r)}
+                        title={requestable(r) ? '' : '상세에서 지급정보 확인 후 요청 가능'}
+                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">지급요청 생성</button>
+                    )}
+                    {r.status === '지급요청' && (
+                      <span className="flex items-center gap-1.5">
+                        <input type="month" value={payMonth[r.id] ?? nowMonth} max={nowMonth}
+                          onChange={(e) => setPayMonth((s) => ({ ...s, [r.id]: e.target.value }))}
+                          title="지급월 (소급 처리 시 변경)"
+                          className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs text-slate-600 outline-none focus:border-blue-400" />
+                        <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
+                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료 처리</button>
+                      </span>
+                    )}
+                    {r.status === '지급완료' && r.paidMonth && (
+                      <span className="text-xs text-slate-400">지급월 {r.paidMonth}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -69,14 +121,122 @@ export function PaymentsPage() {
 
   return (
     <div className="space-y-5">
+      {/* 검색 / 필터 / 관리자 다운로드 */}
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="지급처·프로젝트 검색"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white" />
+          </div>
+          <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}
+            title="지급예정월 필터" className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          {monthFilter && (
+            <button onClick={() => setMonthFilter('')} className="text-xs text-slate-400 underline hover:text-slate-600">필터 해제</button>
+          )}
+          {isAdmin && (
+            <span className="ml-auto flex items-center gap-1.5">
+              <input type="month" value={dlMonth} onChange={(e) => setDlMonth(e.target.value)}
+                title="다운로드 기준월" className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
+              <button onClick={() => downloadTransferSheet(paymentRequests.filter((r) => r.status === '지급요청'), dlMonth)}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                <Download className="h-3.5 w-3.5" /> 자금이체양식
+              </button>
+              <button onClick={() => downloadBusinessIncomeSheet(paymentRequests.filter((r) => r.status === '지급완료' && r.paidMonth === dlMonth), dlMonth)}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                <Download className="h-3.5 w-3.5" /> 사업소득내역
+              </button>
+            </span>
+          )}
+        </div>
+        {isAdmin && (
+          <p className="mt-2 text-[11px] text-slate-400">
+            자금이체양식: 현재 '지급요청' 상태 전체 · 사업소득내역: 선택월에 지급완료된 강사 건 (주민번호 포함 — 취급 주의)
+          </p>
+        )}
+      </Card>
+
+      {/* 일괄 처리 바 */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5">
+          <span className="text-sm font-medium text-emerald-800">{selected.size}건 선택됨</span>
+          <input type="month" value={bulkMonth} max={nowMonth} onChange={(e) => setBulkMonth(e.target.value)}
+            className="rounded-lg border border-emerald-200 px-2 py-1 text-xs outline-none" />
+          <button onClick={bulkComplete}
+            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">선택 일괄 지급완료</button>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-slate-400 underline">선택 해제</button>
+        </div>
+      )}
+
       <Card>
         <CardHeader title={`지급 대기 (${pending.length}건)`} icon={<CreditCard className="h-4 w-4 text-amber-500" />} />
-        <Table rows={pending} />
+        <Table rows={pending} selectable />
       </Card>
       <Card>
         <CardHeader title={`지급 완료 (${done.length}건)`} icon={<CreditCard className="h-4 w-4 text-emerald-500" />} />
         <Table rows={done} />
       </Card>
+
+      {/* 지급 상세 확인 모달 */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setDetail(null)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-800">지급 정보 확인</h3>
+              <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-2.5 text-sm">
+              <Row k="지급처">{detail.payeeName} <span className="text-xs text-slate-400">({detail.payeeType})</span></Row>
+              <Row k="프로젝트">{detail.projectName ?? '-'}</Row>
+              <Row k="은행 / 계좌">
+                {detail.bankName ? `${detail.bankName} | ${detail.accountNumber}` :
+                  <span className="text-red-500">미등록 — 강사/업체 관리에서 등록 필요</span>}
+              </Row>
+              {detail.payeeType === '강사' && (
+                <>
+                  <Row k="주민등록번호"><span className="font-mono">{maskResidentNumber(detail.residentNumber)}</span></Row>
+                  <Row k="지급총액(세전)"><MoneyText value={detail.amount} /></Row>
+                  {(() => { const w = calcWithholding(detail.amount); return (
+                    <>
+                      <Row k="소득세 (3%)"><span className="text-red-500">-<MoneyText value={w.incomeTax} /></span></Row>
+                      <Row k="지방소득세 (0.3%)"><span className="text-red-500">-<MoneyText value={w.residentTax} /></span></Row>
+                      <Row k="실지급액"><span className="font-bold text-emerald-600"><MoneyText value={w.netAmount} /></span></Row>
+                    </>
+                  ); })()}
+                </>
+              )}
+              {detail.payeeType === '업체' && (
+                <>
+                  <Row k="지급금액"><MoneyText value={detail.amount} /></Row>
+                  <Row k="매입세금계산서">{detail.vendorTaxInvoiceReceived
+                    ? <span className="text-emerald-600">수취 완료{detail.vendorTaxInvoiceDate ? ` (${formatDate(detail.vendorTaxInvoiceDate)})` : ''}</span>
+                    : <span className="text-amber-600">미수취</span>}</Row>
+                </>
+              )}
+              {detail.memo && <Row k="비고">{detail.memo}</Row>}
+              {detail.status === '지급대상' && (
+                <label className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                  <input type="checkbox" checked={!!detail.infoConfirmed}
+                    onChange={async (e) => {
+                      await updatePaymentRequest(detail.id, { infoConfirmed: e.target.checked });
+                      setDetail({ ...detail, infoConfirmed: e.target.checked });
+                    }} className="h-4 w-4" />
+                  지급 정보(계좌·금액)를 확인했습니다 — 확인 후 지급요청 생성 가능
+                </label>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ k, children }: { k: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-50 pb-2 last:border-0">
+      <span className="shrink-0 text-xs font-medium text-slate-400">{k}</span>
+      <span className="text-right text-slate-700">{children}</span>
     </div>
   );
 }

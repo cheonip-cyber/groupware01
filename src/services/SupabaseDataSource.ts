@@ -12,7 +12,7 @@
 // =============================================================
 import { supabase } from './supabaseClient';
 import type { DataSource } from './dataSource';
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus, PrepItem, Company, NotionFieldMapping } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, ProjectSyncLog, SyncStatus, PrepItem, Company, NotionFieldMapping } from '../types';
 import {
   dbStatusToProjectStatus, projectStatusToDbStatus,
   deriveRevenueStatus, derivePaymentStatus, deriveSettlementStatus,
@@ -353,7 +353,7 @@ class SupabaseDataSource implements DataSource {
 
     const [{ data: instructors }, { data: companies }] = await Promise.all([
       instructorIds.length
-        ? supabase.from('instructors').select('id, bank_name, account_number').in('id', instructorIds)
+        ? supabase.from('instructors').select('id, bank_name, account_number, resident_number, address').in('id', instructorIds)
         : Promise.resolve({ data: [] as any[] }),
       companyIds.length
         ? supabase.from('companies').select('id, bank_name, account_number').in('id', companyIds)
@@ -376,6 +376,11 @@ class SupabaseDataSource implements DataSource {
         status: SupabaseDataSource.dbCostStatusToFrontend(r.status),
         memo: r.remarks ?? undefined,
         payeeAccountInfo: accountInfo,
+        payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
+        bankName: acct?.bank_name ?? undefined,
+        accountNumber: acct?.account_number ?? undefined,
+        residentNumber: acct?.resident_number ?? undefined,
+        address: acct?.address ?? undefined,
         infoConfirmed: !!r.payment_info_confirmed,
         vendorTaxInvoiceReceived: !!r.vendor_tax_invoice_received,
         vendorTaxInvoiceDate: r.vendor_tax_invoice_date ?? undefined,
@@ -490,6 +495,21 @@ class SupabaseDataSource implements DataSource {
   async deleteNotionFieldMapping(id: string): Promise<void> {
     const { error } = await supabase.from('notion_field_mappings').delete().eq('id', Number(id));
     if (error) throw error;
+  }
+
+  async getProjectSyncLogs(projectId: string): Promise<ProjectSyncLog[]> {
+    const { data, error } = await supabase
+      .from('notion_sync_log')
+      .select('id, direction, status, message, synced_at')
+      .eq('entity_type', 'project')
+      .eq('entity_id', Number(projectId))
+      .order('synced_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return (data ?? []).map((r: any) => ({
+      id: String(r.id), direction: r.direction, status: r.status,
+      message: r.message ?? '', syncedAt: r.synced_at,
+    }));
   }
 
   async getSyncStatus(): Promise<SyncStatus> {
