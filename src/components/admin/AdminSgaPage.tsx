@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
+import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
+import { downloadSgaSheet, downloadCombinedTransferSheet } from '../../utils/paymentExport';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { PiggyBank, RefreshCw } from 'lucide-react';
+import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X } from 'lucide-react';
 
 interface ManualExpense {
   id: number;
@@ -14,6 +16,7 @@ interface ManualExpense {
   amount: number;
   description: string | null;
   status: string;
+  is_periodic?: boolean;
 }
 
 // 실데이터 기준 확인된 판관비 카테고리 (급여/상여, 세금/공과, 대출/수수료, 렌탈/위탁, 임대료/관리비, 기기구입/기타)
@@ -25,12 +28,25 @@ const CATEGORY_COLOR: Record<string, string> = {
   '임대료/관리비': '#10b981',
   '기기구입/기타': '#94a3b8',
 };
+const CATEGORIES = Object.keys(CATEGORY_COLOR);
+
+interface FormState { id: number | null; transaction_date: string; category: string; amount: string; description: string; status: string; }
+const emptyForm = (): FormState => ({
+  id: null, transaction_date: new Date().toISOString().slice(0, 10),
+  category: CATEGORIES[0], amount: '', description: '', status: 'pending',
+});
 
 export function AdminSgaPage() {
+  const { paymentRequests } = useAppData();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ManualExpense[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [search, setSearch] = useState('');
+  const [month, setMonth] = useState('');          // YYYY-MM ('' = 전체)
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [form, setForm] = useState<FormState | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -46,10 +62,16 @@ export function AdminSgaPage() {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = useMemo(
-    () => (statusFilter === 'all' ? rows : rows.filter((r) => r.status === statusFilter)),
-    [rows, statusFilter],
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (month && !r.transaction_date.startsWith(month)) return false;
+      if (categoryFilter && r.category !== categoryFilter) return false;
+      if (q && !`${r.category} ${r.description ?? ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [rows, statusFilter, search, month, categoryFilter]);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -58,23 +80,72 @@ export function AdminSgaPage() {
   }, [filtered]);
 
   const total = byCategory.reduce((s, c) => s + c.value, 0);
-  const pendingCount = rows.filter((r) => r.status !== 'paid').length;
+  const pendingRows = rows.filter((r) => r.status !== 'paid');
+
+  const save = async () => {
+    if (!form || !form.amount || Number.isNaN(Number(form.amount))) return;
+    setSaving(true);
+    const payload = {
+      transaction_date: form.transaction_date,
+      category: form.category,
+      amount: Number(form.amount),
+      description: form.description || null,
+      status: form.status,
+    };
+    const q = form.id == null
+      ? cardSupabase.from('manual_expenses').insert(payload)
+      : cardSupabase.from('manual_expenses').update(payload).eq('id', form.id);
+    const { error: err } = await q;
+    setSaving(false);
+    if (err) { alert(`저장 실패: ${err.message}`); return; }
+    setForm(null);
+    load();
+  };
+
+  const remove = async (r: ManualExpense) => {
+    if (!confirm(`'${r.category} · ${r.description ?? ''}' ${Number(r.amount).toLocaleString('ko-KR')}원 항목을 삭제할까요?`)) return;
+    const { error: err } = await cardSupabase.from('manual_expenses').delete().eq('id', r.id);
+    if (err) { alert(`삭제 실패: ${err.message}`); return; }
+    load();
+  };
+
+  const toggleStatus = async (r: ManualExpense) => {
+    const next = r.status === 'paid' ? 'pending' : 'paid';
+    const { error: err } = await cardSupabase.from('manual_expenses').update({ status: next }).eq('id', r.id);
+    if (err) { alert(`상태 변경 실패: ${err.message}`); return; }
+    setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
+  };
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
 
+  const dlLabel = month || '전체';
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400">CARD 프로젝트(별도 Supabase)의 manual_expenses 기준 — 데이터 복사 없음</p>
-        <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-          <RefreshCw className="h-3.5 w-3.5" /> 새로고침
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs text-slate-400">CARD 프로젝트(별도 Supabase)의 manual_expenses 기준 — 관리자 전용, 직원 비노출</p>
+        <span className="ml-auto flex items-center gap-1.5">
+          <button onClick={() => downloadSgaSheet(filtered, dlLabel)}
+            className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            <Download className="h-3.5 w-3.5" /> 판관비 내역
+          </button>
+          <button
+            onClick={() => downloadCombinedTransferSheet(
+              paymentRequests.filter((p) => p.status === '지급요청'), pendingRows, dlLabel)}
+            title="지급요청(강사/업체) + 미지급 판관비 통합 — 은행 이체 계획용"
+            className="flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700">
+            <Download className="h-3.5 w-3.5" /> 통합 이체 내역
+          </button>
+          <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+            <RefreshCw className="h-3.5 w-3.5" /> 새로고침
+          </button>
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-slate-500">전체 판관비 합계</p>
+          <p className="text-xs text-slate-500">조회 결과 합계</p>
           <p className="mt-1 text-xl font-bold text-slate-900"><MoneyText value={total} compact /></p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -82,8 +153,8 @@ export function AdminSgaPage() {
           <p className="mt-1 text-xl font-bold text-slate-900">{filtered.length}건</p>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-xs text-amber-600">미지급 대기</p>
-          <p className="mt-1 text-xl font-bold text-amber-700">{pendingCount}건</p>
+          <p className="text-xs text-amber-600">미지급 대기 (전체)</p>
+          <p className="mt-1 text-xl font-bold text-amber-700">{pendingRows.length}건</p>
         </div>
       </div>
 
@@ -123,12 +194,31 @@ export function AdminSgaPage() {
         <CardHeader
           title={`상세 내역 (${filtered.length}건)`}
           action={
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
-              <option value="all">전체</option>
-              <option value="pending">대기중</option>
-              <option value="paid">지급완료</option>
-            </select>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="내용 검색"
+                  className="w-36 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
+              </span>
+              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
+              {month && <button onClick={() => setMonth('')} className="text-[11px] text-slate-400 underline">해제</button>}
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+                <option value="">분류 전체</option>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+                <option value="all">전체</option>
+                <option value="pending">대기중</option>
+                <option value="paid">지급완료</option>
+              </select>
+              <button onClick={() => setForm(emptyForm())}
+                className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+                <Plus className="h-3.5 w-3.5" /> 항목 추가
+              </button>
+            </span>
           }
         />
         {filtered.length === 0 ? <EmptyState title="내역이 없습니다" /> : (
@@ -140,17 +230,28 @@ export function AdminSgaPage() {
                 <th className="px-3 py-2.5 font-medium">내용</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액</th>
                 <th className="px-3 py-2.5 font-medium">상태</th>
+                <th className="px-3 py-2.5 font-medium">관리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className="hover:bg-slate-50">
                     <td className="px-5 py-2 text-xs text-slate-500">{formatDate(r.transaction_date)}</td>
                     <td className="px-3 py-2 text-xs text-slate-600">{r.category}</td>
                     <td className="px-3 py-2 text-slate-700">{r.description ?? '-'}</td>
                     <td className="px-3 py-2 text-right"><MoneyText value={r.amount} /></td>
                     <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${r.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                      <button onClick={() => toggleStatus(r)} title="클릭하여 상태 전환"
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${r.status === 'paid' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}>
                         {r.status === 'paid' ? '지급완료' : '대기'}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="flex gap-1">
+                        <button onClick={() => setForm({
+                          id: r.id, transaction_date: r.transaction_date, category: r.category,
+                          amount: String(r.amount), description: r.description ?? '', status: r.status,
+                        })} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-600"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => remove(r)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                       </span>
                     </td>
                   </tr>
@@ -160,6 +261,57 @@ export function AdminSgaPage() {
           </div>
         )}
       </Card>
+
+      {/* 입력 / 수정 모달 */}
+      {form && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setForm(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-800">{form.id == null ? '판관비 항목 추가' : '판관비 항목 수정'}</h3>
+              <button onClick={() => setForm(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">일자</span>
+                <input type="date" value={form.transaction_date} onChange={(e) => setForm({ ...form, transaction_date: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-400" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">카테고리</span>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-400">
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">금액 (원)</span>
+                <input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  placeholder="0" className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-400" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">내용</span>
+                <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="지급 내용" className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-400" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-500">상태</span>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-400">
+                  <option value="pending">대기중</option>
+                  <option value="paid">지급완료</option>
+                </select>
+              </label>
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setForm(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">취소</button>
+                <button onClick={save} disabled={saving || !form.amount}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? '저장 중…' : '저장'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
