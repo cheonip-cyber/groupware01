@@ -11,8 +11,10 @@ export function RevenuePage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   const active = projects.filter((p) => p.projectStatus !== '취소/보류');
-  const totalRev = active.reduce((s, p) => s + p.contractAmount, 0);
-  const collected = active.filter((p) => p.collectionCompleted).reduce((s, p) => s + p.contractAmount, 0);
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 방지)
+  const totalRev = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);
+  const collected = active.filter((p) => p.collectionCompleted).reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);
 
   return (
     <div className="space-y-5">
@@ -48,7 +50,12 @@ export function RevenuePage() {
                   <td className="px-5 py-3">
                     <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
                   </td>
-                  <td className="px-3 py-3 text-slate-500">{p.clientName}</td>
+                  <td className="px-3 py-3 text-slate-500">
+                    {p.clientName}
+                    {p.groupType === 'distribution' && p.parentId && byId.get(p.parentId) && (
+                      <div className="text-[11px] text-indigo-500">매출귀속: {byId.get(p.parentId)!.clientName}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-right"><MoneyText value={p.contractAmount} /></td>
                   <td className="px-3 py-3 text-right"><MoneyText value={p.supplyAmount} /></td>
                   <td className="px-3 py-3"><StatusBadge label={p.revenueStatus} style={revenueStatusStyle[p.revenueStatus]} size="sm" /></td>

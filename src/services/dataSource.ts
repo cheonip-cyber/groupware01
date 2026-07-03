@@ -37,6 +37,14 @@ export interface DataSource {
   getSyncStatus(): Promise<SyncStatus>;
   /** 프로젝트별 Notion 동기화 이력 (히스토리 탭) */
   getProjectSyncLogs(projectId: string): Promise<ProjectSyncLog[]>;
+  // ─ 프로젝트 그룹(묶음) 관리 ─
+  createGroupChild(masterId: string, input: {
+    groupType: 'recurring' | 'distribution'; projectName: string; clientName?: string; amount: number;
+    executionDate?: string; distributionRatio?: number;
+    masterClientId?: string; masterStatus?: string; masterVatType?: string; masterRevenueMonth?: string;
+  }): Promise<void>;
+  attachProjectsToGroup(masterId: string, childIds: string[], groupType?: 'merged' | 'recurring' | 'distribution'): Promise<void>;
+  detachFromGroup(childId: string): Promise<void>;
   // Notion 연동 매핑 관리 (관리자 전용)
   getNotionFieldMappings(): Promise<NotionFieldMapping[]>;
   addNotionFieldMapping(input: Omit<NotionFieldMapping, 'id'>): Promise<void>;
@@ -120,6 +128,9 @@ class SampleDataSource implements DataSource {
   async deleteNotionFieldMapping() { await delay(60); }
 
   async getProjectSyncLogs(_projectId: string): Promise<ProjectSyncLog[]> { await delay(); return []; }
+  async createGroupChild(): Promise<void> { await delay(); }
+  async attachProjectsToGroup(): Promise<void> { await delay(); }
+  async detachFromGroup(): Promise<void> { await delay(); }
 
   async getSyncStatus(): Promise<SyncStatus> {
     await delay(60);

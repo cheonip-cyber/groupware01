@@ -156,7 +156,7 @@ class SupabaseDataSource implements DataSource {
     const ids = (rows ?? []).map((r: any) => r.id);
     const costMap = await fetchCostsByProjectIds(ids);
 
-    return (rows ?? []).map((r: any) =>
+    const projects = (rows ?? []).map((r: any) =>
       buildProject(
         r,
         r.clients?.name ?? '',
@@ -164,6 +164,34 @@ class SupabaseDataSource implements DataSource {
         costMap.get(r.id) ?? [],
       ),
     );
+    return SupabaseDataSource.enrichGroups(projects);
+  }
+
+  /**
+   * 프로젝트 그룹(묶음) 통계 필드 주입 — 구 시스템 집계 규칙 이식:
+   * 자식 중 금액 보유 건이 있으면 마스터의 유효매출(effectiveAmount)은 0 (이중계상 방지),
+   * 자식이 전부 0이면 마스터 금액 사용. 마스터에는 그룹 합계/자식 수를 함께 제공한다.
+   */
+  private static enrichGroups(projects: Project[]): Project[] {
+    const children = new Map<string, Project[]>();
+    for (const p of projects) {
+      if (p.parentId) {
+        if (!children.has(p.parentId)) children.set(p.parentId, []);
+        children.get(p.parentId)!.push(p);
+      }
+    }
+    for (const p of projects) {
+      const kids = children.get(p.id);
+      if (kids && kids.length > 0) {
+        const kidsSum = kids.reduce((sum, c) => sum + (c.contractAmount || 0), 0);
+        p.groupChildCount = kids.length;
+        p.groupTotalAmount = kidsSum > 0 ? kidsSum : p.contractAmount;
+        p.effectiveAmount = kidsSum > 0 ? 0 : p.contractAmount;
+      } else {
+        p.effectiveAmount = p.contractAmount;
+      }
+    }
+    return projects;
   }
 
   async getProject(id: string): Promise<Project | undefined> {
@@ -494,6 +522,69 @@ class SupabaseDataSource implements DataSource {
 
   async deleteNotionFieldMapping(id: string): Promise<void> {
     const { error } = await supabase.from('notion_field_mappings').delete().eq('id', Number(id));
+    if (error) throw error;
+  }
+
+  /** 고객사 find-or-create (매출분배 자식용) */
+  private async findOrCreateClient(name: string): Promise<number> {
+    const { data: found } = await supabase.from('clients').select('id').eq('name', name).limit(1);
+    if (found && found.length > 0) return found[0].id;
+    const { data: created, error } = await supabase.from('clients').insert({ name }).select('id').single();
+    if (error) throw error;
+    return created!.id;
+  }
+
+  /** 그룹 자식 생성 (recurring 회차 / distribution 분배) — manual_groupware, 노션 동기화 비대상 */
+  async createGroupChild(masterId: string, input: {
+    groupType: 'recurring' | 'distribution';
+    projectName: string;
+    clientName?: string;         // distribution: 계열사명 (없으면 마스터 고객사)
+    amount: number;
+    executionDate?: string;      // recurring 회차 시행일
+    distributionRatio?: number;
+    masterClientId?: string;
+    masterStatus?: string;
+    masterVatType?: string;
+    masterRevenueMonth?: string;
+  }): Promise<void> {
+    let clientId: number | null = input.masterClientId ? Number(input.masterClientId) : null;
+    if (input.groupType === 'distribution' && input.clientName) {
+      clientId = await this.findOrCreateClient(input.clientName.trim());
+    }
+    const { error } = await supabase.from('projects').insert({
+      project_name: input.projectName,
+      client_id: clientId,
+      parent_id: Number(masterId),
+      is_master: false,
+      group_type: input.groupType,
+      distribution_ratio: input.distributionRatio ?? null,
+      final_estimate: input.amount,
+      vat_type: input.masterVatType ?? null,
+      status: input.masterStatus ?? '확정/준비',
+      revenue_month: input.masterRevenueMonth ?? null,
+      session_1_date: input.executionDate ?? null,
+      source_type: 'manual_groupware',
+    });
+    if (error) throw error;
+  }
+
+  /** 기존 프로젝트들을 마스터 아래로 묶기 (merged) */
+  async attachProjectsToGroup(masterId: string, childIds: string[], groupType: 'merged' | 'recurring' | 'distribution' = 'merged'): Promise<void> {
+    const { error: childErr } = await supabase.from('projects')
+      .update({ parent_id: Number(masterId), group_type: groupType, is_master: false })
+      .in('id', childIds.map(Number));
+    if (childErr) throw childErr;
+    const { error: masterErr } = await supabase.from('projects')
+      .update({ is_master: true, group_type: groupType })
+      .eq('id', Number(masterId));
+    if (masterErr) throw masterErr;
+  }
+
+  /** 그룹에서 자식 해제 */
+  async detachFromGroup(childId: string): Promise<void> {
+    const { error } = await supabase.from('projects')
+      .update({ parent_id: null, group_type: null, distribution_ratio: null })
+      .eq('id', Number(childId));
     if (error) throw error;
   }
 

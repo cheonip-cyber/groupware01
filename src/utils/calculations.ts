@@ -59,8 +59,13 @@ export const buildDashboardKpis = (
 ): DashboardKpis => {
   const active = projects.filter((p) => p.projectStatus !== '취소/보류');
   const counts = countProjectsByStatus(projects);
-  const expectedRevenue = active.reduce((s, p) => s + (p.contractAmount || 0), 0);
-  const expectedProfit = active.reduce((s, p) => s + (p.expectedProfit || 0), 0);
+  // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0으로 계산돼 이중계상이 제거된다 (구 시스템 규칙)
+  const expectedRevenue = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount ?? 0), 0);
+  const expectedProfit = active.reduce((s, p) => {
+    // 유효매출 0인 마스터는 이익 기여도 자식으로 대체됨 → 매출 성분만 제외하고 비용은 각 행 유지
+    const revenue = p.effectiveAmount ?? p.contractAmount ?? 0;
+    return s + (revenue === 0 && (p.contractAmount || 0) > 0 ? -(p.expectedCost || 0) : (p.expectedProfit || 0));
+  }, 0);
   return {
     total: projects.length,
     thisMonth: getThisMonthProjects(projects).length,

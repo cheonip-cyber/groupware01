@@ -85,6 +85,14 @@ export interface Project extends NotionSyncFields {
   // 매출
   initialEstimate: number;
   contractAmount: number;
+  // ─ 프로젝트 그룹(묶음) ─ 구 시스템 모델 이식: distribution(매출분배)/recurring(다회차)/merged(묶기)
+  isMaster?: boolean;
+  parentId?: string;            // 자식이면 마스터 id
+  groupType?: 'distribution' | 'recurring' | 'merged';
+  distributionRatio?: number;   // distribution 자식의 분배 비율(%)
+  groupChildCount?: number;     // 마스터: 자식 수 (데이터 계층에서 계산)
+  groupTotalAmount?: number;    // 마스터: 그룹 합계 금액 (데이터 계층에서 계산)
+  effectiveAmount?: number;     // 통계용 유효 매출 — 자식이 금액을 가지면 마스터는 0 (이중계상 방지)
   supplyAmount: number;
   vat: number;
   totalAmount: number;
