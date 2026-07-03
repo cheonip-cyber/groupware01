@@ -40,7 +40,11 @@ export function GroupSection({ project, allProjects, onChanged }: {
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     try { await fn(); await onChanged(); }
-    catch (e: any) { alert(`처리 실패: ${e?.message ?? e}`); }
+    catch (e: any) {
+      alert(`처리 실패: ${e?.message ?? e}`);
+      // 서버 가드에 걸린 경우 화면이 오래된 상태일 수 있으므로 즉시 최신화 (예: 이 프로젝트가 방금 다른 그룹의 자식이 된 경우)
+      await onChanged().catch(() => {});
+    }
     finally { setBusy(false); }
   };
 
@@ -197,7 +201,10 @@ export function GroupSection({ project, allProjects, onChanged }: {
               {mergeCandidates.map((p) => (
                 <li key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <span className="font-medium text-slate-700">{p.projectName}</span>
-                  <span className="text-xs text-slate-400">{p.clientName} · <MoneyText value={p.contractAmount} /></span>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${p.sourceType === 'legacy_public' ? 'bg-slate-100 text-slate-500' : p.sourceType === 'notion' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                    {p.sourceType === 'legacy_public' ? '과거이관' : p.sourceType === 'notion' ? '노션' : '수기'}
+                  </span>
+                  <span className="text-xs text-slate-400">{p.clientName} · {p.revenueMonth ?? '-'} · <MoneyText value={p.contractAmount} /></span>
                   <button disabled={busy}
                     onClick={() => run(() => dataSource.attachProjectsToGroup(project.id, [p.id], 'merged'))}
                     className="ml-auto flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-indigo-700">

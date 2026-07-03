@@ -439,6 +439,8 @@ class SupabaseDataSource implements DataSource {
       if (patch.status === '지급완료') dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
+    // 지급대상 연결(미연결 건 수동 연결용) — 계좌정보 조인의 전제 조건
+    if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
     if ('vendorTaxInvoiceDate' in patch) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate ?? null;
 
@@ -557,7 +559,7 @@ class SupabaseDataSource implements DataSource {
       .select('id, parent_id, group_type').eq('id', Number(masterId)).maybeSingle();
     if (mErr) throw mErr;
     if (!masterRow) throw new Error('마스터 프로젝트를 찾을 수 없습니다.');
-    if (masterRow.parent_id != null) throw new Error('이미 다른 그룹의 구성인 프로젝트는 마스터가 될 수 없습니다.');
+    if (masterRow.parent_id != null) throw new Error('현재 프로젝트가 이미 다른 그룹의 구성입니다. 화면을 새로고침한 뒤 소속 그룹에서 해제 후 시도하세요.');
 
     // 가드: 동일 이름(회차) 자식 중복 방지 (#5)
     const { data: dup } = await supabase.from('projects')
@@ -596,7 +598,7 @@ class SupabaseDataSource implements DataSource {
     if (childIds.includes(masterId)) throw new Error('자기 자신을 그룹에 묶을 수 없습니다.');
     const { data: masterRow } = await supabase.from('projects').select('id, parent_id').eq('id', Number(masterId)).maybeSingle();
     if (!masterRow) throw new Error('마스터 프로젝트를 찾을 수 없습니다.');
-    if (masterRow.parent_id != null) throw new Error('이미 다른 그룹의 구성인 프로젝트는 마스터가 될 수 없습니다.');
+    if (masterRow.parent_id != null) throw new Error('현재 프로젝트가 이미 다른 그룹의 구성입니다. 화면을 새로고침한 뒤 소속 그룹에서 해제 후 시도하세요.');
     const numIds = childIds.map(Number);
     const { data: targets } = await supabase.from('projects').select('id, parent_id').in('id', numIds);
     if ((targets ?? []).some((t: any) => t.parent_id != null)) throw new Error('이미 다른 그룹에 속한 프로젝트가 포함되어 있습니다. 먼저 해제하세요.');

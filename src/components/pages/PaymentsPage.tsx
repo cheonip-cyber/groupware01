@@ -14,7 +14,7 @@ import { EmptyState } from '../common/EmptyState';
 import type { PaymentRequest } from '../../types';
 
 export function PaymentsPage() {
-  const { paymentRequests, loading, updatePaymentRequest } = useAppData();
+  const { paymentRequests, instructors, companies, loading, updatePaymentRequest } = useAppData();
   const { isAdmin } = useAuth();
   const nowMonth = new Date().toISOString().slice(0, 7);
 
@@ -24,6 +24,7 @@ export function PaymentsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
+  const [linkQuery, setLinkQuery] = useState('');
   const [dlMonth, setDlMonth] = useState(nowMonth);
 
   const visible = useMemo(() => {
@@ -70,7 +71,7 @@ export function PaymentsPage() {
             {rows.map((r) => {
               const net = r.payeeType === '강사' ? calcWithholding(r.amount).netAmount : r.amount;
               return (
-                <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setDetail(r)}>
+                <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => { setDetail(r); setLinkQuery(r.payeeName); }}>
                   {selectable && (
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       {r.status === '지급요청' && (
@@ -190,8 +191,38 @@ export function PaymentsPage() {
               <Row k="프로젝트">{detail.projectName ?? '-'}</Row>
               <Row k="은행 / 계좌">
                 {detail.bankName ? `${detail.bankName} | ${detail.accountNumber}` :
-                  <span className="text-red-500">미등록 — 강사/업체 관리에서 등록 필요</span>}
+                  detail.payeeId
+                    ? <span className="text-red-500">미등록 — 강사/업체 관리에서 계좌 등록 필요</span>
+                    : <span className="text-amber-600">대상 미연결 — 아래에서 연결하세요</span>}
               </Row>
+              {!detail.payeeId && (detail.payeeType === '강사' || detail.payeeType === '업체') && (
+                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
+                  <p className="mb-1.5 text-[11px] font-medium text-amber-700">
+                    지급처가 {detail.payeeType} DB와 연결되어 있지 않아 계좌를 표시할 수 없습니다. 연결할 대상을 선택하세요.
+                  </p>
+                  <input value={linkQuery} onChange={(e) => setLinkQuery(e.target.value)} placeholder={`${detail.payeeType}명 검색`}
+                    className="mb-1.5 w-full rounded-lg border border-amber-200 px-2.5 py-1.5 text-xs outline-none focus:border-amber-400" />
+                  <ul className="max-h-36 divide-y divide-amber-100 overflow-y-auto">
+                    {(detail.payeeType === '강사'
+                      ? instructors.filter((i) => i.name.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
+                          .map((i) => ({ id: i.id, name: i.name, sub: i.accountInfo ?? '계좌 미등록' }))
+                      : companies.filter((c) => c.companyName.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
+                          .map((c) => ({ id: c.id, name: c.companyName, sub: c.bankName ? `${c.bankName} ${c.accountNumber ?? ''}` : '계좌 미등록' }))
+                    ).map((cand) => (
+                      <li key={cand.id} className="flex items-center gap-2 py-1.5 text-xs">
+                        <span className="font-medium text-slate-700">{cand.name}</span>
+                        <span className="text-slate-400">{cand.sub}</span>
+                        <button
+                          onClick={async () => {
+                            await updatePaymentRequest(detail.id, { payeeId: cand.id });
+                            setDetail(null); // 재조회된 목록에서 계좌 반영 확인
+                          }}
+                          className="ml-auto rounded bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600">연결</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {detail.payeeType === '강사' && (
                 <>
                   <Row k="주민등록번호"><span className="font-mono">{maskResidentNumber(detail.residentNumber)}</span></Row>
