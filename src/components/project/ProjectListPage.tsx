@@ -31,16 +31,40 @@ export function ProjectListPage() {
     return { ys, hasUnknown };
   }, [projects]);
   const filtered = useMemo(() => applyProjectFilters(projects, f), [projects, f]);
+
+  // 그룹 묶어 보기: 자식(parentId 보유)은 마스터 아래에 표시. 필터에 자식만 걸려도 마스터를 최상위로 노출.
+  const childrenIndex = useMemo(() => {
+    const map = new Map<string, typeof projects>();
+    for (const p of projects) {
+      if (p.parentId) {
+        if (!map.has(p.parentId)) map.set(p.parentId, [] as typeof projects);
+        map.get(p.parentId)!.push(p);
+      }
+    }
+    return map;
+  }, [projects]);
+
+  const topLevel = useMemo(() => {
+    const byId = new Map(projects.map((p) => [p.id, p]));
+    const seen = new Set<string>();
+    const out: typeof projects = [];
+    for (const p of filtered) {
+      const top = p.parentId ? byId.get(p.parentId) ?? p : p;
+      if (!seen.has(top.id)) { seen.add(top.id); out.push(top); }
+    }
+    return out;
+  }, [filtered, projects]);
+
   const set = (patch: Partial<ProjectFilterState>) => setF((prev) => ({ ...prev, ...patch }));
 
   // 필터 변경 시 1페이지로 이동
   useEffect(() => { setPage(1); }, [f]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(topLevel.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageRows = useMemo(
-    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filtered, safePage],
+    () => topLevel.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [topLevel, safePage],
   );
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
@@ -85,7 +109,7 @@ export function ProjectListPage() {
       <Card>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <span className="text-sm font-semibold text-slate-700">
-            전체 {filtered.length}건
+            전체 {filtered.length}건 <span className="font-normal text-slate-400">(그룹 {topLevel.length}행)</span>
             <span className="ml-2 text-xs font-normal text-slate-400">
               조회 기준: {f.year === '전체' ? '전체 연도' : f.year === '미지정' ? '연도 미지정' : `${f.year}년`} · 매출월(없으면 교육일)
             </span>
@@ -100,7 +124,7 @@ export function ProjectListPage() {
             </span>
           )}
         </div>
-        <ProjectTable projects={pageRows} />
+        <ProjectTable projects={pageRows} childrenIndex={childrenIndex} />
       </Card>
     </div>
   );
