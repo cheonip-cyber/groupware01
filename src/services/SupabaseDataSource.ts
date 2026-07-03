@@ -119,7 +119,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     clientRequest: undefined,
     internalMemo: row.etc_notes ?? undefined,
 
-    nextAction: riskFlags[0] ?? (row.status === '종료(수익화완료)' ? '완료' : '진행 확인'),
+    nextAction: riskFlags[0] ?? (row.status === '종료(수익화 완료)' ? '완료' : '진행 확인'),
     riskFlags,
     history: [],
     updatedAt: row.updated_at ?? new Date().toISOString(),
@@ -193,7 +193,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
 
     // 결산완료 처리 시 전체 진행상태를 '종료'로 승격, 취소 시 '보고/정산' 단계로 되돌림
-    if (patch.settlementStatus === '결산완료') dbPatch.status = '종료(수익화완료)';
+    if (patch.settlementStatus === '결산완료') dbPatch.status = '종료(수익화 완료)';
     else if (patch.settlementStatus === '정산중') dbPatch.status = '보고/정산';
     else if (patch.projectStatus !== undefined) dbPatch.status = projectStatusToDbStatus(patch.projectStatus);
 
@@ -379,6 +379,7 @@ class SupabaseDataSource implements DataSource {
         infoConfirmed: !!r.payment_info_confirmed,
         vendorTaxInvoiceReceived: !!r.vendor_tax_invoice_received,
         vendorTaxInvoiceDate: r.vendor_tax_invoice_date ?? undefined,
+        paidMonth: r.paid_month ?? undefined,
       } as PaymentRequest;
     });
   }
@@ -396,7 +397,8 @@ class SupabaseDataSource implements DataSource {
     const dbPatch: Record<string, unknown> = {};
     if (patch.status !== undefined) {
       dbPatch.status = SupabaseDataSource.frontendStatusToDbCostStatus(patch.status);
-      if (patch.status === '지급완료') dbPatch.paid_month = new Date().toISOString().slice(0, 7);
+      // 지급월: 사용자가 선택한 값 우선(소급 처리 지원), 미지정 시 현재 월
+      if (patch.status === '지급완료') dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;

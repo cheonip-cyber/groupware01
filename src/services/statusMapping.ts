@@ -10,7 +10,7 @@ import type { ProjectStatus, RevenueStatus, PaymentStatus, SettlementStatus } fr
 
 export type DbProjectStatus =
   | '요청/담당' | '제안/PT' | '확정/준비' | '준비'
-  | '운영/모니터링' | '보고/정산' | '종료(수익화완료)' | '취소/보류';
+  | '운영/모니터링' | '보고/정산' | '종료(수익화 완료)' | '취소/보류';
 
 export const dbStatusToProjectStatus = (s: DbProjectStatus | string): ProjectStatus => {
   switch (s) {
@@ -20,7 +20,7 @@ export const dbStatusToProjectStatus = (s: DbProjectStatus | string): ProjectSta
     case '준비': return '확정/준비';
     case '운영/모니터링': return '운영중';
     case '보고/정산': return '보고/정산';
-    case '종료(수익화완료)': return '완료';
+    case '종료(수익화 완료)': return '완료';
     case '취소/보류': return '취소/보류';
     default: return '제안중';
   }
@@ -34,7 +34,7 @@ export const projectStatusToDbStatus = (s: ProjectStatus): DbProjectStatus => {
     case '확정/준비': return '확정/준비';
     case '운영중': return '운영/모니터링';
     case '보고/정산': return '보고/정산';
-    case '완료': return '종료(수익화완료)';
+    case '완료': return '종료(수익화 완료)';
     case '취소/보류': return '취소/보류';
   }
 };
@@ -60,7 +60,7 @@ export const derivePaymentStatus = (costs: { status: string; is_payable: boolean
 
 export const deriveSettlementStatus = (dbStatus: string): SettlementStatus => {
   switch (dbStatus) {
-    case '종료(수익화완료)': return '결산완료';
+    case '종료(수익화 완료)': return '결산완료';
     case '보고/정산': return '정산중';
     case '취소/보류': return '제외';
     default: return '미시작';
