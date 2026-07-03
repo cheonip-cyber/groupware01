@@ -45,6 +45,7 @@ export interface DataSource {
   }): Promise<void>;
   attachProjectsToGroup(masterId: string, childIds: string[], groupType?: 'merged' | 'recurring' | 'distribution'): Promise<void>;
   detachFromGroup(childId: string): Promise<void>;
+  deleteGroupChild(childId: string): Promise<void>;
   // Notion 연동 매핑 관리 (관리자 전용)
   getNotionFieldMappings(): Promise<NotionFieldMapping[]>;
   addNotionFieldMapping(input: Omit<NotionFieldMapping, 'id'>): Promise<void>;
@@ -131,6 +132,7 @@ class SampleDataSource implements DataSource {
   async createGroupChild(): Promise<void> { await delay(); }
   async attachProjectsToGroup(): Promise<void> { await delay(); }
   async detachFromGroup(): Promise<void> { await delay(); }
+  async deleteGroupChild(): Promise<void> { await delay(); }
 
   async getSyncStatus(): Promise<SyncStatus> {
     await delay(60);

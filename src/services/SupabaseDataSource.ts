@@ -125,6 +125,8 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     updatedAt: row.updated_at ?? new Date().toISOString(),
 
     notionPageId: row.notion_page_id ?? undefined,
+    finalEstimate: row.final_estimate != null ? Number(row.final_estimate) : undefined,
+    sourceType: row.source_type ?? undefined,
     notionUrl: row.notion_url ?? undefined,
     lastSyncedAt: row.last_synced_at ?? undefined,
     syncStatus: (row.sync_status as any) ?? 'pending',
@@ -219,6 +221,9 @@ class SupabaseDataSource implements DataSource {
     if ('collectionDoneDate' in patch) dbPatch.client_payment_date = patch.collectionDoneDate ?? null;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
+    // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준
+    if (patch.finalEstimate !== undefined) dbPatch.final_estimate = patch.finalEstimate;
+    if ('startDate' in patch) dbPatch.session_1_date = patch.startDate || null;
 
     // 결산완료 처리 시 전체 진행상태를 '종료'로 승격, 취소 시 '보고/정산' 단계로 되돌림
     if (patch.settlementStatus === '결산완료') dbPatch.status = '종료(수익화 완료)';
@@ -547,6 +552,18 @@ class SupabaseDataSource implements DataSource {
     masterVatType?: string;
     masterRevenueMonth?: string;
   }): Promise<void> {
+    // 가드: 마스터가 이미 다른 그룹의 자식이면 중첩 그룹이 되므로 금지 (#4)
+    const { data: masterRow, error: mErr } = await supabase.from('projects')
+      .select('id, parent_id, group_type').eq('id', Number(masterId)).maybeSingle();
+    if (mErr) throw mErr;
+    if (!masterRow) throw new Error('마스터 프로젝트를 찾을 수 없습니다.');
+    if (masterRow.parent_id != null) throw new Error('이미 다른 그룹의 구성인 프로젝트는 마스터가 될 수 없습니다.');
+
+    // 가드: 동일 이름(회차) 자식 중복 방지 (#5)
+    const { data: dup } = await supabase.from('projects')
+      .select('id').eq('parent_id', Number(masterId)).eq('project_name', input.projectName).limit(1);
+    if (dup && dup.length > 0) throw new Error(`동일한 구성("${input.projectName}")이 이미 존재합니다. 회차 번호를 확인하세요.`);
+
     let clientId: number | null = input.masterClientId ? Number(input.masterClientId) : null;
     if (input.groupType === 'distribution' && input.clientName) {
       clientId = await this.findOrCreateClient(input.clientName.trim());
@@ -566,10 +583,26 @@ class SupabaseDataSource implements DataSource {
       source_type: 'manual_groupware',
     });
     if (error) throw error;
+
+    // 마스터 유형 동기화: 유형이 비어 있으면 이번 추가 유형으로 표시 (#1)
+    if (!masterRow.group_type) {
+      await supabase.from('projects').update({ is_master: true, group_type: input.groupType }).eq('id', Number(masterId));
+    }
   }
 
   /** 기존 프로젝트들을 마스터 아래로 묶기 (merged) */
   async attachProjectsToGroup(masterId: string, childIds: string[], groupType: 'merged' | 'recurring' | 'distribution' = 'merged'): Promise<void> {
+    // 가드 (#4): 자기 자신 금지 / 마스터가 이미 자식이면 금지 / 대상이 이미 자식이거나 자식을 가진 마스터면 금지 (중첩·순환 차단)
+    if (childIds.includes(masterId)) throw new Error('자기 자신을 그룹에 묶을 수 없습니다.');
+    const { data: masterRow } = await supabase.from('projects').select('id, parent_id').eq('id', Number(masterId)).maybeSingle();
+    if (!masterRow) throw new Error('마스터 프로젝트를 찾을 수 없습니다.');
+    if (masterRow.parent_id != null) throw new Error('이미 다른 그룹의 구성인 프로젝트는 마스터가 될 수 없습니다.');
+    const numIds = childIds.map(Number);
+    const { data: targets } = await supabase.from('projects').select('id, parent_id').in('id', numIds);
+    if ((targets ?? []).some((t: any) => t.parent_id != null)) throw new Error('이미 다른 그룹에 속한 프로젝트가 포함되어 있습니다. 먼저 해제하세요.');
+    const { data: grandChildren } = await supabase.from('projects').select('id').in('parent_id', numIds).limit(1);
+    if (grandChildren && grandChildren.length > 0) throw new Error('자체 구성(자식)을 가진 프로젝트는 다른 그룹에 묶을 수 없습니다.');
+
     const { error: childErr } = await supabase.from('projects')
       .update({ parent_id: Number(masterId), group_type: groupType, is_master: false })
       .in('id', childIds.map(Number));
@@ -580,11 +613,36 @@ class SupabaseDataSource implements DataSource {
     if (masterErr) throw masterErr;
   }
 
-  /** 그룹에서 자식 해제 */
+  /** 그룹에서 자식 해제 — 마지막 자식이면 마스터의 그룹 유형도 정리한다 (#6) */
   async detachFromGroup(childId: string): Promise<void> {
+    const { data: child } = await supabase.from('projects').select('id, parent_id').eq('id', Number(childId)).maybeSingle();
+    const masterId = child?.parent_id ?? null;
     const { error } = await supabase.from('projects')
       .update({ parent_id: null, group_type: null, distribution_ratio: null })
       .eq('id', Number(childId));
+    if (error) throw error;
+    if (masterId != null) {
+      const { data: rest } = await supabase.from('projects').select('id').eq('parent_id', masterId).limit(1);
+      if (!rest || rest.length === 0) {
+        await supabase.from('projects').update({ group_type: null }).eq('id', masterId);
+      }
+    }
+  }
+
+  /** 앱에서 생성한 그룹 자식 삭제 (#3) — manual_groupware·노션 미연동·비용 0건·자식 없음일 때만. DB 정책상 관리자만 삭제 가능 */
+  async deleteGroupChild(childId: string): Promise<void> {
+    const idNum = Number(childId);
+    const { data: row } = await supabase.from('projects')
+      .select('id, source_type, notion_page_id').eq('id', idNum).maybeSingle();
+    if (!row) throw new Error('프로젝트를 찾을 수 없습니다.');
+    if (row.source_type !== 'manual_groupware' || row.notion_page_id) {
+      throw new Error('앱에서 생성한(노션 미연동) 구성만 삭제할 수 있습니다. 대신 그룹 해제를 사용하세요.');
+    }
+    const { data: costs } = await supabase.from('project_costs').select('id').eq('project_id', idNum).limit(1);
+    if (costs && costs.length > 0) throw new Error('예산/비용 항목이 있는 프로젝트는 삭제할 수 없습니다. 비용 삭제 후 시도하거나 그룹 해제를 사용하세요.');
+    const { data: kids } = await supabase.from('projects').select('id').eq('parent_id', idNum).limit(1);
+    if (kids && kids.length > 0) throw new Error('자체 구성을 가진 프로젝트는 삭제할 수 없습니다.');
+    const { error } = await supabase.from('projects').delete().eq('id', idNum);
     if (error) throw error;
   }
 

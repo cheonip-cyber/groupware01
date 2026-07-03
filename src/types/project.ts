@@ -93,6 +93,8 @@ export interface Project extends NotionSyncFields {
   groupChildCount?: number;     // 마스터: 자식 수 (데이터 계층에서 계산)
   groupTotalAmount?: number;    // 마스터: 그룹 합계 금액 (데이터 계층에서 계산)
   effectiveAmount?: number;     // 통계용 유효 매출 — 자식이 금액을 가지면 마스터는 0 (이중계상 방지)
+  finalEstimate?: number;       // DB final_estimate 원본(세전) — 그룹 자식 금액 수정용
+  sourceType?: string;          // notion | legacy_public | manual_groupware
   supplyAmount: number;
   vat: number;
   totalAmount: number;

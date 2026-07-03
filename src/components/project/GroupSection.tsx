@@ -5,7 +5,8 @@ import { dataSource } from '../../services/dataSource';
 import { MoneyText } from '../common/MoneyText';
 import { formatDate } from '../../utils/formatters';
 import { GROUP_TYPE_LABEL } from './ProjectTable';
-import { Layers, Plus, Search, Unlink, CornerDownRight } from 'lucide-react';
+import { Layers, Plus, Search, Unlink, CornerDownRight, Pencil, Trash2, Check, X } from 'lucide-react';
+import { useAuth } from '../../auth/AuthContext';
 
 /**
  * 프로젝트 그룹(묶음) 구성 섹션 — 구 시스템 모델 이식.
@@ -27,7 +28,10 @@ export function GroupSection({ project, allProjects, onChanged }: {
     [allProjects, project.parentId],
   );
 
+  const { isAdmin } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [edit, setEdit] = useState({ amount: '', date: '' });
   const [mode, setMode] = useState<'' | 'merged' | 'recurring' | 'distribution'>('');
   const [query, setQuery] = useState('');
   const [occ, setOcc] = useState({ no: String(children.length + 1), amount: '', date: '' });
@@ -76,7 +80,13 @@ export function GroupSection({ project, allProjects, onChanged }: {
         p.projectName.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8)
     : [];
 
-  const addOccurrence = () => run(() => dataSource.createGroupChild(project.id, {
+  const addOccurrence = () => {
+    const name = `${project.projectName} (${occ.no}회차)`;
+    if (children.some((c) => c.projectName === name)) {
+      alert(`"${occ.no}회차"가 이미 존재합니다. 회차 번호를 확인하세요.`);
+      return;
+    }
+    return run(() => dataSource.createGroupChild(project.id, {
     groupType: 'recurring',
     projectName: `${project.projectName} (${occ.no}회차)`,
     amount: Number(occ.amount),
@@ -85,7 +95,8 @@ export function GroupSection({ project, allProjects, onChanged }: {
     masterStatus: undefined,
     masterVatType: project.vatType,
     masterRevenueMonth: project.revenueMonth,
-  }).then(() => setOcc({ no: String(Number(occ.no) + 1), amount: '', date: '' })));
+    }).then(() => setOcc({ no: String(Number(occ.no) + 1), amount: '', date: '' })));
+  };
 
   const addDistribution = () => run(() => dataSource.createGroupChild(project.id, {
     groupType: 'distribution',
@@ -116,7 +127,11 @@ export function GroupSection({ project, allProjects, onChanged }: {
 
       {children.length > 0 && (
         <ul className="mb-4 divide-y divide-slate-50 rounded-lg border border-slate-100">
-          {children.map((c) => (
+          {children.map((c) => {
+            const editable = !c.notionPageId; // 노션 연동 자식은 노션이 원천이므로 수정 잠금
+            const deletable = isAdmin && c.sourceType === 'manual_groupware' && !c.notionPageId;
+            const editing = editId === c.id;
+            return (
             <li key={c.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
               <CornerDownRight className="h-3.5 w-3.5 text-slate-300" />
               <Link to={`/projects/${c.id}`} className="font-medium text-slate-700 hover:text-indigo-600">{c.projectName}</Link>
@@ -124,13 +139,38 @@ export function GroupSection({ project, allProjects, onChanged }: {
               {c.groupType === 'distribution' && c.distributionRatio != null && (
                 <span className="text-[11px] text-indigo-500">{c.distributionRatio}%</span>
               )}
-              {c.startDate && <span className="text-[11px] text-slate-400">{formatDate(c.startDate)}</span>}
-              <span className="ml-auto"><MoneyText value={c.contractAmount} className="text-sm" /></span>
-              <button disabled={busy} title="그룹에서 해제"
-                onClick={() => { if (confirm(`'${c.projectName}'을(를) 그룹에서 해제할까요?`)) run(() => dataSource.detachFromGroup(c.id)); }}
-                className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-500"><Unlink className="h-3.5 w-3.5" /></button>
+              {editing ? (
+                <span className="ml-auto flex items-center gap-1.5">
+                  <input type="number" value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })}
+                    placeholder="금액(세전)" className="w-28 rounded-lg border border-indigo-200 px-2 py-1 text-xs outline-none focus:border-indigo-400" />
+                  <input type="date" value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })}
+                    className="rounded-lg border border-indigo-200 px-2 py-1 text-xs outline-none focus:border-indigo-400" />
+                  <button disabled={busy || !edit.amount} title="저장"
+                    onClick={() => run(() => dataSource.updateProject(c.id, { finalEstimate: Number(edit.amount), startDate: edit.date || undefined }).then(() => setEditId(null)))}
+                    className="rounded bg-indigo-600 p-1 text-white hover:bg-indigo-700 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+                  <button title="취소" onClick={() => setEditId(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
+                </span>
+              ) : (
+                <>
+                  {c.startDate && <span className="text-[11px] text-slate-400">{formatDate(c.startDate)}</span>}
+                  <span className="ml-auto"><MoneyText value={c.finalEstimate ?? c.contractAmount} className="text-sm" /><span className="ml-0.5 text-[10px] text-slate-400">세전</span></span>
+                  {editable && (
+                    <button disabled={busy} title="금액·시행일 수정"
+                      onClick={() => { setEditId(c.id); setEdit({ amount: String(c.finalEstimate ?? ''), date: c.startDate ?? '' }); }}
+                      className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-indigo-600"><Pencil className="h-3.5 w-3.5" /></button>
+                  )}
+                  <button disabled={busy} title="그룹에서 해제"
+                    onClick={() => { if (confirm(`'${c.projectName}'을(를) 그룹에서 해제할까요? (프로젝트는 목록에 남습니다)`)) run(() => dataSource.detachFromGroup(c.id)); }}
+                    className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-amber-500"><Unlink className="h-3.5 w-3.5" /></button>
+                  {deletable && (
+                    <button disabled={busy} title="구성 삭제 (앱에서 생성한 항목, 비용 없음일 때만)"
+                      onClick={() => { if (confirm(`'${c.projectName}'을(를) 완전히 삭제할까요? 이 동작은 되돌릴 수 없습니다.`)) run(() => dataSource.deleteGroupChild(c.id)); }}
+                      className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                  )}
+                </>
+              )}
             </li>
-          ))}
+          ); })}
         </ul>
       )}
 
