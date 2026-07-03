@@ -1,21 +1,47 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
-import { applyProjectFilters, defaultFilterState } from '../../utils/filters';
+import { applyProjectFilters, defaultFilterState, projectYear } from '../../utils/filters';
 import type { ProjectFilterState } from '../../utils/filters';
 import { ProjectTable } from './ProjectTable';
 import { Card } from '../common/Card';
 import { Search } from 'lucide-react';
 import type { ProjectStatus } from '../../types';
 
-const STATUSES: ProjectStatus[] = ['제안중', '제안완료', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류'];
+// '제안완료'는 DB 상태 파생 로직상 나올 수 없는 값이라 필터 옵션에서 제외 (죽은 옵션 정리)
+const STATUSES: ProjectStatus[] = ['제안중', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류'];
+const PAGE_SIZE = 50;
 
 export function ProjectListPage() {
   const { projects, clients, loading } = useAppData();
-  const [f, setF] = useState<ProjectFilterState>(defaultFilterState);
+  const [params] = useSearchParams();
+  // 대시보드 KPI 드릴다운 등 URL 파라미터로 초기 필터 지정 가능 (?status=&year=&month=)
+  const [f, setF] = useState<ProjectFilterState>(() => ({
+    ...defaultFilterState,
+    status: params.get('status') ?? defaultFilterState.status,
+    year: params.get('year') ?? defaultFilterState.year,
+    month: params.get('month') ?? defaultFilterState.month,
+  }));
+  const [page, setPage] = useState(1);
 
   const managers = useMemo(() => [...new Set(projects.map((p) => p.managerName))], [projects]);
+  const years = useMemo(() => {
+    const ys = [...new Set(projects.map(projectYear).filter((y): y is string => !!y))].sort().reverse();
+    const hasUnknown = projects.some((p) => !projectYear(p));
+    return { ys, hasUnknown };
+  }, [projects]);
   const filtered = useMemo(() => applyProjectFilters(projects, f), [projects, f]);
   const set = (patch: Partial<ProjectFilterState>) => setF((prev) => ({ ...prev, ...patch }));
+
+  // 필터 변경 시 1페이지로 이동
+  useEffect(() => { setPage(1); }, [f]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage],
+  );
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
 
@@ -30,6 +56,11 @@ export function ProjectListPage() {
             <input value={f.search} onChange={(e) => set({ search: e.target.value })} placeholder="프로젝트·고객사·담당자 검색"
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white" />
           </div>
+          <select value={f.year} onChange={(e) => set({ year: e.target.value })} className={selCls}>
+            <option value="전체">연도 전체</option>
+            {years.ys.map((y) => <option key={y} value={y}>{y}년</option>)}
+            {years.hasUnknown && <option value="미지정">연도 미지정</option>}
+          </select>
           <select value={f.status} onChange={(e) => set({ status: e.target.value })} className={selCls}>
             <option value="">상태 전체</option>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -53,9 +84,23 @@ export function ProjectListPage() {
       </Card>
       <Card>
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-700">전체 {filtered.length}건</span>
+          <span className="text-sm font-semibold text-slate-700">
+            전체 {filtered.length}건
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              조회 기준: {f.year === '전체' ? '전체 연도' : f.year === '미지정' ? '연도 미지정' : `${f.year}년`} · 매출월(없으면 교육일)
+            </span>
+          </span>
+          {totalPages > 1 && (
+            <span className="flex items-center gap-2 text-xs text-slate-500">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}
+                className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50">이전</button>
+              {safePage} / {totalPages}
+              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}
+                className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50">다음</button>
+            </span>
+          )}
         </div>
-        <ProjectTable projects={filtered} />
+        <ProjectTable projects={pageRows} />
       </Card>
     </div>
   );

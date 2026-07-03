@@ -15,6 +15,7 @@ export function ProjectTable({ projects }: { projects: Project[] }) {
           <tr className="border-b border-slate-200 text-left text-xs text-slate-400">
             <th className="px-4 py-3 font-medium">프로젝트 / 고객사</th>
             <th className="px-3 py-3 font-medium">교육일정</th>
+            <th className="px-3 py-3 font-medium">매출월</th>
             <th className="px-3 py-3 font-medium">우선순위</th>
             <th className="px-3 py-3 font-medium">프로젝트</th>
             <th className="px-3 py-3 font-medium">매출</th>
@@ -33,6 +34,7 @@ export function ProjectTable({ projects }: { projects: Project[] }) {
                 <div className="text-xs text-slate-400">{p.clientName}{p.riskFlags.length > 0 && <span className="ml-2 text-red-500">● 주의</span>}</div>
               </td>
               <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}</td>
+              <td className="px-3 py-3 text-xs tabular-nums text-slate-500">{p.revenueMonth ?? '-'}</td>
               <td className="px-3 py-3"><StatusBadge label={p.priority} style={priorityStyle[p.priority]} size="sm" /></td>
               <td className="px-3 py-3"><StatusBadge label={p.projectStatus} style={projectStatusStyle[p.projectStatus]} size="sm" /></td>
               <td className="px-3 py-3"><StatusBadge label={p.revenueStatus} style={revenueStatusStyle[p.revenueStatus]} size="sm" /></td>
