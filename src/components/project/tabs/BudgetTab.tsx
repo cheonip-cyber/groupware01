@@ -10,28 +10,31 @@ const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'
 
 // 강사/업체 검색형 선택 + 세부정보 확인 팝업
 function PayeePicker({
-  payeeType, instructors, companies, selectedId, onSelect,
+  payeeType, instructors, companies, selectedId, onSelect, onTypeChange,
 }: {
   payeeType: 'instructor' | 'company';
   instructors: Instructor[];
   companies: Company[];
   selectedId: string;
   onSelect: (id: string, name: string) => void;
+  /** 통합 검색에서 다른 유형을 선택했을 때 지급유형을 자동 전환 */
+  onTypeChange: (t: 'instructor' | 'company') => void;
 }) {
   const [query, setQuery] = useState('');
   const [showDetail, setShowDetail] = useState(false);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (payeeType === 'instructor') {
-      return instructors
-        .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.phone ?? '').includes(q))
-        .slice(0, 8);
-    }
-    // 업체: 업체명 또는 대표자명으로 검색
-    return companies
+    // 통합 검색: 강사와 업체(대표자명 포함)를 함께 검색 — 같은 이름이 양쪽에 등록된 경우 배지로 구분해 선택
+    const instr = instructors
+      .filter((i) => !q || i.name.toLowerCase().includes(q) || (i.phone ?? '').includes(q))
+      .map((i) => ({ kind: 'instructor' as const, id: i.id, label: i.name, sub: i.phone ?? '' }));
+    const comp = companies
       .filter((c) => !q || c.companyName.toLowerCase().includes(q) || (c.ceoName ?? '').toLowerCase().includes(q))
-      .slice(0, 8);
+      .map((c) => ({ kind: 'company' as const, id: c.id, label: c.companyName, sub: c.ceoName ? `대표 ${c.ceoName}` : '' }));
+    // 현재 선택된 유형을 앞에 배치하되 양쪽 모두 노출
+    const ordered = payeeType === 'instructor' ? [...instr, ...comp] : [...comp, ...instr];
+    return ordered.slice(0, 10);
   }, [query, payeeType, instructors, companies]);
 
   const selected = payeeType === 'instructor'
@@ -68,24 +71,26 @@ function PayeePicker({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={payeeType === 'instructor' ? '강사명/연락처 검색' : '업체명/대표자명 검색'}
+            placeholder="이름 검색 (강사·업체·대표자명 통합)"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
           />
           {query && (
             <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
               {results.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-slate-400">검색 결과 없음</div>
-              ) : results.map((r: any) => (
+              ) : results.map((r) => (
                 <button
-                  key={r.id}
+                  key={`${r.kind}-${r.id}`}
                   type="button"
-                  onClick={() => { onSelect(r.id, payeeType === 'instructor' ? r.name : r.companyName); setQuery(''); }}
-                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
+                  onClick={() => { if (r.kind !== payeeType) onTypeChange(r.kind); onSelect(r.id, r.label); setQuery(''); }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                 >
-                  <span className="font-medium text-slate-800">{payeeType === 'instructor' ? r.name : r.companyName}</span>
-                  <span className="text-xs text-slate-400">
-                    {payeeType === 'instructor' ? (r.phone ?? '') : (r.ceoName ? `대표 ${r.ceoName}` : '')}
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                    r.kind === 'instructor' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
+                    {r.kind === 'instructor' ? '강사' : '업체'}
                   </span>
+                  <span className="flex-1 truncate font-medium text-slate-800">{r.label}</span>
+                  <span className="text-xs text-slate-400">{r.sub}</span>
                 </button>
               ))}
             </div>
@@ -236,6 +241,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
                   companies={companies}
                   selectedId={payeeId}
                   onSelect={(id, name) => { setPayeeId(id); setPayeeName(name); }}
+                  onTypeChange={(t) => { setPayeeType(t); setPayeeId(''); }}
                 />
               )}
 
