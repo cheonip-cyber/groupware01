@@ -230,7 +230,7 @@ export function AdminSgaPage() {
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                <th className="px-5 py-2.5 font-medium">일자</th>
+                <th className="w-10 px-3 py-2.5 font-medium">No.</th><th className="px-5 py-2.5 font-medium">일자</th>
                 <th className="px-3 py-2.5 font-medium">카테고리</th>
                 <th className="px-3 py-2.5 font-medium">내용</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액</th>
@@ -238,9 +238,9 @@ export function AdminSgaPage() {
                 <th className="px-3 py-2.5 font-medium">관리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filtered.map((r) => (
+                {filtered.map((r, __idx) => (
                   <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="px-5 py-2 text-xs text-slate-500">{formatDate(r.transaction_date)}</td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{__idx + 1}</td><td className="px-5 py-2 text-xs text-slate-500">{formatDate(r.transaction_date)}</td>
                     <td className="px-3 py-2 text-xs text-slate-600">{r.category}</td>
                     <td className="px-3 py-2 text-slate-700">{r.description ?? '-'}</td>
                     <td className="px-3 py-2 text-right"><MoneyText value={r.amount} /></td>

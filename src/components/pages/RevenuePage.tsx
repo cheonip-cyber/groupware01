@@ -35,7 +35,7 @@ export function RevenuePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-              <th className="px-5 py-2.5 font-medium">프로젝트</th>
+              <th className="w-10 px-3 py-2.5 font-medium">No.</th><th className="px-5 py-2.5 font-medium">프로젝트</th>
               <th className="px-3 py-2.5 font-medium">고객사</th>
               <th className="px-3 py-2.5 text-right font-medium">계약금액</th>
               <th className="px-3 py-2.5 text-right font-medium">공급가액</th>
@@ -45,9 +45,9 @@ export function RevenuePage() {
               <th className="px-3 py-2.5 font-medium">수금완료일</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-50">
-              {active.map((p) => (
+              {active.map((p, __idx) => (
                 <tr key={p.id} className="group hover:bg-slate-50">
-                  <td className="px-5 py-3">
+                  <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{__idx + 1}</td><td className="px-5 py-3">
                     <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
                   </td>
                   <td className="px-3 py-3 text-slate-500">

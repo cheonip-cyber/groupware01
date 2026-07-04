@@ -25,12 +25,13 @@ export const GROUP_TYPE_LABEL: Record<string, string> = {
   merged: '묶음',
 };
 
-function Row({ p, child, expandable, expanded, onToggle, highlight }: {
-  p: Project; child?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void; highlight?: boolean;
+function Row({ p, child, expandable, expanded, onToggle, highlight, no }: {
+  p: Project; child?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void; highlight?: boolean; no?: number;
 }) {
   const isGroupMaster = (p.groupChildCount ?? 0) > 0;
   return (
     <tr className={`group hover:bg-slate-50 ${highlight ? 'bg-yellow-50' : child ? 'bg-slate-50/60' : ''}`}>
+      <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{no ?? ''}</td>
       <td className={`py-3 ${child ? 'pl-9 pr-4' : 'px-4'}`}>
         <div className="flex items-center gap-1.5">
           {expandable && (
@@ -78,9 +79,11 @@ function Row({ p, child, expandable, expanded, onToggle, highlight }: {
 /**
  * projects: 최상위 행(마스터/독립). childrenIndex가 주어지면 마스터 행을 펼쳐 자식을 들여쓰기로 표시한다.
  */
-export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highlightIds }: {
+export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highlightIds, startNo = 1 }: {
   projects: Project[];
   childrenIndex?: Map<string, Project[]>;
+  /** 페이지네이션 오프셋 반영 시작 번호 */
+  startNo?: number;
   /** 검색 매칭 등으로 자동 펼칠 마스터 id (수동 토글과 병합) */
   forceExpandedIds?: Set<string>;
   /** 하이라이트할 자식 id (검색 매칭 표시) */
@@ -97,7 +100,7 @@ export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highli
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs text-slate-400">
-            <th className="px-4 py-3 font-medium">프로젝트 / 고객사</th>
+            <th className="w-10 px-3 py-2.5 font-medium">No.</th><th className="px-4 py-3 font-medium">프로젝트 / 고객사</th>
             <th className="px-3 py-3 font-medium">교육일정</th>
             <th className="px-3 py-3 font-medium">매출월</th>
             <th className="px-3 py-3 font-medium">우선순위</th>
@@ -109,12 +112,12 @@ export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highli
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {projects.map((p) => {
+          {projects.map((p, __idx) => {
             const kids = childrenIndex?.get(p.id) ?? [];
             const isOpen = expanded.has(p.id) || !!forceExpandedIds?.has(p.id);
             return (
               <FragmentRow key={p.id}>
-                <Row p={p} expandable={kids.length > 0} expanded={isOpen} onToggle={() => toggle(p.id)} />
+                <Row p={p} no={startNo + __idx} expandable={kids.length > 0} expanded={isOpen} onToggle={() => toggle(p.id)} />
                 {isOpen && kids.map((c) => <Row key={c.id} p={c} child highlight={highlightIds?.has(c.id)} />)}
               </FragmentRow>
             );

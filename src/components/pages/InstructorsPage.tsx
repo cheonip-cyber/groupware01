@@ -3,6 +3,7 @@ import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { Users, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { Instructor } from '../../types';
+import { maskResidentNumber } from '../../utils/withholding';
 
 type SensitiveForm = {
   name: string;
@@ -126,6 +127,7 @@ export function InstructorsPage() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+            <th className="w-10 px-4 py-2.5 font-medium">No.</th>
             <th className="px-5 py-2.5 font-medium">이름</th>
             <th className="px-3 py-2.5 font-medium">전문분야 / 등급</th>
             <th className="px-3 py-2.5 font-medium">연락처</th>
@@ -135,11 +137,12 @@ export function InstructorsPage() {
             <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {(noAccountOnly ? instructors.filter((i) => !i.bankName || !i.accountNumber) : instructors).map((i) => {
+            {(noAccountOnly ? instructors.filter((i) => !i.bankName || !i.accountNumber) : instructors).map((i, __idx) => {
               const isEditing = editingId === i.id;
               if (isEditing) {
                 return (
                   <tr key={i.id} className="bg-blue-50/40">
+                    <td className="px-4 py-2 text-xs text-slate-400">{__idx + 1}</td>
                     <td className="px-5 py-2"><input className={editInputCls + ' font-sans'} value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} /></td>
                     <td className="px-3 py-2 text-xs text-slate-400">Notion 관리</td>
                     <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.phone} onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))} /></td>
@@ -166,6 +169,7 @@ export function InstructorsPage() {
               }
               return (
                 <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setPanel(i)}>
+                  <td className="px-4 py-3 text-xs tabular-nums text-slate-400">{__idx + 1}</td>
                   <td className="px-5 py-3 font-semibold text-slate-800">
                     {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
                   </td>
@@ -173,7 +177,7 @@ export function InstructorsPage() {
                     {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{i.level}</span> : null}
                   </td>
                   <td className="px-3 py-3 text-slate-500">{i.phone || '-'}</td>
-                  <td className="px-3 py-3 font-mono text-xs text-slate-500">{i.residentNumber || '-'}</td>
+                  <td className="px-3 py-3 font-mono text-xs text-slate-500">{maskResidentNumber(i.residentNumber)}</td>
                   <td className="px-3 py-3 text-slate-500">{i.address || '-'}</td>
                   <td className="px-3 py-3 font-mono text-xs text-slate-500">
                     {i.bankName && i.accountNumber ? `${i.bankName} ${i.accountNumber}` : '-'}

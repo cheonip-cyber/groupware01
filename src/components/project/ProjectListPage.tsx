@@ -139,6 +139,7 @@ export function ProjectListPage() {
           )}
         </div>
         <ProjectTable projects={pageRows} childrenIndex={childrenIndex}
+          startNo={(page - 1) * PAGE_SIZE + 1}
           forceExpandedIds={hasActiveQuery ? autoExpandIds : undefined}
           highlightIds={hasActiveQuery ? matchedChildIds : undefined} />
       </Card>
