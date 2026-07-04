@@ -49,8 +49,10 @@ export interface DashboardKpis {
   taxInvoicePending: number;
   unpaidCollection: number;
   settlementPending: number;
-  expectedRevenue: number;
-  expectedProfit: number;
+  confirmedRevenue: number;   // 확정 매출: 확정/준비·운영중·보고/정산·완료
+  expectedRevenue: number;    // 예상 매출: 제안 단계(제안중)
+  expectedProfit: number;     // 이익 = 매출 − 예산비용 (구 그룹웨어 방식)
+  profitRate: number;         // 이익률 = 이익/총매출 ×100
 }
 
 export const buildDashboardKpis = (
@@ -59,13 +61,16 @@ export const buildDashboardKpis = (
 ): DashboardKpis => {
   const active = projects.filter((p) => p.projectStatus !== '취소/보류');
   const counts = countProjectsByStatus(projects);
-  // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0으로 계산돼 이중계상이 제거된다 (구 시스템 규칙)
-  const expectedRevenue = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount ?? 0), 0);
-  const expectedProfit = active.reduce((s, p) => {
-    // 유효매출 0인 마스터는 이익 기여도 자식으로 대체됨 → 매출 성분만 제외하고 비용은 각 행 유지
-    const revenue = p.effectiveAmount ?? p.contractAmount ?? 0;
-    return s + (revenue === 0 && (p.contractAmount || 0) > 0 ? -(p.expectedCost || 0) : (p.expectedProfit || 0));
-  }, 0);
+  // 매출 규칙(구 그룹웨어 방식): 확정군(확정/준비·운영중·보고/정산·완료)=확정 매출, 제안중=예상 매출, 취소/보류=미반영
+  // 금액은 유효매출(effectiveAmount) 기준 — 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 제거)
+  const CONFIRMED_SET = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
+  const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
+  const confirmedRevenue = active.filter((p) => CONFIRMED_SET.has(p.projectStatus)).reduce((s, p) => s + eff(p), 0);
+  const expectedRevenue = active.filter((p) => p.projectStatus === '제안중').reduce((s, p) => s + eff(p), 0);
+  // 이익 = Σ(유효매출 − 예산비용) — 구 뷰 profit_max와 동일 공식
+  const expectedProfit = active.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0);
+  const totalRevenue = confirmedRevenue + expectedRevenue;
+  const profitRate = totalRevenue > 0 ? Number(((expectedProfit / totalRevenue) * 100).toFixed(1)) : 0;
   return {
     total: projects.length,
     thisMonth: getThisMonthProjects(projects).length,
@@ -78,7 +83,9 @@ export const buildDashboardKpis = (
     settlementPending: active.filter(
       (p) => p.settlementStatus !== '결산완료' && p.settlementStatus !== '제외',
     ).length,
+    confirmedRevenue,
     expectedRevenue,
     expectedProfit,
+    profitRate,
   };
 };

@@ -43,9 +43,10 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
   const finalEstimate = Number(row.final_estimate ?? 0);
   const totalAmount = Number(row.total_amount ?? finalEstimate); // VAT 포함/별도 반영된 실제 계약금액
   const supplyAmount = Number(row.supply_amount ?? 0); // 공급가액(VAT 제외, 실매출 기준)
-  // 이익/이익률은 부가세를 제외한 공급가액(실매출) 기준으로 산정 — VAT는 세무상 통과 금액이라 손익에 포함하지 않음
-  const expectedProfit = supplyAmount - costForProfit;
-  const profitRate = supplyAmount > 0 ? Number(((expectedProfit / supplyAmount) * 100).toFixed(1)) : 0;
+  // 이익/이익률: 구 그룹웨어(gw_monthly_performance_stats) 방식 적용 —
+  // 이익 = 매출(총액 total_amount) − 예산비용(budget 합), 이익률 = 이익/매출 ×100
+  const expectedProfit = totalAmount - expectedCost;
+  const profitRate = totalAmount > 0 ? Number(((expectedProfit / totalAmount) * 100).toFixed(1)) : 0;
 
   const sumBy = (bucket: string) => costs
     .filter((c) => budgetBucket(c.category) === bucket)
@@ -252,11 +253,19 @@ class SupabaseDataSource implements DataSource {
       email: r.email ?? undefined,
       defaultFee: Number(r.fee_basis ?? 0),
       accountInfo: r.bank_name && r.account_number ? `${r.bank_name} ${r.account_number}` : undefined,
-      memo: undefined,
       bankName: r.bank_name ?? undefined,
       accountNumber: r.account_number ?? undefined,
       residentNumber: r.resident_number ?? undefined,
       address: r.address ?? undefined,
+      // 과거 강사DB 프로필 필드 — DB에는 있었지만 매핑 누락으로 화면에서 '누락'처럼 보이던 것 복원
+      specialty: r.specialty ?? undefined,
+      level: r.level ?? undefined,
+      career: r.career ?? undefined,
+      education: r.education ?? undefined,
+      honorific: r.honorific ?? undefined,
+      remarks: r.remarks ?? undefined,
+      specialNotes: r.special_notes ?? undefined,
+      memo: r.remarks ?? undefined,
     }));
   }
 
@@ -357,7 +366,6 @@ class SupabaseDataSource implements DataSource {
       contactName: '',
       contactPhone: undefined,
       contactEmail: undefined,
-      memo: undefined,
     }));
   }
 

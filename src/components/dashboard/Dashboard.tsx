@@ -76,10 +76,12 @@ export function Dashboard() {
           hint="견적 단계 제외" onClick={() => navigate('/revenue')} />
         <KpiCard label="미수금" value={kpi.unpaidCollection} unit="건" tone="red" icon={<AlertCircle className="h-4 w-4" />}
           hint="계산서 발행 후 미입금" onClick={() => navigate('/revenue')} />
-        <KpiCard label="예상 매출" value={formatCompactKRW(kpi.expectedRevenue)} tone="blue" icon={<TrendingUp className="h-4 w-4" />}
-          hint={`${yearLabel} 계약금액 합계 (취소/보류 제외)`} />
-        <KpiCard label="예상 이익" value={formatCompactKRW(kpi.expectedProfit)} tone="emerald" icon={<TrendingUp className="h-4 w-4" />}
-          hint="공급가액 - 비용(실지출 우선)" />
+        <KpiCard label="확정 매출" value={formatCompactKRW(kpi.confirmedRevenue)} tone="blue" icon={<TrendingUp className="h-4 w-4" />}
+          hint="확정/준비·운영·정산·종료 프로젝트" />
+        <KpiCard label="예상 매출" value={formatCompactKRW(kpi.expectedRevenue)} tone="amber" icon={<TrendingUp className="h-4 w-4" />}
+          hint="제안 단계 (취소/보류 미반영)" />
+        <KpiCard label="이익" value={formatCompactKRW(kpi.expectedProfit)} tone="emerald" icon={<TrendingUp className="h-4 w-4" />}
+          hint={`매출 - 예산비용 · 이익률 ${kpi.profitRate}%`} />
       </div>
 
       {/* 차트 + 위험 + 할일 */}
