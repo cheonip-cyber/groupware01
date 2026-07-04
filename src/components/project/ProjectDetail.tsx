@@ -12,6 +12,7 @@ import { SettlementTab } from './tabs/SettlementTab';
 import { HistoryTab } from './tabs/HistoryTab';
 import { GroupSection } from './GroupSection';
 import { StatusBadge } from '../common/StatusBadge';
+import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle } from '../../utils/statusConfig';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
 
@@ -100,9 +101,16 @@ export function ProjectDetail() {
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-sm text-slate-500">{project.clientName} · {project.managerName} · {project.startDate}</p>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {project.clientName} · {project.managerName} · {project.startDate}
+            <span className="ml-2 font-semibold text-slate-700"><MoneyText value={project.contractAmount} /></span>
+            {project.revenueMonth && <span className="ml-1.5 text-xs text-slate-400">매출월 {project.revenueMonth}</span>}
+          </p>
         </div>
       </div>
+
+      {/* 자금 진행 스테퍼 + 다음 액션: 어느 탭에 있든 프로젝트의 자금 위치가 한눈에 보이도록 */}
+      <FundStepper project={project} requests={projectRequests} onGoTab={(t) => setActiveTab(t)} />
 
       {/* 탭 네비게이션 */}
       <div className="rounded-xl border border-slate-200 bg-white">
@@ -139,6 +147,58 @@ export function ProjectDetail() {
           {activeTab === '히스토리' && <HistoryTab project={project} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── 자금 5단계 스테퍼(견적→계산서→입금→지급→결산) + 상태 기반 '다음 액션' ──
+function FundStepper({ project, requests, onGoTab }: {
+  project: Project;
+  requests: PaymentRequest[];
+  onGoTab: (t: Tab) => void;
+}) {
+  const payDone = requests.length > 0 && requests.every((r) => r.status === '지급완료');
+  const steps = [
+    { label: '견적', done: project.contractAmount > 0 },
+    { label: '계산서 발행', done: project.taxInvoiceIssued },
+    { label: '입금', done: project.collectionCompleted },
+    { label: '지급', done: payDone },
+    { label: '결산', done: project.settlementStatus === '결산완료' },
+  ];
+
+  // 다음 액션: 현재 상태에서 지금 해야 할 일 하나를 제시 (구 시스템 '미요청 배지' 철학의 상세 화면 확장)
+  const pendingPay = requests.filter((r) => r.status !== '지급완료').length;
+  const next = project.projectStatus === '취소/보류' ? null
+    : !project.taxInvoiceIssued && ['확정/준비', '운영중', '보고/정산', '완료'].includes(project.projectStatus)
+      ? { label: '세금계산서 발행 확인', tab: '매출' as Tab }
+    : project.taxInvoiceIssued && !project.collectionCompleted
+      ? { label: '입금 확인', tab: '매출' as Tab }
+    : project.collectionCompleted && pendingPay > 0
+      ? { label: `지급 처리 (${pendingPay}건 대기)`, tab: '지급' as Tab }
+    : project.collectionCompleted && payDone && project.settlementStatus !== '결산완료'
+      ? { label: '결산 처리', tab: '정산/결산' as Tab }
+    : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {steps.map((st, i) => (
+          <li key={st.label} className="flex items-center gap-1.5">
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ring-1 ${
+              st.done ? 'bg-emerald-500 text-white ring-emerald-500' : 'bg-slate-50 text-slate-400 ring-slate-200'}`}>
+              {st.done ? '✓' : i + 1}
+            </span>
+            <span className={`text-xs ${st.done ? 'font-medium text-slate-700' : 'text-slate-400'}`}>{st.label}</span>
+            {i < steps.length - 1 && <span className={`h-px w-4 ${st.done ? 'bg-emerald-300' : 'bg-slate-200'}`} />}
+          </li>
+        ))}
+      </ol>
+      {next && (
+        <button onClick={() => onGoTab(next.tab)}
+          className="ml-auto flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+          다음 액션: {next.label} →
+        </button>
+      )}
     </div>
   );
 }
