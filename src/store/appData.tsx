@@ -6,6 +6,8 @@ import { dataSource } from '../services/dataSource';
 import type { NewProjectCostInput } from '../services/dataSource';
 
 interface AppDataValue {
+  globalYear: string;
+  setGlobalYear: (y: string) => void;
   loading: boolean;
   projects: Project[];
   instructors: Instructor[];
@@ -29,6 +31,8 @@ const Ctx = createContext<AppDataValue | null>(null);
 
 export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loading, setLoading] = useState(true);
+  // 전역 기간 컨텍스트: 대시보드·리포트·목록이 동일 연도를 공유 (화면 이동 시 초기화 방지)
+  const [globalYear, setGlobalYear] = useState<string>(String(new Date().getFullYear()));
   const [projects, setProjects] = useState<Project[]>([]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -114,6 +118,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       loading, projects, instructors, companies, clients, paymentRequests,
       refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
       addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
+      globalYear, setGlobalYear,
     }}>
       {children}
     </Ctx.Provider>
