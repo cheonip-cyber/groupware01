@@ -7,6 +7,7 @@ import { formatDate } from '../../utils/formatters';
 import { GROUP_TYPE_LABEL } from './ProjectTable';
 import { Layers, Plus, Search, Unlink, CornerDownRight, Pencil, Trash2, Check, X } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import { useToast } from '../common/toast';
 
 /**
  * 프로젝트 그룹(묶음) 구성 섹션 — 구 시스템 모델 이식.
@@ -29,6 +30,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
   );
 
   const { isAdmin } = useAuth();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [edit, setEdit] = useState({ amount: '', date: '' });
@@ -39,9 +41,9 @@ export function GroupSection({ project, allProjects, onChanged }: {
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
-    try { await fn(); await onChanged(); }
+    try { await fn(); await onChanged(); toast.success('그룹 구성이 변경되었습니다'); }
     catch (e: any) {
-      alert(`처리 실패: ${e?.message ?? e}`);
+      toast.error(`처리 실패: ${e?.message ?? e}`);
       // 서버 가드에 걸린 경우 화면이 오래된 상태일 수 있으므로 즉시 최신화 (예: 이 프로젝트가 방금 다른 그룹의 자식이 된 경우)
       await onChanged().catch(() => {});
     }
@@ -87,7 +89,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
   const addOccurrence = () => {
     const name = `${project.projectName} (${occ.no}회차)`;
     if (children.some((c) => c.projectName === name)) {
-      alert(`"${occ.no}회차"가 이미 존재합니다. 회차 번호를 확인하세요.`);
+      toast.error(`"${occ.no}회차"가 이미 존재합니다. 회차 번호를 확인하세요.`);
       return;
     }
     return run(() => dataSource.createGroupChild(project.id, {

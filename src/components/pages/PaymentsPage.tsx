@@ -12,6 +12,7 @@ import { calcWithholding, maskResidentNumber } from '../../utils/withholding';
 import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
 import { Search, Download, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
+import { PageSkeleton } from '../common/Skeleton';
 import type { PaymentRequest } from '../../types';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
@@ -95,7 +96,7 @@ export function PaymentsPage() {
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const selectedNetTotal = selectedRows.reduce((s, r) => s + netOf(r), 0);
 
-  if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
+  if (loading) return <PageSkeleton rows={8} />;
 
   const toggleSelect = (id: string) =>
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { useAppData } from '../../store/appData';
+import { useToast } from '../common/toast';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { EmptyState } from '../common/EmptyState';
@@ -8,6 +9,7 @@ import { formatDate } from '../../utils/formatters';
 import { downloadSgaSheet, downloadCombinedTransferSheet } from '../../utils/paymentExport';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X } from 'lucide-react';
+import { PageSkeleton } from '../common/Skeleton';
 
 interface ManualExpense {
   id: number;
@@ -38,6 +40,7 @@ const emptyForm = (): FormState => ({
 
 export function AdminSgaPage() {
   const { paymentRequests } = useAppData();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ManualExpense[]>([]);
@@ -97,7 +100,8 @@ export function AdminSgaPage() {
       : cardSupabase.from('manual_expenses').update(payload).eq('id', form.id);
     const { error: err } = await q;
     setSaving(false);
-    if (err) { alert(`저장 실패: ${err.message}`); return; }
+    if (err) { toast.error(`저장 실패: ${err.message}`); return; }
+    toast.success(form.id == null ? '판관비 항목이 추가되었습니다' : '판관비 항목이 수정되었습니다');
     setForm(null);
     load();
   };
@@ -105,18 +109,19 @@ export function AdminSgaPage() {
   const remove = async (r: ManualExpense) => {
     if (!confirm(`'${r.category} · ${r.description ?? ''}' ${Number(r.amount).toLocaleString('ko-KR')}원 항목을 삭제할까요?`)) return;
     const { error: err } = await cardSupabase.from('manual_expenses').delete().eq('id', r.id);
-    if (err) { alert(`삭제 실패: ${err.message}`); return; }
+    if (err) { toast.error(`삭제 실패: ${err.message}`); return; }
+    toast.success('삭제되었습니다');
     load();
   };
 
   const toggleStatus = async (r: ManualExpense) => {
     const next = r.status === 'paid' ? 'pending' : 'paid';
     const { error: err } = await cardSupabase.from('manual_expenses').update({ status: next }).eq('id', r.id);
-    if (err) { alert(`상태 변경 실패: ${err.message}`); return; }
+    if (err) { toast.error(`상태 변경 실패: ${err.message}`); return; }
     setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
   };
 
-  if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
+  if (loading) return <PageSkeleton />;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
 
   const dlLabel = month || '전체';
