@@ -16,7 +16,9 @@ type SensitiveForm = {
 const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', address: '', bankName: '', accountNumber: '' };
 
 export function InstructorsPage() {
-  const { instructors, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
+  const { instructors, paymentRequests, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
+  const [panel, setPanel] = useState<Instructor | null>(null);       // 상세 슬라이드 패널
+  const [noAccountOnly, setNoAccountOnly] = useState(false);          // 계좌 미등록 필터 (76명 정비용)
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SensitiveForm>(emptyForm);
@@ -88,10 +90,16 @@ export function InstructorsPage() {
         title={`강사 목록 (${instructors.length}명)`}
         icon={<Users className="h-4 w-4 text-slate-400" />}
         action={
-          <button onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
-            <Plus className="h-3.5 w-3.5" /> 강사 추가
-          </button>
+          <span className="flex items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
+              <input type="checkbox" checked={noAccountOnly} onChange={(e) => setNoAccountOnly(e.target.checked)} className="h-3.5 w-3.5" />
+              계좌 미등록만 ({instructors.filter((i) => !i.bankName || !i.accountNumber).length}명)
+            </label>
+            <button onClick={() => setOpen((v) => !v)}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+              <Plus className="h-3.5 w-3.5" /> 강사 추가
+            </button>
+          </span>
         }
       />
 
@@ -127,7 +135,7 @@ export function InstructorsPage() {
             <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {instructors.map((i) => {
+            {(noAccountOnly ? instructors.filter((i) => !i.bankName || !i.accountNumber) : instructors).map((i) => {
               const isEditing = editingId === i.id;
               if (isEditing) {
                 return (
@@ -157,7 +165,7 @@ export function InstructorsPage() {
                 );
               }
               return (
-                <tr key={i.id} className="hover:bg-slate-50">
+                <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setPanel(i)}>
                   <td className="px-5 py-3 font-semibold text-slate-800">
                     {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
                   </td>
@@ -170,7 +178,7 @@ export function InstructorsPage() {
                   <td className="px-3 py-3 font-mono text-xs text-slate-500">
                     {i.bankName && i.accountNumber ? `${i.bankName} ${i.accountNumber}` : '-'}
                   </td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1.5">
                       <button onClick={() => startEdit(i)} className="text-slate-400 hover:text-blue-500" title="편집">
                         <Pencil className="h-4 w-4" />
@@ -186,6 +194,53 @@ export function InstructorsPage() {
           </tbody>
         </table>
       </div>
+      {/* 강사 상세 슬라이드 패널: 복원된 프로필 필드 + 참여 프로젝트/지급 이력 */}
+      {panel && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setPanel(null)}>
+          <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">
+                {panel.name}{panel.honorific && <span className="ml-1 text-sm font-normal text-slate-400">{panel.honorific}</span>}
+              </h3>
+              <button onClick={() => setPanel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <dl className="space-y-2 text-sm">
+              {[
+                ['전문분야', panel.specialty], ['등급', panel.level], ['연락처', panel.phone], ['이메일', panel.email],
+                ['주소', panel.address],
+                ['계좌', panel.bankName ? `${panel.bankName} ${panel.accountNumber ?? ''}` : undefined],
+                ['경력', panel.career], ['학력', panel.education], ['비고', panel.remarks], ['특이사항', panel.specialNotes],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <div key={k as string} className="flex gap-3 border-b border-slate-50 pb-2">
+                  <dt className="w-16 shrink-0 text-xs font-medium text-slate-400">{k}</dt>
+                  <dd className="whitespace-pre-wrap text-slate-700">{v}</dd>
+                </div>
+              ))}
+              {!panel.bankName && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">계좌 미등록 — 목록에서 연필 버튼으로 등록하세요</p>
+              )}
+            </dl>
+            <h4 className="mb-2 mt-5 text-sm font-semibold text-slate-700">지급 이력</h4>
+            {(() => {
+              const rows = paymentRequests.filter((r) => r.payeeType === '강사' && r.payeeId === panel.id);
+              if (rows.length === 0) return <p className="text-xs text-slate-400">연결된 지급 이력이 없습니다.</p>;
+              return (
+                <ul className="divide-y divide-slate-50 rounded-lg border border-slate-100">
+                  {rows.map((r) => (
+                    <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-xs">
+                      <span className="flex-1 truncate text-slate-600">{r.projectName}</span>
+                      <span className="font-medium text-slate-700">{r.amount.toLocaleString('ko-KR')}원</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${r.status === '지급완료' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                        {r.status === '지급완료' && r.paidMonth ? `지급/${Number(r.paidMonth.slice(5, 7))}월` : r.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
