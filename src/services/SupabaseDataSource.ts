@@ -434,6 +434,8 @@ class SupabaseDataSource implements DataSource {
     const { data, error } = await supabase
       .from('project_costs')
       .select('*, projects(project_name, session_1_date)')
+      // 카드 결제 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙, 카드는 관리자 카드 화면에서 관리)
+      .or('is_card_payment.is.null,is_card_payment.eq.false')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return this.buildPaymentRequests(data ?? []);
@@ -445,6 +447,8 @@ class SupabaseDataSource implements DataSource {
       dbPatch.status = SupabaseDataSource.frontendStatusToDbCostStatus(patch.status);
       // 지급월: 사용자가 선택한 값 우선(소급 처리 지원), 미지정 시 현재 월
       if (patch.status === '지급완료') dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
+      // 지급취소(완료 → 요청 되돌리기) 시 지급월 해제
+      if (patch.status === '지급요청') dbPatch.paid_month = null;
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
     // 지급대상 연결(미연결 건 수동 연결용) — 계좌정보 조인의 전제 조건
