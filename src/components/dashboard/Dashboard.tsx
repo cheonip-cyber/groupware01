@@ -10,12 +10,16 @@ import { TodoList } from './TodoList';
 import { RiskProjectList } from './RiskProjectList';
 import { ProjectSummaryTable } from './ProjectSummaryTable';
 import { FolderKanban, CalendarClock, CheckCircle2, Play, FileBarChart, CreditCard, AlertCircle, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { PageSkeleton } from '../common/Skeleton';
+import type { Project } from '../../types';
 
 export function Dashboard() {
-  const { projects, paymentRequests, loading } = useAppData();
+  const { projects, paymentRequests, loading, globalYear, setGlobalYear } = useAppData();
   const navigate = useNavigate();
-  // 기간 필터: 매출월(없으면 교육일) 귀속 연도 기준. 기본값 올해 — 수년치 누적 합산으로 KPI가 왜곡되는 문제 방지
-  const [year, setYear] = useState<string>(String(new Date().getFullYear()));
+  // 기간 필터: 전역 연도 컨텍스트 공유 (헤더·리포트·목록과 동일 기간 유지)
+  const year = globalYear;
+  const setYear = setGlobalYear;
 
   const years = useMemo(() => {
     const ys = [...new Set(projects.map(projectYear).filter((y): y is string => !!y))].sort().reverse();
@@ -37,7 +41,7 @@ export function Dashboard() {
 
   const kpi = useMemo(() => buildDashboardKpis(filteredProjects, filteredPayments), [filteredProjects, filteredPayments]);
 
-  if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
+  if (loading) return <PageSkeleton />;
 
   const goProjects = (extra: Record<string, string> = {}) => {
     const q = new URLSearchParams({ year, ...extra });
@@ -45,8 +49,39 @@ export function Dashboard() {
   };
   const yearLabel = year === '전체' ? '전체 연도' : year === '미지정' ? '연도 미지정' : `${year}년`;
 
+  // 오늘 할 일 액션밴드: 연체 지급 / 미수금 / 이번 주 교육
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const overduePay = paymentRequests.filter((r) => r.status !== '지급완료' && r.dueDate && r.dueDate < todayStr).length;
+  const weekEdu = filteredProjects.filter((p) => p.startDate && p.startDate >= todayStr && p.startDate <= weekEnd && p.projectStatus !== '취소/보류').length;
+  const actions = [
+    overduePay > 0 && { label: `연체 지급 ${overduePay}건`, to: '/payments', tone: 'red' },
+    kpi.unpaidCollection > 0 && { label: `미수금 ${kpi.unpaidCollection}건`, to: '/revenue', tone: 'amber' },
+    weekEdu > 0 && { label: `이번 주 교육 ${weekEdu}건`, to: `/projects?year=${year}`, tone: 'blue' },
+  ].filter(Boolean) as { label: string; to: string; tone: string }[];
+
   return (
     <div className="space-y-5">
+      {/* 오늘 할 일 액션밴드 */}
+      {actions.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+          <span className="text-xs font-bold text-slate-500">지금 확인할 항목</span>
+          {actions.map((a) => (
+            <button key={a.label} onClick={() => navigate(a.to)}
+              className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                a.tone === 'red' ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                : a.tone === 'amber' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+              {a.label} →
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-2.5 text-xs font-medium text-emerald-600">
+          ✓ 처리할 긴급 항목이 없습니다 (연체 지급 · 미수금 기준)
+        </div>
+      )}
+
       {/* 조회 기준 */}
       <div className="flex flex-wrap items-center gap-3">
         <select value={year} onChange={(e) => setYear(e.target.value)}
@@ -84,6 +119,9 @@ export function Dashboard() {
           hint={`매출 - 예산비용 · 이익률 ${kpi.profitRate}%`} />
       </div>
 
+      {/* 월별 매출 미니차트 (리포트 상세는 /reports) */}
+      <MiniRevenueChart projects={filteredProjects} onMore={() => navigate('/reports')} />
+
       {/* 차트 + 위험 + 할일 */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <StatusChart projects={filteredProjects} />
@@ -93,6 +131,41 @@ export function Dashboard() {
 
       {/* 요약 테이블 */}
       <ProjectSummaryTable projects={filteredProjects} />
+    </div>
+  );
+}
+
+// 월별 확정/예상 매출 미니차트 — 유효매출 기준 (그룹 이중계상 제거)
+function MiniRevenueChart({ projects, onMore }: { projects: Project[]; onMore: () => void }) {
+  const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
+  const map = new Map<string, { month: string; confirmed: number; expected: number }>();
+  for (const p of projects) {
+    if (!p.revenueMonth || p.projectStatus === '취소/보류') continue;
+    if (!map.has(p.revenueMonth)) map.set(p.revenueMonth, { month: p.revenueMonth.slice(5), confirmed: 0, expected: 0 });
+    const row = map.get(p.revenueMonth)!;
+    const amt = p.effectiveAmount ?? p.contractAmount ?? 0;
+    if (CONFIRMED.has(p.projectStatus)) row.confirmed += amt;
+    else if (p.projectStatus === '제안중') row.expected += amt;
+  }
+  const data = [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v);
+  if (data.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-slate-700">월별 매출 (확정/예상)</h4>
+        <button onClick={onMore} className="text-xs text-blue-600 hover:underline">리포트 상세 →</button>
+      </div>
+      <div className="h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={(v) => formatCompactKRW(v)} tick={{ fontSize: 10 }} width={56} />
+            <Tooltip formatter={(v: number, n: string) => [v.toLocaleString('ko-KR') + '원', n === 'confirmed' ? '확정' : '예상']} />
+            <Bar dataKey="confirmed" stackId="r" fill="#3b82f6" />
+            <Bar dataKey="expected" stackId="r" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
