@@ -25,12 +25,12 @@ export const GROUP_TYPE_LABEL: Record<string, string> = {
   merged: '묶음',
 };
 
-function Row({ p, child, expandable, expanded, onToggle }: {
-  p: Project; child?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void;
+function Row({ p, child, expandable, expanded, onToggle, highlight }: {
+  p: Project; child?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void; highlight?: boolean;
 }) {
   const isGroupMaster = (p.groupChildCount ?? 0) > 0;
   return (
-    <tr className={`group hover:bg-slate-50 ${child ? 'bg-slate-50/60' : ''}`}>
+    <tr className={`group hover:bg-slate-50 ${highlight ? 'bg-yellow-50' : child ? 'bg-slate-50/60' : ''}`}>
       <td className={`py-3 ${child ? 'pl-9 pr-4' : 'px-4'}`}>
         <div className="flex items-center gap-1.5">
           {expandable && (
@@ -78,9 +78,13 @@ function Row({ p, child, expandable, expanded, onToggle }: {
 /**
  * projects: 최상위 행(마스터/독립). childrenIndex가 주어지면 마스터 행을 펼쳐 자식을 들여쓰기로 표시한다.
  */
-export function ProjectTable({ projects, childrenIndex }: {
+export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highlightIds }: {
   projects: Project[];
   childrenIndex?: Map<string, Project[]>;
+  /** 검색 매칭 등으로 자동 펼칠 마스터 id (수동 토글과 병합) */
+  forceExpandedIds?: Set<string>;
+  /** 하이라이트할 자식 id (검색 매칭 표시) */
+  highlightIds?: Set<string>;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   if (projects.length === 0) return <EmptyState title="조건에 맞는 프로젝트가 없습니다" desc="필터를 변경해 보세요" />;
@@ -107,11 +111,11 @@ export function ProjectTable({ projects, childrenIndex }: {
         <tbody className="divide-y divide-slate-100">
           {projects.map((p) => {
             const kids = childrenIndex?.get(p.id) ?? [];
-            const isOpen = expanded.has(p.id);
+            const isOpen = expanded.has(p.id) || !!forceExpandedIds?.has(p.id);
             return (
               <FragmentRow key={p.id}>
                 <Row p={p} expandable={kids.length > 0} expanded={isOpen} onToggle={() => toggle(p.id)} />
-                {isOpen && kids.map((c) => <Row key={c.id} p={c} child />)}
+                {isOpen && kids.map((c) => <Row key={c.id} p={c} child highlight={highlightIds?.has(c.id)} />)}
               </FragmentRow>
             );
           })}
