@@ -52,7 +52,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateProject = useCallback(async (id: string, patch: Partial<Project>) => {
     const updated = await projectService.update(id, patch);
-    if (updated) setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    // 단건 응답에는 그룹 파생 통계(effectiveAmount 등)가 없어 일시적 이중계상이 생기므로,
+    // 비용 추가와 동일하게 전체 재조회로 그룹/유효매출 일관성을 유지한다.
+    if (updated) {
+      const p = await projectService.list();
+      setProjects(p);
+    }
   }, []);
 
   const updatePaymentRequest = useCallback(async (id: string, patch: Partial<PaymentRequest>) => {
