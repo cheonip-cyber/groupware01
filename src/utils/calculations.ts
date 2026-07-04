@@ -12,7 +12,7 @@ export const calculateProfit = (contractAmount: number, actualCost: number): num
   contractAmount - actualCost;
 
 export const calculateProfitRate = (profit: number, contractAmount: number): number =>
-  contractAmount > 0 ? Number(((profit / contractAmount) * 100).toFixed(1)) : 0;
+  contractAmount > 0 ? Number(((profit / contractAmount) * 100).toFixed(1)) : profit < 0 ? -100 : 0;
 
 const ALL_STATUSES: ProjectStatus[] = [
   '제안중', '제안완료', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류',

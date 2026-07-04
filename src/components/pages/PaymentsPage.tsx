@@ -29,6 +29,7 @@ export function PaymentsPage() {
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');
   const [subFilter, setSubFilter] = useState<'전체' | '지급대상' | '지급요청'>('전체');
+  const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>('전체');
   const [payMonth, setPayMonth] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
@@ -71,6 +72,7 @@ export function PaymentsPage() {
       if (year !== '전체' && !base.startsWith(year)) return false;
       if (month !== '전체' && base.slice(5, 7) !== month) return false;
       if (tab === 'pending' && subFilter !== '전체' && r.status !== subFilter) return false;
+      if (typeFilter !== '전체' && r.payeeType !== typeFilter) return false;
       if (q && !`${r.payeeName} ${r.projectName ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -79,7 +81,7 @@ export function PaymentsPage() {
       ? (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
       : (b.paidMonth ?? '').localeCompare(a.paidMonth ?? ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAll, doneAll, tab, search, year, month, subFilter]);
+  }, [pendingAll, doneAll, tab, search, year, month, subFilter, typeFilter]);
 
   // 요약 카운터 (구 시스템 '미요청 N건' 배지 이식)
   const counters = useMemo(() => ({
@@ -95,6 +97,8 @@ export function PaymentsPage() {
   );
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const selectedNetTotal = selectedRows.reduce((s, r) => s + netOf(r), 0);
+  // 조회 결과 총액: 현재 탭·필터에 잡힌 건들의 실지급 합 — 지급해야 할 금액 상시 모니터링용
+  const visibleNetTotal = rows.reduce((s, r) => s + netOf(r), 0);
 
   if (loading) return <PageSkeleton rows={8} />;
 
@@ -135,7 +139,7 @@ export function PaymentsPage() {
   return (
     <div className="space-y-4">
       {/* 요약 카운터 */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <button onClick={() => { setTab('pending'); setSubFilter('지급대상'); }}
           className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-left hover:border-amber-300">
           <p className="text-xs text-amber-600">미요청 (지급대상)</p>
@@ -149,6 +153,11 @@ export function PaymentsPage() {
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
           <p className="text-xs text-emerald-600">이번 달 지급완료</p>
           <p className="text-xl font-bold text-emerald-700">{counters.doneThisMonth}건</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3" title="현재 탭·필터에 조회된 건들의 실지급액 합계 (강사 3.3% 공제 후)">
+          <p className="text-xs text-slate-500">{tab === 'pending' ? '조회 결과 지급 예정액' : '조회 결과 지급액'}</p>
+          <p className="text-xl font-bold text-slate-800">{formatCompactKRW(visibleNetTotal)}</p>
+          <p className="text-[10px] text-slate-400">{visibleNetTotal.toLocaleString('ko-KR')}원 · {rows.length}건</p>
         </div>
       </div>
 
@@ -169,6 +178,10 @@ export function PaymentsPage() {
           <select value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
             <option value="전체">월 전체</option>
             {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((m) => <option key={m} value={m}>{Number(m)}월</option>)}
+          </select>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+            className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
+            <option value="전체">유형 전체</option><option value="강사">강사</option><option value="업체">업체</option><option value="기타">기타</option>
           </select>
           {tab === 'pending' && (
             <select value={subFilter} onChange={(e) => setSubFilter(e.target.value as typeof subFilter)}
@@ -233,6 +246,7 @@ export function PaymentsPage() {
                     <input type="checkbox" checked={selected.size > 0 && selected.size >= selectableIds.length} onChange={toggleAll} className="h-4 w-4" title="전체 선택" />
                   )}
                 </th>
+                <th className="px-3 py-2.5 font-medium">No.</th>
                 <th className="px-3 py-2.5 font-medium">지급처</th>
                 <th className="px-3 py-2.5 font-medium">유형</th>
                 <th className="px-3 py-2.5 font-medium">프로젝트</th>
@@ -243,7 +257,7 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {rows.map((r) => {
+                {rows.map((r, idx) => {
                   const overdue = tab === 'pending' && !!r.dueDate && r.dueDate < today;
                   const canSelect = tab === 'pending' ? r.status === '지급요청' : true;
                   return (
@@ -251,6 +265,7 @@ export function PaymentsPage() {
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {canSelect && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="h-4 w-4" />}
                       </td>
+                      <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                       <td className="px-3 py-3 font-medium text-slate-800">
                         {r.payeeName}
                         {!r.bankName && <span className="ml-1.5 text-[11px] text-red-500">계좌없음</span>}
@@ -333,8 +348,8 @@ export function PaymentsPage() {
                     {(detail.payeeType === '강사'
                       ? instructors.filter((i) => i.name.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
                           .map((i) => ({ id: i.id, name: i.name, sub: i.accountInfo ?? '계좌 미등록' }))
-                      : companies.filter((c) => c.companyName.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
-                          .map((c) => ({ id: c.id, name: c.companyName, sub: c.bankName ? `${c.bankName} ${c.accountNumber ?? ''}` : '계좌 미등록' }))
+                      : companies.filter((c) => `${c.companyName} ${c.ceoName ?? ''}`.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
+                          .map((c) => ({ id: c.id, name: c.ceoName ? `${c.companyName} (대표 ${c.ceoName})` : c.companyName, sub: c.bankName ? `${c.bankName} ${c.accountNumber ?? ''}` : '계좌 미등록' }))
                     ).map((cand) => (
                       <li key={cand.id} className="flex items-center gap-2 py-1.5 text-xs">
                         <span className="font-medium text-slate-700">{cand.name}</span>

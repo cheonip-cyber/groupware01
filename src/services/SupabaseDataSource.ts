@@ -46,7 +46,10 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
   // 이익/이익률: 구 그룹웨어(gw_monthly_performance_stats) 방식 적용 —
   // 이익 = 매출(총액 total_amount) − 예산비용(budget 합), 이익률 = 이익/매출 ×100
   const expectedProfit = totalAmount - expectedCost;
-  const profitRate = totalAmount > 0 ? Number(((expectedProfit / totalAmount) * 100).toFixed(1)) : 0;
+  // 매출이 0인데 비용만 있으면(이익 음수) 0%가 아니라 -100%로 표기해 손실을 드러낸다
+  const profitRate = totalAmount > 0
+    ? Number(((expectedProfit / totalAmount) * 100).toFixed(1))
+    : expectedProfit < 0 ? -100 : 0;
 
   const sumBy = (bucket: string) => costs
     .filter((c) => budgetBucket(c.category) === bucket)
@@ -436,6 +439,8 @@ class SupabaseDataSource implements DataSource {
       .select('*, projects(project_name, session_1_date)')
       // 카드 결제 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙, 카드는 관리자 카드 화면에서 관리)
       .or('is_card_payment.is.null,is_card_payment.eq.false')
+      // 비지급 대상 비용(is_payable=false: 내부 배부·감가 등)은 지급 목록에서 제외
+      .or('is_payable.is.null,is_payable.eq.true')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return this.buildPaymentRequests(data ?? []);
