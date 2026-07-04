@@ -12,4 +12,12 @@ export interface Instructor {
   accountNumber?: string;
   residentNumber?: string;
   address?: string;
+  // 과거 강사DB에서 이관된 프로필 필드 (매핑 누락으로 화면에 표시되지 않던 것 복원)
+  specialty?: string;      // 전문분야
+  level?: string;          // 등급
+  career?: string;         // 경력
+  education?: string;      // 학력
+  honorific?: string;      // 호칭
+  remarks?: string;        // 비고
+  specialNotes?: string;   // 특이사항
 }

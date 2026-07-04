@@ -119,6 +119,7 @@ export function InstructorsPage() {
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="px-5 py-2.5 font-medium">이름</th>
+            <th className="px-3 py-2.5 font-medium">전문분야 / 등급</th>
             <th className="px-3 py-2.5 font-medium">연락처</th>
             <th className="px-3 py-2.5 font-medium">주민등록번호</th>
             <th className="px-3 py-2.5 font-medium">주소</th>
@@ -132,6 +133,7 @@ export function InstructorsPage() {
                 return (
                   <tr key={i.id} className="bg-blue-50/40">
                     <td className="px-5 py-2"><input className={editInputCls + ' font-sans'} value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} /></td>
+                    <td className="px-3 py-2 text-xs text-slate-400">Notion 관리</td>
                     <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.phone} onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))} /></td>
                     <td className="px-3 py-2"><input className={editInputCls} value={editForm.residentNumber} onChange={(e) => setEditForm((s) => ({ ...s, residentNumber: e.target.value }))} /></td>
                     <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.address} onChange={(e) => setEditForm((s) => ({ ...s, address: e.target.value }))} /></td>
@@ -156,7 +158,12 @@ export function InstructorsPage() {
               }
               return (
                 <tr key={i.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-3 font-semibold text-slate-800">{i.name}</td>
+                  <td className="px-5 py-3 font-semibold text-slate-800">
+                    {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
+                    {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{i.level}</span> : null}
+                  </td>
                   <td className="px-3 py-3 text-slate-500">{i.phone || '-'}</td>
                   <td className="px-3 py-3 font-mono text-xs text-slate-500">{i.residentNumber || '-'}</td>
                   <td className="px-3 py-3 text-slate-500">{i.address || '-'}</td>
