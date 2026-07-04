@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
+import { useToast } from '../common/toast';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search } from 'lucide-react';
@@ -14,6 +15,7 @@ interface CardTxn {
   purpose: string | null;
   status: string;
   category_name?: string;
+  project_linked?: boolean;
 }
 interface ManualExpense {
   id: number;
@@ -37,6 +39,7 @@ interface RecurringSetting {
 const DUPLICATE_RISK_KEYWORD = '플젝중복';
 
 export function AdminCardPage() {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardTxns, setCardTxns] = useState<CardTxn[]>([]);
@@ -86,11 +89,27 @@ export function AdminCardPage() {
     () => cardTxns.filter((t) => (t.category_name ?? '').includes(DUPLICATE_RISK_KEYWORD)),
     [cardTxns],
   );
+  // 회사비용 합계: 프로젝트 예산에 반영된 건(project_linked)은 제외해 이중 반영 방지
   const totalByCategory = useMemo(() => {
     const map = new Map<string, number>();
-    for (const t of cardTxns) map.set(t.category_name ?? '미분류', (map.get(t.category_name ?? '미분류') ?? 0) + Number(t.amount));
+    for (const t of cardTxns) {
+      if (t.project_linked) continue;
+      map.set(t.category_name ?? '미분류', (map.get(t.category_name ?? '미분류') ?? 0) + Number(t.amount));
+    }
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [cardTxns]);
+  const projectLinkedStats = useMemo(() => {
+    const rows = cardTxns.filter((t) => t.project_linked);
+    return { count: rows.length, total: rows.reduce((s, t) => s + Number(t.amount), 0) };
+  }, [cardTxns]);
+
+  const toggleProjectLinked = async (t: any) => {
+    const next = !t.project_linked;
+    const { error: err } = await cardSupabase.from('card_transactions').update({ project_linked: next }).eq('id', t.id);
+    if (err) { toast.error(`변경 실패: ${err.message}`); return; }
+    setCardTxns((prev) => prev.map((x) => (x.id === t.id ? { ...x, project_linked: next } : x)));
+    toast.success(next ? '프로젝트 귀속으로 표시 — 회사비용 합계에서 제외됩니다' : '일반 비용으로 변경되었습니다');
+  };
 
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
@@ -119,6 +138,13 @@ export function AdminCardPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {projectLinkedStats.count > 0 && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3" title="프로젝트 예산에 반영된 카드 사용분 — 손익 이중 반영 방지를 위해 회사비용 합계에서 제외됨">
+            <p className="text-xs text-blue-600">프로젝트 귀속 (합계 제외)</p>
+            <p className="mt-1 text-base font-bold text-blue-700"><MoneyText value={projectLinkedStats.total} compact /></p>
+            <p className="text-[10px] text-blue-500">{projectLinkedStats.count}건</p>
+          </div>
+        )}
         {totalByCategory.slice(0, 6).map(([cat, total]) => (
           <div key={cat} className="rounded-xl border border-slate-200 bg-white p-3">
             <p className="text-xs text-slate-500">{cat}</p>
@@ -153,20 +179,31 @@ export function AdminCardPage() {
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                <th className="px-5 py-2.5 font-medium">일자</th>
+                <th className="px-5 py-2.5 font-medium">No.</th>
+                <th className="px-3 py-2.5 font-medium">일자</th>
                 <th className="px-3 py-2.5 font-medium">가맹점</th>
                 <th className="px-3 py-2.5 font-medium">카테고리</th>
                 <th className="px-3 py-2.5 font-medium">용도</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액</th>
+                <th className="px-3 py-2.5 font-medium">구분</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredTxns.slice(0, 100).map((t) => (
-                  <tr key={t.id} className={t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}>
-                    <td className="px-5 py-2 text-xs text-slate-500">{formatDate(t.transaction_date)}</td>
+                {filteredTxns.slice(0, 100).map((t, idx) => (
+                  <tr key={t.id} className={t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}>
+                    <td className="px-5 py-2 text-xs tabular-nums text-slate-400">{idx + 1}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{formatDate(t.transaction_date)}</td>
                     <td className="px-3 py-2 font-medium text-slate-800">{t.merchant_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{t.category_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-400">{t.purpose ?? '-'}</td>
                     <td className="px-3 py-2 text-right"><MoneyText value={t.amount} /></td>
+                    <td className="px-3 py-2">
+                      <button onClick={() => toggleProjectLinked(t)}
+                        title="프로젝트 예산 반영 건은 회사비용 합계에서 제외 (손익 이중 반영 방지)"
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          t.project_linked ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                        {t.project_linked ? '프로젝트 귀속' : '일반'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
