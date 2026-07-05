@@ -12,6 +12,7 @@ import { InstructorsPage } from './components/pages/InstructorsPage';
 import { CompaniesPage } from './components/pages/CompaniesPage';
 import { ReportsPage } from './components/pages/ReportsPage';
 import { SettingsPage } from './components/pages/SettingsPage';
+import { AdminOverviewPage } from './components/admin/AdminOverviewPage';
 import { AdminCardPage } from './components/admin/AdminCardPage';
 import { AdminSgaPage } from './components/admin/AdminSgaPage';
 import { RequireAdmin } from './auth/RequireAdmin';
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/overview" element={<RequireAdmin><AdminOverviewPage /></RequireAdmin>} />
           <Route path="/admin/card" element={<RequireAdmin><AdminCardPage /></RequireAdmin>} />
           <Route path="/admin/sga" element={<RequireAdmin><AdminSgaPage /></RequireAdmin>} />
           <Route path="*" element={<Dashboard />} />

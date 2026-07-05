@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Receipt, Wallet, CreditCard,
-  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck,
+  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -20,6 +20,7 @@ const items = [
 
 // 관리자 전용 메뉴 — isAdmin일 때만 노출
 const adminItems = [
+  { to: '/admin/overview', label: '경영 현황', icon: Landmark },
   { to: '/admin/card', label: '카드사용 관리', icon: CreditCard },
   { to: '/admin/sga', label: '판관비 관리', icon: PiggyBank },
 ];

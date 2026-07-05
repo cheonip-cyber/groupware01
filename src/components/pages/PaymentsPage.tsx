@@ -2,15 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
-import { useAuth } from '../../auth/AuthContext';
 import { Card } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { paymentStatusStyle } from '../../utils/statusConfig';
 import { formatDate, formatCompactKRW } from '../../utils/formatters';
 import { calcWithholding, maskResidentNumber } from '../../utils/withholding';
-import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
-import { Search, Download, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
+import { Search, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
 import type { PaymentRequest } from '../../types';
@@ -20,7 +18,6 @@ const netOf = (r: PaymentRequest) => (r.payeeType === '강사' ? calcWithholding
 
 export function PaymentsPage() {
   const { paymentRequests, instructors, companies, loading, updatePaymentRequest } = useAppData();
-  const { isAdmin } = useAuth();
   const nowMonth = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -35,7 +32,6 @@ export function PaymentsPage() {
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
   const [linkQuery, setLinkQuery] = useState('');
-  const [dlMonth, setDlMonth] = useState(nowMonth);
   const [busy, setBusy] = useState(false);
 
   const pendingAll = useMemo(() => paymentRequests.filter((r) => r.status === '지급대상' || r.status === '지급요청'), [paymentRequests]);
@@ -189,26 +185,7 @@ export function PaymentsPage() {
               <option value="전체">상태 전체</option><option value="지급대상">미요청</option><option value="지급요청">요청됨</option>
             </select>
           )}
-          {isAdmin && (
-            <span className="ml-auto flex items-center gap-1.5">
-              <input type="month" value={dlMonth} onChange={(e) => setDlMonth(e.target.value)}
-                title="다운로드 기준월" className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
-              <button onClick={() => downloadTransferSheet(paymentRequests.filter((r) => r.status === '지급요청'), dlMonth)}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                <Download className="h-3.5 w-3.5" /> 자금이체양식
-              </button>
-              <button onClick={() => downloadBusinessIncomeSheet(paymentRequests.filter((r) => r.status === '지급완료' && r.paidMonth === dlMonth), dlMonth)}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                <Download className="h-3.5 w-3.5" /> 사업소득내역
-              </button>
-            </span>
-          )}
         </div>
-        {isAdmin && (
-          <p className="mt-2 text-[11px] text-slate-400">
-            자금이체양식: '지급요청' 상태 전체 · 사업소득내역: 선택월 지급완료 강사 건 (주민번호 포함 — 취급 주의)
-          </p>
-        )}
       </Card>
 
       {/* 선택 합계 바 */}
