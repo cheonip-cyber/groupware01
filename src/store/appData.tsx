@@ -16,6 +16,7 @@ interface AppDataValue {
   paymentRequests: PaymentRequest[];
   refresh: () => Promise<void>;
   updateProject: (id: string, patch: Partial<Project>) => Promise<void>;
+  createProject: (input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }) => Promise<string>;
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
@@ -53,6 +54,13 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const createProject = useCallback(async (input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }) => {
+    const newId = await dataSource.createProject(input);
+    const p = await projectService.list();
+    setProjects(p);
+    return newId;
+  }, []);
 
   const updateProject = useCallback(async (id: string, patch: Partial<Project>) => {
     const updated = await projectService.update(id, patch);
@@ -116,7 +124,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
-      refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
+      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
       addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
       globalYear, setGlobalYear,
     }}>

@@ -360,13 +360,14 @@ export function PaymentsPage() {
                   <Row k="지급금액"><MoneyText value={detail.amount} /></Row>
                   <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
                     <input type="checkbox" checked={!!detail.vendorTaxInvoiceReceived}
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const checked = e.target.checked;
-                        await updatePaymentRequest(detail.id, {
+                        // 낙관적 업데이트: 화면 먼저 반영 후 저장 — 서버 왕복 동안 미반응으로 보여 이중 클릭이 꼬이는 문제 방지
+                        setDetail({ ...detail, vendorTaxInvoiceReceived: checked, vendorTaxInvoiceDate: checked ? today : undefined });
+                        updatePaymentRequest(detail.id, {
                           vendorTaxInvoiceReceived: checked,
                           vendorTaxInvoiceDate: checked ? today : undefined,
-                        });
-                        setDetail({ ...detail, vendorTaxInvoiceReceived: checked, vendorTaxInvoiceDate: checked ? today : undefined });
+                        }).catch(() => setDetail((d) => (d ? { ...d, vendorTaxInvoiceReceived: !checked } : d)));
                       }} className="h-4 w-4" />
                     매입 세금계산서 수취 확인
                     {detail.vendorTaxInvoiceReceived && detail.vendorTaxInvoiceDate && (
@@ -379,9 +380,11 @@ export function PaymentsPage() {
               {detail.status === '지급대상' && (
                 <label className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
                   <input type="checkbox" checked={!!detail.infoConfirmed}
-                    onChange={async (e) => {
-                      await updatePaymentRequest(detail.id, { infoConfirmed: e.target.checked });
-                      setDetail({ ...detail, infoConfirmed: e.target.checked });
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setDetail({ ...detail, infoConfirmed: checked }); // 낙관적 업데이트 (즉시 반영)
+                      updatePaymentRequest(detail.id, { infoConfirmed: checked })
+                        .catch(() => setDetail((d) => (d ? { ...d, infoConfirmed: !checked } : d)));
                     }} className="h-4 w-4" />
                   지급 정보(계좌·금액)를 확인했습니다
                   <span className="text-[11px] text-slate-400">{detail.payeeType === '업체' ? '— 계산서 수취와 함께 요청 가능' : '— 확인 후 요청 가능'}</span>

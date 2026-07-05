@@ -55,6 +55,8 @@ export interface HistoryLog {
 // 노션 연동 대비 필드 (사양서 12장)
 export interface NotionSyncFields {
   notionPageId?: string;
+  /** DB 원본 상태 문자열 (상태 변경 UI용, 8종) */
+  dbStatus?: string;
   notionUrl?: string;
   lastSyncedAt?: string;
   syncStatus?: 'synced' | 'pending' | 'error';

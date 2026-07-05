@@ -135,6 +135,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     updatedAt: row.updated_at ?? new Date().toISOString(),
 
     notionPageId: row.notion_page_id ?? undefined,
+    dbStatus: row.status ?? undefined,
     finalEstimate: row.final_estimate != null ? Number(row.final_estimate) : undefined,
     sourceType: row.source_type ?? undefined,
     notionUrl: row.notion_url ?? undefined,
@@ -147,7 +148,8 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 async function fetchCostsByProjectIds(ids: number[]): Promise<Map<number, CostRow[]>> {
   const map = new Map<number, CostRow[]>();
   if (ids.length === 0) return map;
-  const { data, error } = await supabase.from('project_costs').select('*').in('project_id', ids);
+  // 수백 개 id를 .in()으로 URL에 싣지 않고 전체 조회 — 비용 행 수가 프로젝트 수와 같은 규모라 전체 조회가 더 빠르고 안전
+  const { data, error } = await supabase.from('project_costs').select('*');
   if (error) throw error;
   for (const row of (data ?? []) as CostRow[]) {
     const list = map.get(row.project_id) ?? [];
@@ -197,8 +199,11 @@ class SupabaseDataSource implements DataSource {
       if (kids && kids.length > 0) {
         const kidsSum = kids.reduce((sum, c) => sum + (c.contractAmount || 0), 0);
         p.groupChildCount = kids.length;
-        p.groupTotalAmount = kidsSum > 0 ? kidsSum : p.contractAmount;
-        p.effectiveAmount = kidsSum > 0 ? 0 : p.contractAmount;
+        // merged(기존 묶기)는 실적 있는 개별 프로젝트가 마스터인 유형 → 마스터 매출도 합산해야 과소계상이 없다.
+        // 단 마스터 금액=자식 합이면 이중입력(컨테이너형)으로 보고 recurring/distribution처럼 0 처리.
+        const mergedIndependent = p.groupType === 'merged' && Math.abs((p.contractAmount || 0) - kidsSum) >= 2;
+        p.groupTotalAmount = (kidsSum > 0 ? kidsSum : 0) + (mergedIndependent || kidsSum === 0 ? (p.contractAmount || 0) : 0);
+        p.effectiveAmount = kidsSum > 0 ? (mergedIndependent ? (p.contractAmount || 0) : 0) : (p.contractAmount || 0);
       } else {
         p.effectiveAmount = p.contractAmount;
       }
@@ -218,6 +223,26 @@ class SupabaseDataSource implements DataSource {
     return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? []);
   }
 
+  // 수기 프로젝트 신규 생성 (기존에는 노션 pull·그룹 회차 생성만 가능해 화면에서 프로젝트를 만들 수 없었음)
+  async createProject(input: {
+    projectName: string; clientName: string; finalEstimate: number;
+    revenueMonth?: string; startDate?: string; status?: string;
+  }): Promise<string> {
+    const clientId = await this.findOrCreateClient(input.clientName.trim());
+    const { data, error } = await supabase.from('projects').insert({
+      project_name: input.projectName.trim(),
+      client_id: clientId,
+      status: input.status ?? '요청/담당',
+      final_estimate: input.finalEstimate,
+      vat_type: '별도',
+      revenue_month: input.revenueMonth || null,
+      session_1_date: input.startDate || null,
+      source_type: 'manual_groupware',
+    }).select('id').single();
+    if (error) throw error;
+    return String(data.id);
+  }
+
   async updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined> {
     const dbPatch: Record<string, unknown> = {};
 
@@ -231,6 +256,8 @@ class SupabaseDataSource implements DataSource {
     if ('collectionDoneDate' in patch) dbPatch.client_payment_date = patch.collectionDoneDate ?? null;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
+    // 상태 변경 (수기 프로젝트 수명주기 관리 — DB 원본 상태 8종 그대로 저장)
+    if (patch.dbStatus !== undefined) dbPatch.status = patch.dbStatus;
     // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준
     if (patch.finalEstimate !== undefined) dbPatch.final_estimate = patch.finalEstimate;
     if ('startDate' in patch) dbPatch.session_1_date = patch.startDate || null;
@@ -688,13 +715,16 @@ class SupabaseDataSource implements DataSource {
 
   async getSyncStatus(): Promise<SyncStatus> {
     const { count } = await supabase.from('projects').select('*', { count: 'exact', head: true });
-    const { data: last } = await supabase
-      .from('notion_sync_log').select('synced_at').order('synced_at', { ascending: false }).limit(1).maybeSingle();
+    // 동기화 시각은 실제 pull 커서(sync_state) 기준 — 변경 로그 최신행 기준이면
+    // '변경이 없던 기간'이 통째로 미동기화처럼 보이는 오표시가 난다
+    const { data: cursor } = await supabase
+      .from('sync_state').select('value').eq('key', 'pull_cursor_project').maybeSingle();
+    const cursorAt = cursor?.value ? String(cursor.value).replace(/^"|"$/g, '') : undefined;
     return {
       status: 'synced',
-      lastSyncedAt: last?.synced_at ?? undefined,
+      lastSyncedAt: cursorAt,
       syncedCount: count ?? 0,
-      message: 'Supabase 연동 모드',
+      message: '노션 자동 동기화 (pull 커서 기준)',
     };
   }
 }

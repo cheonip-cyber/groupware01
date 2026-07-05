@@ -21,6 +21,7 @@ export interface DataSource {
   getProjects(): Promise<Project[]>;
   getProject(id: string): Promise<Project | undefined>;
   updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined>;
+  createProject(input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }): Promise<string>;
   getInstructors(): Promise<Instructor[]>;
   addInstructor(input: Omit<Instructor, 'id'>): Promise<void>;
   updateInstructor(id: string, patch: Partial<Instructor>): Promise<void>;
@@ -66,6 +67,7 @@ class SampleDataSource implements DataSource {
   async getProjects() { await delay(); return clone(this.projects); }
   async getProject(id: string) { await delay(60); return clone(this.projects.find((p) => p.id === id)); }
 
+  async createProject(): Promise<string> { throw new Error('샘플 모드에서는 프로젝트 생성이 지원되지 않습니다'); }
   async updateProject(id: string, patch: Partial<Project>) {
     await delay(60);
     const idx = this.projects.findIndex((p) => p.id === id);

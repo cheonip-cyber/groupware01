@@ -60,7 +60,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
           )}
         </nav>
         <div className="border-t border-slate-800 px-5 py-3 text-center text-[11px] text-slate-500">
-          샘플 데이터 모드 · v0.1
+          삼쏘타 그룹웨어 · v1.0
         </div>
       </aside>
     </>

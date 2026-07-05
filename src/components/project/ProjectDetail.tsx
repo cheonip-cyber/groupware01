@@ -89,7 +89,21 @@ export function ProjectDetail() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-bold text-slate-900 lg:text-xl">{project.projectName}</h2>
-            <StatusBadge label={project.projectStatus} style={projectStatusStyle[project.projectStatus]} />
+            {project.notionPageId ? (
+            <span title="노션 연동 프로젝트 — 상태는 노션에서 관리됩니다">
+              <StatusBadge label={project.projectStatus} style={projectStatusStyle[project.projectStatus]} />
+            </span>
+          ) : (
+            <select
+              value={project.dbStatus ?? '요청/담당'}
+              onChange={(e) => updateProject(project.id, { dbStatus: e.target.value })}
+              title="프로젝트 상태 변경 (수기 프로젝트)"
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-blue-400">
+              {['요청/담당', '제안/PT', '확정/준비', '준비', '운영/모니터링', '보고/정산', '종료(수익화 완료)', '취소/보류'].map((st) => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+          )}
             {project.riskFlags.length > 0 && (
               <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
                 ⚠ {project.riskFlags.join(' · ')}

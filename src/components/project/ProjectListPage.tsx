@@ -7,6 +7,9 @@ import { ProjectTable } from './ProjectTable';
 import { Card } from '../common/Card';
 import { Search } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '../common/toast';
+import { Plus, X } from 'lucide-react';
 import type { ProjectStatus } from '../../types';
 
 // '제안완료'는 DB 상태 파생 로직상 나올 수 없는 값이라 필터 옵션에서 제외 (죽은 옵션 정리)
@@ -14,7 +17,7 @@ const STATUSES: ProjectStatus[] = ['제안중', '확정/준비', '운영중', '�
 const PAGE_SIZE = 50;
 
 export function ProjectListPage() {
-  const { projects, clients, loading, globalYear } = useAppData();
+  const { projects, clients, loading, globalYear, createProject } = useAppData();
   const [params] = useSearchParams();
   // 초기 필터: URL 파라미터(드릴다운) > 전역 연도 컨텍스트 > 기본값
   const [f, setF] = useState<ProjectFilterState>(() => ({
@@ -25,6 +28,27 @@ export function ProjectListPage() {
     month: params.get('month') ?? defaultFilterState.month,
   }));
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
+  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  const submitCreate = async () => {
+    if (!cForm.projectName.trim() || !cForm.clientName.trim()) { toast.error('프로젝트명과 고객사는 필수입니다'); return; }
+    setCreating(true);
+    try {
+      const id = await createProject({
+        projectName: cForm.projectName, clientName: cForm.clientName,
+        finalEstimate: Number(cForm.finalEstimate || 0),
+        revenueMonth: cForm.revenueMonth || undefined, startDate: cForm.startDate || undefined,
+      });
+      toast.success('프로젝트가 생성되었습니다');
+      setCreateOpen(false);
+      navigate(`/projects/${id}`);
+    } catch (e: any) { toast.error(`생성 실패: ${e?.message ?? e}`); }
+    finally { setCreating(false); }
+  };
 
   const managers = useMemo(() => [...new Set(projects.map((p) => p.managerName))], [projects]);
   const years = useMemo(() => {
@@ -89,7 +113,11 @@ export function ProjectListPage() {
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
+          <button onClick={() => setCreateOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <Plus className="h-4 w-4" /> 새 프로젝트
+        </button>
+        <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input value={f.search} onChange={(e) => set({ search: e.target.value })} placeholder="프로젝트·고객사·담당자 검색"
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white" />
@@ -143,6 +171,42 @@ export function ProjectListPage() {
           forceExpandedIds={hasActiveQuery ? autoExpandIds : undefined}
           highlightIds={hasActiveQuery ? matchedChildIds : undefined} />
       </Card>
+
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setCreateOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-800">새 프로젝트</h3>
+              <button onClick={() => setCreateOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-2.5">
+              <input value={cForm.projectName} onChange={(e) => setCForm((f) => ({ ...f, projectName: e.target.value }))}
+                placeholder="프로젝트명 *" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+              <input value={cForm.clientName} onChange={(e) => setCForm((f) => ({ ...f, clientName: e.target.value }))}
+                placeholder="고객사명 * (없으면 자동 등록)" list="client-options"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+              <datalist id="client-options">{clients.map((c) => <option key={c.id} value={c.name} />)}</datalist>
+              <input value={cForm.finalEstimate} onChange={(e) => setCForm((f) => ({ ...f, finalEstimate: e.target.value }))}
+                type="number" placeholder="계약금액 (세전, 원)" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400" />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-slate-400">매출월
+                  <input value={cForm.revenueMonth} onChange={(e) => setCForm((f) => ({ ...f, revenueMonth: e.target.value }))}
+                    type="month" className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none" />
+                </label>
+                <label className="text-xs text-slate-400">교육일
+                  <input value={cForm.startDate} onChange={(e) => setCForm((f) => ({ ...f, startDate: e.target.value }))}
+                    type="date" className="mt-0.5 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none" />
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400">상태는 '요청/담당'으로 시작하며, 상세 화면 상단에서 언제든 변경할 수 있습니다. 부가세는 별도 기준입니다.</p>
+              <button onClick={submitCreate} disabled={creating}
+                className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                {creating ? '생성 중…' : '프로젝트 생성'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
