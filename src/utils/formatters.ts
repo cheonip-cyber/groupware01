@@ -40,3 +40,7 @@ export const daysUntil = (dateStr?: string): number | null => {
   d.setHours(0, 0, 0, 0);
   return Math.round((d.getTime() - today.getTime()) / 86400000);
 };
+
+// 이익률 표기: 매출 0원에 손실이 있으면 비율 산정이 불가하므로 '매출입력'으로 안내
+export const profitRateLabel = (p: { contractAmount?: number; expectedProfit?: number; profitRate?: number }): string =>
+  (p.contractAmount ?? 0) === 0 && (p.expectedProfit ?? 0) < 0 ? '매출입력' : `${p.profitRate ?? 0}%`;

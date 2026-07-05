@@ -69,8 +69,11 @@ export const buildDashboardKpis = (
   const expectedRevenue = active.filter((p) => p.projectStatus === '제안중').reduce((s, p) => s + eff(p), 0);
   // 이익 = Σ(유효매출 − 예산비용) — 구 뷰 profit_max와 동일 공식
   const expectedProfit = active.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0);
-  const totalRevenue = confirmedRevenue + expectedRevenue;
-  const profitRate = totalRevenue > 0 ? Number(((expectedProfit / totalRevenue) * 100).toFixed(1)) : 0;
+  // 총 이익률: 예산이 입력되지 않은 프로젝트(비용 0 → 이익률 100%)는 왜곡을 만들므로 산정 베이스에서 제외
+  const rateBase = active.filter((p) => (p.expectedCost || 0) > 0);
+  const rateRevenue = rateBase.reduce((s, p) => s + eff(p), 0);
+  const rateProfit = rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0);
+  const profitRate = rateRevenue > 0 ? Number(((rateProfit / rateRevenue) * 100).toFixed(1)) : 0;
   return {
     total: projects.length,
     thisMonth: getThisMonthProjects(projects).length,

@@ -1,3 +1,4 @@
+import { profitRateLabel } from '../../../utils/formatters';
 import { useMemo, useState } from 'react';
 import type { Project, PaymentRequest, Instructor, Company } from '../../../types';
 import type { NewProjectCostInput } from '../../../services/dataSource';
@@ -202,7 +203,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
           <Field label="실제 지출"><MoneyText value={project.actualCost} /></Field>
           <Field label="계약금액"><MoneyText value={project.contractAmount} /></Field>
           <Field label="예상 이익"><MoneyText value={project.expectedProfit} className={`font-semibold ${profitTone}`} /></Field>
-          <Field label="이익률"><span className={`font-semibold ${profitTone}`}>{project.profitRate}%</span></Field>
+          <Field label="이익률"><span className={`font-semibold ${profitTone}`}>{profitRateLabel(project)}</span></Field>
         </Section>
       </div>
 

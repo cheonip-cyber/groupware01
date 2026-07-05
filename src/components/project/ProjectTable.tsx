@@ -5,7 +5,7 @@ import type { Project } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
-import { formatDateRange } from '../../utils/formatters';
+import { formatDateRange, profitRateLabel } from '../../utils/formatters';
 import { EmptyState } from '../common/EmptyState';
 import { ChevronRight, CornerDownRight } from 'lucide-react';
 
@@ -70,7 +70,7 @@ function Row({ p, child, expandable, expanded, onToggle, highlight, no }: {
           </span>
         ) : <MoneyText value={p.contractAmount} />}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums text-slate-600">{p.profitRate}%</td>
+      <td className="px-3 py-3 text-right tabular-nums text-slate-600">{profitRateLabel(p)}</td>
       <td className="px-3 py-3 text-xs text-slate-500">{p.managerName}</td>
     </tr>
   );

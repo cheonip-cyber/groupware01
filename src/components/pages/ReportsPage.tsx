@@ -68,11 +68,16 @@ export function ReportsPage() {
     return Object.entries(counts).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
   }, [filtered]);
 
-  const totals = useMemo(() => ({
-    confirmed: filtered.filter((p) => CONFIRMED_SET.has(p.projectStatus)).reduce((s, p) => s + eff(p), 0),
-    expected: filtered.filter((p) => p.projectStatus === '제안중').reduce((s, p) => s + eff(p), 0),
-    profit: filtered.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0),
-  }), [filtered]);
+  const totals = useMemo(() => {
+    const rateBase = filtered.filter((p) => (p.expectedCost || 0) > 0); // 예산 미입력 제외 (이익률 왜곡 방지)
+    const rateRev = rateBase.reduce((s, p) => s + eff(p), 0);
+    return {
+      confirmed: filtered.filter((p) => CONFIRMED_SET.has(p.projectStatus)).reduce((s, p) => s + eff(p), 0),
+      expected: filtered.filter((p) => p.projectStatus === '제안중').reduce((s, p) => s + eff(p), 0),
+      profit: filtered.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0),
+      rate: rateRev > 0 ? ((rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0) / rateRev) * 100).toFixed(1) : '0',
+    };
+  }, [filtered]);
   const totalRev = totals.confirmed + totals.expected;
 
   if (loading) return <PageSkeleton />;
@@ -94,7 +99,7 @@ export function ReportsPage() {
         <SummaryCard label="확정 매출" value={formatCompactKRW(totals.confirmed)} tone="text-blue-600" />
         <SummaryCard label="예상 매출 (제안)" value={formatCompactKRW(totals.expected)} tone="text-amber-600" />
         <SummaryCard label="이익 (매출-예산비용)" value={formatCompactKRW(totals.profit)} tone="text-emerald-600" />
-        <SummaryCard label="이익률" value={`${totalRev > 0 ? ((totals.profit / totalRev) * 100).toFixed(1) : 0}%`} tone="text-slate-800" />
+        <SummaryCard label="이익률 (예산입력 건 기준)" value={`${totals.rate}%`} tone="text-slate-800" />
       </div>
 
       <Card>

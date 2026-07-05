@@ -1,3 +1,4 @@
+import { profitRateLabel } from '../../utils/formatters';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
@@ -35,7 +36,7 @@ export function BudgetPage() {
                   <MoneyText value={p.expectedProfit} />
                 </td>
                 <td className={`px-3 py-3 text-right font-medium tabular-nums ${p.profitRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {p.profitRate}%
+                  {profitRateLabel(p)}
                 </td>
               </tr>
             ))}

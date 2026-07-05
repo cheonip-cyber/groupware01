@@ -1,3 +1,4 @@
+import { profitRateLabel } from '../../../utils/formatters';
 import type { ReactNode } from 'react';
 import type { Project, PaymentRequest } from '../../../types';
 import { Section, Field, ActionButton } from './_shared';
@@ -121,7 +122,7 @@ export function SettlementTab({ project, requests, onUpdate }:
           <MoneyText value={project.expectedProfit} className={`font-bold ${profitTone}`} />
         </Field>
         <Field label="이익률">
-          <span className={`font-bold ${profitTone}`}>{project.profitRate}%</span>
+          <span className={`font-bold ${profitTone}`}>{profitRateLabel(project)}</span>
         </Field>
         <Field label="결산 완료">
           {notionLocked ? (
