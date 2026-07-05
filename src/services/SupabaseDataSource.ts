@@ -98,6 +98,12 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     collectionDoneDate: row.client_payment_date ?? undefined,
     taxInvoiceDate: row.tax_invoice_date ?? undefined,
     revenueMonth: row.revenue_month ?? undefined,
+    // 그룹(묶음) 필드 — 이 매핑이 없으면 enrichGroups가 자식을 인식하지 못해
+    // 마스터+자식이 전부 개별 합산(매출 이중계상)되고 그룹 UI가 동작하지 않는다
+    parentId: row.parent_id != null ? String(row.parent_id) : undefined,
+    isMaster: !!row.is_master,
+    groupType: row.group_type ?? undefined,
+    distributionRatio: row.distribution_ratio != null ? Number(row.distribution_ratio) : undefined,
 
     trainerFeeBudget: sumBy('trainer'),
     operationBudget: sumBy('operation'),
