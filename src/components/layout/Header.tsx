@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Menu, LogOut, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { useAppData } from '../../store/appData';
+import { GlobalSearch } from '../common/GlobalSearch';
 import { dataSource } from '../../services/dataSource';
 import { projectYear } from '../../utils/filters';
 import type { SyncStatus } from '../../types';
@@ -68,6 +69,7 @@ export function Header({ title, onMenu }: { title: string; onMenu: () => void })
             {years.map((y) => <option key={y} value={y}>{y}년</option>)}
             <option value="전체">전체 연도</option>
           </select>
+          <GlobalSearch />
           <SyncIndicator />
         </div>
         <span className="hidden text-sm text-slate-500 sm:block">{today()}</span>

@@ -453,6 +453,7 @@ class SupabaseDataSource implements DataSource {
         id: String(r.id),
         projectId: String(r.project_id),
         projectName: r.projects?.project_name ?? undefined,
+        clientName: r.projects?.clients?.name ?? undefined,
         payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
         amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
@@ -480,7 +481,7 @@ class SupabaseDataSource implements DataSource {
   async getPaymentRequests(): Promise<PaymentRequest[]> {
     const { data, error } = await supabase
       .from('project_costs')
-      .select('*, projects(project_name, session_1_date)')
+      .select('*, projects(project_name, session_1_date, clients(name))')
       // 카드 결제 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙, 카드는 관리자 카드 화면에서 관리)
       .or('is_card_payment.is.null,is_card_payment.eq.false')
       // 비지급 대상 비용(is_payable=false: 내부 배부·감가 등)은 지급 목록에서 제외
@@ -512,7 +513,7 @@ class SupabaseDataSource implements DataSource {
       if (error) throw error;
     }
     const { data: r, error: fetchErr } = await supabase
-      .from('project_costs').select('*, projects(project_name, session_1_date)').eq('id', Number(id)).maybeSingle();
+      .from('project_costs').select('*, projects(project_name, session_1_date, clients(name))').eq('id', Number(id)).maybeSingle();
     if (fetchErr) throw fetchErr;
     if (!r) return undefined;
     const [built] = await this.buildPaymentRequests([r]);

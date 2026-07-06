@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
@@ -71,7 +71,7 @@ export function PaymentsPage() {
       if (month !== '전체' && base.slice(5, 7) !== month) return false;
       if (tab === 'pending' && subFilter !== '전체' && r.status !== subFilter) return false;
       if (typeFilter !== '전체' && r.payeeType !== typeFilter) return false;
-      if (q && !`${r.payeeName} ${r.projectName ?? ''}`.toLowerCase().includes(q)) return false;
+      if (q && !`${r.payeeName} ${r.projectName ?? ''} ${r.clientName ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
     // 정렬: 대기=예정일 임박순(없으면 뒤로), 완료=지급월 최신순
@@ -82,16 +82,24 @@ export function PaymentsPage() {
   }, [pendingAll, doneAll, tab, search, year, month, subFilter, typeFilter]);
 
   // 요약 카운터 (구 시스템 '미요청 N건' 배지 이식)
+  // 카운터는 '전체'가 아니라 현재 연/월 필터 기준 (구 그룹웨어 개발 시 확정된 원칙: 통계 카드는 선택 기간 기준)
+  const inPeriod = useCallback((r: PaymentRequest) => {
+    const base = r.dueDate || r.scheduledMonth || r.paidMonth || '';
+    if (year !== '전체' && !String(base).startsWith(year) && base !== '') return false;
+    if (month && !String(base).startsWith(month)) return false;
+    return true;
+  }, [year, month]);
   const counters = useMemo(() => {
+    const pend = pendingAll.filter((r) => !month && year === '전체' ? true : inPeriod(r));
     const dueThis = pendingAll.filter((r) => r.scheduledMonth === nowMonth);
     return {
-      unrequested: pendingAll.filter((r) => r.status === '지급대상').length,
-      requested: pendingAll.filter((r) => r.status === '지급요청').length,
+      unrequested: pend.filter((r) => r.status === '지급대상').length,
+      requested: pend.filter((r) => r.status === '지급요청').length,
       doneThisMonth: doneAll.filter((r) => r.paidMonth === nowMonth).length,
       dueThisCount: dueThis.length,
       dueThisTotal: dueThis.reduce((s, r) => s + netOf(r), 0),
     };
-  }, [pendingAll, doneAll, nowMonth]);
+  }, [pendingAll, doneAll, nowMonth, inPeriod, month, year]);
 
   // 선택 대상: 대기 탭=지급요청 건(일괄 완료), 완료 탭=전체(일괄 취소)
   // 대기 탭은 전체 선택 가능 — 일괄 '지급월 예약'은 상태 무관, 일괄 '지급완료'는 지급요청 건만 내부 필터

@@ -4,6 +4,7 @@ export interface PaymentRequest {
   id: string;
   projectId: string;
   projectName?: string;
+  clientName?: string;
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;
