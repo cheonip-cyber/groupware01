@@ -111,6 +111,23 @@ export function AdminCardPage() {
     toast.success(next ? '프로젝트 귀속으로 표시 — 회사비용 합계에서 제외됩니다' : '일반 비용으로 변경되었습니다');
   };
 
+  // 카드 거래 인라인 편집 (설계 원칙: 입력 마찰 최소화 — 대시보드에서 바로 수정)
+  const [editId, setEditId] = useState<string | number | null>(null);
+  const [editTx, setEditTx] = useState({ merchant_name: '', purpose: '', amount: 0, transaction_date: '' });
+  const startEditTx = (t: any) => {
+    setEditId(t.id);
+    setEditTx({ merchant_name: t.merchant_name ?? '', purpose: t.purpose ?? '', amount: Number(t.amount ?? 0), transaction_date: String(t.transaction_date ?? '').slice(0, 10) });
+  };
+  const saveEditTx = async () => {
+    if (editId == null) return;
+    const patch = { merchant_name: editTx.merchant_name, purpose: editTx.purpose || null, amount: editTx.amount, transaction_date: editTx.transaction_date };
+    const { error: err } = await cardSupabase.from('card_transactions').update(patch).eq('id', editId);
+    if (err) { toast.error(`수정 실패: ${err.message}`); return; }
+    setCardTxns((prev) => prev.map((x) => (x.id === editId ? ({ ...x, ...patch, purpose: patch.purpose ?? undefined } as CardTxn) : x)));
+    toast.success('카드 내역이 수정되었습니다');
+    setEditId(null);
+  };
+
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
 
@@ -188,13 +205,28 @@ export function AdminCardPage() {
                 <th className="px-3 py-2.5 font-medium">구분</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredTxns.slice(0, 100).map((t, idx) => (
-                  <tr key={t.id} className={t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}>
+                {filteredTxns.slice(0, 100).map((t, idx) => editId === t.id ? (
+                  <tr key={t.id} className="bg-blue-50/60">
+                    <td className="px-5 py-2 text-xs text-slate-400">{idx + 1}</td>
+                    <td className="px-3 py-2"><input type="date" value={editTx.transaction_date} onChange={(e) => setEditTx((s) => ({ ...s, transaction_date: e.target.value }))} className="rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
+                    <td className="px-3 py-2"><input value={editTx.merchant_name} onChange={(e) => setEditTx((s) => ({ ...s, merchant_name: e.target.value }))} className="w-full rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{t.category_name}</td>
+                    <td className="px-3 py-2"><input value={editTx.purpose} onChange={(e) => setEditTx((s) => ({ ...s, purpose: e.target.value }))} placeholder="용도" className="w-full rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
+                    <td className="px-3 py-2 text-right"><input type="number" value={editTx.amount} onChange={(e) => setEditTx((s) => ({ ...s, amount: Number(e.target.value) }))} className="w-28 rounded border border-blue-200 px-1.5 py-1 text-right text-xs outline-none" /></td>
+                    <td className="px-3 py-2">
+                      <span className="flex gap-1">
+                        <button onClick={saveEditTx} className="rounded bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-700">저장</button>
+                        <button onClick={() => setEditId(null)} className="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-200">취소</button>
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={t.id} className={`group ${t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}`}>
                     <td className="px-5 py-2 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{formatDate(t.transaction_date)}</td>
-                    <td className="px-3 py-2 font-medium text-slate-800">{t.merchant_name}</td>
+                    <td className="cursor-pointer px-3 py-2 font-medium text-slate-800 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEditTx(t)}>{t.merchant_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{t.category_name}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{t.purpose ?? '-'}</td>
+                    <td className="cursor-pointer px-3 py-2 text-xs text-slate-400 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEditTx(t)}>{t.purpose ?? '-'}</td>
                     <td className="px-3 py-2 text-right"><MoneyText value={t.amount} /></td>
                     <td className="px-3 py-2">
                       <button onClick={() => toggleProjectLinked(t)}

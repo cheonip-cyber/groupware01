@@ -99,7 +99,7 @@ export function InstructorsPage() {
         icon={<Users className="h-4 w-4 text-slate-400" />}
         action={
           <span className="flex items-center gap-2">
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름·분야·연락처 검색"
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름·분야·연락처 검색" autoComplete="off"
               className="w-44 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400 focus:bg-white" />
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
               <input type="checkbox" checked={noAccountOnly} onChange={(e) => setNoAccountOnly(e.target.checked)} className="h-3.5 w-3.5" />
@@ -137,15 +137,17 @@ export function InstructorsPage() {
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="w-10 px-4 py-2.5 font-medium">No.</th>
-            <th className="cursor-pointer px-5 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('name')}>이름 {sortKey === 'name' ? '↓' : ''}</th>
+            <th className="cursor-pointer px-5 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('name')} style={{ minWidth: '7rem' }}>이름 {sortKey === 'name' ? '↓' : ''}</th>
             <th className="cursor-pointer px-3 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('specialty')}>전문분야 / 등급 {sortKey === 'specialty' ? '↓' : ''}</th>
             <th className="px-3 py-2.5 font-medium">연락처</th>
             <th className="px-3 py-2.5 font-medium">주민등록번호</th>
-            <th className="px-3 py-2.5 font-medium">주소</th>
             <th className="px-3 py-2.5 font-medium">계좌정보</th>
             <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
+            {query.trim() && instructors.filter((i) => `${i.name} ${i.specialty ?? ''} ${i.phone ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())).length === 0 && (
+              <tr><td colSpan={6} className="px-5 py-6 text-center text-xs text-slate-400">'{query}' 검색 결과가 없습니다 — 방금 등록했다면 새로고침 후 다시 검색해 보세요</td></tr>
+            )}
             {instructors
               .filter((i) => !noAccountOnly || !i.bankName || !i.accountNumber)
               .filter((i) => {
@@ -165,7 +167,6 @@ export function InstructorsPage() {
                     <td className="px-3 py-2 text-xs text-slate-400">Notion 관리</td>
                     <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.phone} onChange={(e) => setEditForm((s) => ({ ...s, phone: e.target.value }))} /></td>
                     <td className="px-3 py-2"><input className={editInputCls} value={editForm.residentNumber} onChange={(e) => setEditForm((s) => ({ ...s, residentNumber: e.target.value }))} /></td>
-                    <td className="px-3 py-2"><input className={editInputCls + ' font-sans'} value={editForm.address} onChange={(e) => setEditForm((s) => ({ ...s, address: e.target.value }))} /></td>
                     <td className="px-3 py-2">
                       <div className="flex gap-1">
                         <input placeholder="은행" className={editInputCls + ' font-sans'} value={editForm.bankName} onChange={(e) => setEditForm((s) => ({ ...s, bankName: e.target.value }))} />
@@ -188,7 +189,7 @@ export function InstructorsPage() {
               return (
                 <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setPanel(i)}>
                   <td className="px-4 py-2 text-xs tabular-nums text-slate-400">{__idx + 1}</td>
-                  <td className="px-5 py-2 font-semibold text-slate-800">
+                  <td className="whitespace-nowrap px-5 py-2 font-semibold text-slate-800">
                     {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
@@ -196,7 +197,6 @@ export function InstructorsPage() {
                   </td>
                   <td className="px-3 py-2 text-slate-500">{i.phone || '-'}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">{maskResidentNumber(i.residentNumber)}</td>
-                  <td className="px-3 py-2 text-slate-500">{i.address || '-'}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">
                     {i.bankName && i.accountNumber ? `${i.bankName} ${i.accountNumber}` : '-'}
                   </td>

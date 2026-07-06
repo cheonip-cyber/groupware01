@@ -104,6 +104,32 @@ export function PaymentsPage() {
   // 선택 대상: 대기 탭=지급요청 건(일괄 완료), 완료 탭=전체(일괄 취소)
   // 대기 탭은 전체 선택 가능 — 일괄 '지급월 예약'은 상태 무관, 일괄 '지급완료'는 지급요청 건만 내부 필터
   const selectableIds = useMemo(() => rows.map((r) => r.id), [rows, tab]);
+
+  // 월별 분리 표시 (구 그룹웨어 UX): 현재월 섹션이 최상단, 이후 미래월(가까운순)→과거월(최근순)→미지정
+  const monthGroups = useMemo(() => {
+    const keyOf = (r: PaymentRequest) => {
+      const base = tab === 'pending' ? (r.scheduledMonth || (r.dueDate ?? '').slice(0, 7)) : (r.paidMonth ?? '');
+      return base && base.length >= 7 ? base.slice(0, 7) : '';
+    };
+    const map = new Map<string, PaymentRequest[]>();
+    for (const r of rows) {
+      const k = keyOf(r);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    }
+    const keys = [...map.keys()];
+    keys.sort((a, b) => {
+      if (a === nowMonth) return -1;
+      if (b === nowMonth) return 1;
+      if (a === '') return 1;
+      if (b === '') return -1;
+      const aFuture = a > nowMonth, bFuture = b > nowMonth;
+      if (aFuture && bFuture) return a.localeCompare(b);      // 미래: 가까운 순
+      if (!aFuture && !bFuture) return b.localeCompare(a);    // 과거: 최근 순
+      return aFuture ? -1 : 1;                                 // 미래가 과거보다 먼저
+    });
+    return keys.map((k) => ({ key: k, items: map.get(k)! }));
+  }, [rows, tab, nowMonth]);
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const selectedNetTotal = selectedRows.reduce((s, r) => s + netOf(r), 0);
   // 조회 결과 총액: 현재 탭·필터에 잡힌 건들의 실지급 합 — 지급해야 할 금액 상시 모니터링용
@@ -270,7 +296,14 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {rows.map((r, idx) => {
+                {monthGroups.map((g) => [
+                  <tr key={`h-${g.key}`} className="bg-slate-50/80">
+                    <td colSpan={10} className="px-4 py-1.5 text-xs font-bold text-slate-500">
+                      {g.key === '' ? '지급월 미지정' : `${g.key.replace('-', '년 ')}월`}{g.key === nowMonth ? ' · 이번 달' : ''}
+                      <span className="ml-2 font-normal text-slate-400">{g.items.length}건 · 이체액 {g.items.reduce((t, r) => t + netOf(r), 0).toLocaleString('ko-KR')}원</span>
+                    </td>
+                  </tr>,
+                  ...g.items.map((r, idx) => {
                   const overdue = tab === 'pending' && !!r.dueDate && r.dueDate < today;
                   const canSelect = tab === 'pending' ? r.status === '지급요청' : true;
                   return (
@@ -338,7 +371,8 @@ export function PaymentsPage() {
                       </td>
                     </tr>
                   );
-                })}
+                }),
+                ])}
               </tbody>
             </table>
           </div>
