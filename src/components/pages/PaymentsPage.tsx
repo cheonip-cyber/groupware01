@@ -94,10 +94,8 @@ export function PaymentsPage() {
   }, [pendingAll, doneAll, nowMonth]);
 
   // 선택 대상: 대기 탭=지급요청 건(일괄 완료), 완료 탭=전체(일괄 취소)
-  const selectableIds = useMemo(
-    () => rows.filter((r) => (tab === 'pending' ? r.status === '지급요청' : true)).map((r) => r.id),
-    [rows, tab],
-  );
+  // 대기 탭은 전체 선택 가능 — 일괄 '지급월 예약'은 상태 무관, 일괄 '지급완료'는 지급요청 건만 내부 필터
+  const selectableIds = useMemo(() => rows.map((r) => r.id), [rows, tab]);
   const selectedRows = rows.filter((r) => selected.has(r.id));
   const selectedNetTotal = selectedRows.reduce((s, r) => s + netOf(r), 0);
   // 조회 결과 총액: 현재 탭·필터에 잡힌 건들의 실지급 합 — 지급해야 할 금액 상시 모니터링용
@@ -118,9 +116,20 @@ export function PaymentsPage() {
     finally { setBusy(false); setSelected(new Set()); }
   };
 
-  const bulkComplete = () => runBulk(
-    (r) => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: bulkMonth }),
-    `선택한 ${selectedRows.length}건을 지급완료 처리할까요?\n지급월: ${bulkMonth} · 이체 총액 ${selectedNetTotal.toLocaleString('ko-KR')}원`);
+  const bulkComplete = async () => {
+    const targets = selectedRows.filter((r) => r.status === '지급요청');
+    if (targets.length === 0) { alert('지급완료 처리할 수 있는 건(지급요청 상태)이 선택되지 않았습니다.'); return; }
+    if (!confirm(`지급요청 상태 ${targets.length}건을 지급완료 처리할까요?\n지급월: ${bulkMonth}`)) return;
+    setBusy(true);
+    try { for (const r of targets) await updatePaymentRequest(r.id, { status: '지급완료', paidMonth: bulkMonth }); }
+    finally { setBusy(false); setSelected(new Set()); }
+  };
+
+  // 월말 배치 준비용: 선택 건들을 특정 지급월(말일)로 일괄 예약 (과거 이관 미지급 건 정리에 사용)
+  const [bulkScheduleMonth, setBulkScheduleMonth] = useState(nextMonth);
+  const bulkSchedule = () => runBulk(
+    (r) => updatePaymentRequest(r.id, { scheduledMonth: bulkScheduleMonth }),
+    `선택한 ${selectedRows.length}건의 지급월을 ${bulkScheduleMonth}(말일 배치)로 예약할까요?`);
   const bulkCancel = () => runBulk(
     (r) => updatePaymentRequest(r.id, { status: '지급요청' }),
     `선택한 ${selectedRows.length}건의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`);
@@ -209,10 +218,17 @@ export function PaymentsPage() {
           </span>
           {tab === 'pending' ? (
             <>
+              <span className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50/70 px-2 py-1">
+                <input type="month" value={bulkScheduleMonth} onChange={(e) => setBulkScheduleMonth(e.target.value)}
+                  title="일괄 예약할 지급월 (말일 배치)"
+                  className="rounded border border-violet-200 bg-white px-1.5 py-0.5 text-xs outline-none" />
+                <button onClick={bulkSchedule} disabled={busy}
+                  className="rounded-lg bg-violet-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50">일괄 지급월 예약</button>
+              </span>
               <input type="month" value={bulkMonth} max={nowMonth} onChange={(e) => setBulkMonth(e.target.value)}
                 className="rounded-lg border border-emerald-200 px-2 py-1 text-xs outline-none" />
               <button onClick={bulkComplete} disabled={busy}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">선택 일괄 지급완료</button>
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">일괄 지급완료 (요청 건)</button>
             </>
           ) : (
             <button onClick={bulkCancel} disabled={busy}
