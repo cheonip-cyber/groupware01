@@ -33,7 +33,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ amount: '', date: '' });
+  const [edit, setEdit] = useState({ amount: '', date: '', name: '' });
   const [mode, setMode] = useState<'' | 'merged' | 'recurring' | 'distribution'>('');
   const [query, setQuery] = useState('');
   const [occ, setOcc] = useState({ no: String(children.length + 1), amount: '', date: '' });
@@ -147,12 +147,17 @@ export function GroupSection({ project, allProjects, onChanged }: {
               )}
               {editing ? (
                 <span className="ml-auto flex items-center gap-1.5">
+                  {c.groupType !== 'merged' && (
+                    <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                      title="회차명 수정 (예: 3회차 → 4회차)"
+                      className="w-52 rounded-lg border border-indigo-200 px-2 py-1 text-xs outline-none focus:border-indigo-400" />
+                  )}
                   <input type="number" value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })}
                     placeholder="금액(세전)" className="w-28 rounded-lg border border-indigo-200 px-2 py-1 text-xs outline-none focus:border-indigo-400" />
                   <input type="date" value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })}
                     className="rounded-lg border border-indigo-200 px-2 py-1 text-xs outline-none focus:border-indigo-400" />
                   <button disabled={busy || !edit.amount} title="저장"
-                    onClick={() => run(() => dataSource.updateProject(c.id, { finalEstimate: Number(edit.amount), startDate: edit.date || undefined }).then(() => setEditId(null)))}
+                    onClick={() => run(() => dataSource.updateProject(c.id, { finalEstimate: Number(edit.amount), startDate: edit.date || undefined, ...(c.groupType !== 'merged' && edit.name.trim() ? { projectName: edit.name.trim() } : {}) }).then(() => setEditId(null)))}
                     className="rounded bg-indigo-600 p-1 text-white hover:bg-indigo-700 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
                   <button title="취소" onClick={() => setEditId(null)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-3.5 w-3.5" /></button>
                 </span>
@@ -162,7 +167,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
                   <span className="ml-auto"><MoneyText value={c.finalEstimate ?? c.contractAmount} className="text-sm" /><span className="ml-0.5 text-[10px] text-slate-400">세전</span></span>
                   {editable && (
                     <button disabled={busy} title="금액·시행일 수정"
-                      onClick={() => { setEditId(c.id); setEdit({ amount: String(c.finalEstimate ?? ''), date: c.startDate ?? '' }); }}
+                      onClick={() => { setEditId(c.id); setEdit({ amount: String(c.finalEstimate ?? ''), date: c.startDate ?? '', name: c.projectName }); }}
                       className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-indigo-600"><Pencil className="h-3.5 w-3.5" /></button>
                   )}
                   <button disabled={busy} title="그룹에서 해제"

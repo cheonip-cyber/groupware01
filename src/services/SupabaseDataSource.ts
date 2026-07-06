@@ -74,6 +74,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     clientId: row.client_id ? String(row.client_id) : '',
     clientName,
     masterClientName: row.master_client_name ?? undefined,
+    clientPaymentMemo: row.client_payment_memo ?? undefined,
     courseName: row.project_name ?? '',
     topic: '',
     description: row.progress_notes ?? '',
@@ -256,11 +257,15 @@ class SupabaseDataSource implements DataSource {
     if (patch.collectionCompleted !== undefined) dbPatch.client_payment_received = patch.collectionCompleted;
     if ('collectionDoneDate' in patch) dbPatch.client_payment_date = patch.collectionDoneDate ?? null;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
+    if ('clientPaymentMemo' in patch) dbPatch.client_payment_memo = patch.clientPaymentMemo || null;
+    if ('masterClientName' in patch) dbPatch.master_client_name = patch.masterClientName || null;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
     // 상태 변경 (수기 프로젝트 수명주기 관리 — DB 원본 상태 8종 그대로 저장)
     if (patch.dbStatus !== undefined) dbPatch.status = patch.dbStatus;
     // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준
     if (patch.finalEstimate !== undefined) dbPatch.final_estimate = patch.finalEstimate;
+    // 회차명 수정 (그룹웨어 생성 자식 전용 — 노션 연동 프로젝트 이름은 노션이 원천이라 여기서 수정 금지)
+    if (patch.projectName !== undefined) dbPatch.project_name = patch.projectName;
     if ('startDate' in patch) dbPatch.session_1_date = patch.startDate || null;
 
     // 결산완료 처리 시 전체 진행상태를 '종료'로 승격, 취소 시 '보고/정산' 단계로 되돌림

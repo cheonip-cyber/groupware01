@@ -112,7 +112,28 @@ export function RevenueTab({ project, onUpdate }:
           </div>
         </Field>
         <Field label="수금 완료일">{formatDate(project.collectionDoneDate)}</Field>
+        <Field label="입금 메모">
+          <InlineTextSave value={project.clientPaymentMemo ?? ''} placeholder="입금 지연 사유·특이사항 (구 그룹웨어 입금 메모)"
+            onSave={(v) => onUpdate({ clientPaymentMemo: v })} />
+        </Field>
+        <Field label="대표거래처">
+          <InlineTextSave value={project.masterClientName ?? ''} placeholder="계열사 분산 발행 시 통계 집계용 대표거래처"
+            onSave={(v) => onUpdate({ masterClientName: v })} />
+        </Field>
       </Section>
     </div>
+  );
+}
+
+// 인라인 텍스트 저장 (입력 마찰 최소화 원칙: 상세화면 인라인 편집)
+function InlineTextSave({ value, placeholder, onSave }: { value: string; placeholder: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  const dirty = v !== value;
+  return (
+    <span className="flex items-center gap-1.5">
+      <input value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder}
+        className="w-72 max-w-full rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
+      {dirty && <button onClick={() => onSave(v.trim())} className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-blue-700">저장</button>}
+    </span>
   );
 }
