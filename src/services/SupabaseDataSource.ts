@@ -73,6 +73,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     projectName: row.project_name ?? '',
     clientId: row.client_id ? String(row.client_id) : '',
     clientName,
+    masterClientName: row.master_client_name ?? undefined,
     courseName: row.project_name ?? '',
     topic: '',
     description: row.progress_notes ?? '',

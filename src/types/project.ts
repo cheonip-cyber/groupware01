@@ -68,6 +68,8 @@ export interface Project extends NotionSyncFields {
   projectName: string;
   clientId: string;
   clientName: string;
+  /** 대표거래처 — 계열사 분산 계산서 발행 시 통계 집계용 (구 그룹웨어 확정 기능) */
+  masterClientName?: string;
   courseName: string;
   topic: string;
   description: string;

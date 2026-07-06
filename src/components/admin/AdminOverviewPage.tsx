@@ -56,8 +56,26 @@ export function AdminOverviewPage() {
     const netProfit = revenue - totalCost;
     const netRate = revenue > 0 ? ((netProfit / revenue) * 100).toFixed(1) : '0';
     return { revenue, projectCost, sgaTotal, cardGeneral, totalCost, netProfit, netRate };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, sga, cardTxns, globalYear]);
+
+  // KPI 드릴다운 (설계원전: 숫자 클릭 → 구성 거래 목록)
+  const [drill, setDrill] = useState<'revenue' | 'cost' | null>(null);
+  const drillRows = useMemo(() => {
+    if (!drill) return [];
+    const yearOf = (p: Project) => (p.revenueMonth || p.startDate || '').slice(0, 4);
+    const inScope = projects.filter((p) => p.projectStatus !== '취소/보류' && (globalYear === '전체' || yearOf(p) === globalYear));
+    if (drill === 'revenue') {
+      return inScope.filter((p) => CONFIRMED.has(p.projectStatus) && eff(p) > 0)
+        .map((p) => ({ label: p.projectName, sub: `${p.clientName ?? ''} · ${p.projectStatus}`, amount: eff(p) }))
+        .sort((a, b) => b.amount - a.amount);
+    }
+    const rows: { label: string; sub: string; amount: number }[] = [];
+    for (const p of inScope) if ((p.expectedCost || 0) > 0) rows.push({ label: p.projectName, sub: '프로젝트 예산', amount: p.expectedCost || 0 });
+    for (const r of sga) if (inYear(r.transaction_date)) rows.push({ label: r.description || r.category, sub: `판관비 · ${r.category}`, amount: Number(r.amount) });
+    for (const t of cardTxns) if (!t.project_linked && inYear(t.transaction_date)) rows.push({ label: '카드 사용', sub: `카드 일반 · ${(t.transaction_date ?? '').slice(0, 10)}`, amount: Number(t.amount) });
+    return rows.sort((a, b) => b.amount - a.amount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drill, projects, sga, cardTxns, globalYear]);
 
   if (loading || extLoading) return <PageSkeleton />;
 
@@ -73,8 +91,8 @@ export function AdminOverviewPage() {
 
       {/* 경영 KPI */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="회사 총매출 (확정)" value={stats.revenue} tone="text-blue-600" />
-        <Kpi label="총 사용비용" value={stats.totalCost} tone="text-slate-800"
+        <Kpi label="회사 총매출 (확정)" value={stats.revenue} tone="text-blue-600" onClick={() => setDrill(drill === 'revenue' ? null : 'revenue')} active={drill === 'revenue'} />
+        <Kpi label="총 사용비용" value={stats.totalCost} tone="text-slate-800" onClick={() => setDrill(drill === 'cost' ? null : 'cost')} active={drill === 'cost'}
           sub={`프로젝트 ${formatCompactKRW(stats.projectCost)} · 판관비 ${formatCompactKRW(stats.sgaTotal)} · 카드 ${formatCompactKRW(stats.cardGeneral)}`} />
         <Kpi label="최종 경영이익" value={stats.netProfit} tone={stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'} />
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -86,6 +104,22 @@ export function AdminOverviewPage() {
           <p className="text-[10px] text-slate-400">경영이익 ÷ 총매출</p>
         </div>
       </div>
+
+      {drill && (
+        <Card>
+          <CardHeader title={drill === 'revenue' ? `총매출 구성 (${drillRows.length}건)` : `총 사용비용 구성 (${drillRows.length}건)`} />
+          <div className="max-h-80 overflow-y-auto px-4 pb-3">
+            {drillRows.slice(0, 200).map((r, i) => (
+              <div key={i} className="flex items-center gap-2 border-b border-slate-50 py-1.5 text-sm last:border-0">
+                <span className="w-8 text-xs tabular-nums text-slate-300">{i + 1}</span>
+                <span className="flex-1 truncate font-medium text-slate-700">{r.label}</span>
+                <span className="max-w-[30%] truncate text-xs text-slate-400">{r.sub}</span>
+                <MoneyText value={r.amount} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* 월말 일괄 지급 다운로드 */}
       <Card>
@@ -105,7 +139,12 @@ export function AdminOverviewPage() {
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <Download className="h-4 w-4" /> 자금이체양식
             </button>
-            <button onClick={() => downloadBusinessIncomeSheet(paymentRequests.filter((r) => r.status === '지급완료' && r.paidMonth === dlMonth), dlMonth)}
+            <button onClick={() => {
+              // 주민번호 포함 자료 — 구 그룹웨어 확정 요청: 다운로드 전 비밀번호 확인
+              const pw = prompt('주민등록번호가 포함된 자료입니다. 다운로드 비밀번호를 입력하세요.');
+              if (pw !== '0511') { if (pw !== null) alert('비밀번호가 올바르지 않습니다.'); return; }
+              downloadBusinessIncomeSheet(paymentRequests.filter((r) => r.status === '지급완료' && r.paidMonth === dlMonth), dlMonth);
+            }}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <Download className="h-4 w-4" /> 사업소득 지급내역
             </button>
@@ -119,9 +158,11 @@ export function AdminOverviewPage() {
   );
 }
 
-function Kpi({ label, value, tone, sub }: { label: string; value: number; tone: string; sub?: string }) {
+function Kpi({ label, value, tone, sub, onClick, active }: { label: string; value: number; tone: string; sub?: string; onClick?: () => void; active?: boolean }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div onClick={onClick}
+      className={`rounded-xl border bg-white p-4 ${onClick ? 'cursor-pointer hover:border-blue-300' : ''} ${active ? 'border-blue-400 ring-1 ring-blue-100' : 'border-slate-200'}`}
+      title={onClick ? '클릭하면 구성 내역이 열립니다' : undefined}>
       <p className="text-xs text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone}`}><MoneyText value={value} compact /></p>
       {sub && <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">{sub}</p>}

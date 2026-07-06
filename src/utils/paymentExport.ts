@@ -21,17 +21,27 @@ export function downloadCsv(fileName: string, headers: string[], rows: (string |
   URL.revokeObjectURL(url);
 }
 
-/** 자금이체양식: 은행 대량이체 등록용 — '지급요청' 상태 건 대상 */
+// 은행명 → 은행코드 (구 그룹웨어 확정 매핑 — 은행 CMS 대량이체 업로드용)
+const BANK_CODES: Record<string, string> = {
+  '하나': '081', '국민': '004', '신한': '088', '우리': '020', 'NH농협': '011', '농협': '011',
+  'IBK기업': '003', '기업': '003', '카카오뱅크': '090', '케이뱅크': '089', '토스뱅크': '092',
+  '새마을금고': '045', '신협': '048', '우체국': '071', 'SC제일': '023', '씨티': '027',
+  '경남': '039', '광주': '034', '대구': '031', '부산': '032', '전북': '037', '제주': '035', '수협': '007',
+};
+const bankCode = (name?: string) => {
+  if (!name) return '';
+  const key = Object.keys(BANK_CODES).find((k) => name.includes(k));
+  return key ? BANK_CODES[key] : name; // 미등록 은행은 원문 유지 (수기 확인용)
+};
+
+/** 자금이체양식: 은행 CMS 대량이체 업로드용 — 구 그룹웨어 확정 양식 (지급요청 상태 건 대상) */
 export function downloadTransferSheet(requests: PaymentRequest[], label: string) {
-  const headers = ['유형', '지급처명', '은행명', '계좌번호', '공급가액(세전)', '소득세', '지방소득세', '실지급액', '프로젝트', '비고'];
+  const headers = ['입금은행', '입금계좌번호', '입금액(원)', '출금통장표시', '입금통장표시', 'CMS코드'];
+  const mark = (r: PaymentRequest) => (r.projectName || r.payeeName).slice(0, 20); // 통장표시 최대 20자
   const rows = requests.map((r) => {
     const isPerson = r.payeeType === '강사';
     const w = isPerson ? calcWithholding(r.amount) : null;
-    return [
-      r.payeeType, r.payeeName, r.bankName ?? '', r.accountNumber ?? '',
-      r.amount, w?.incomeTax ?? 0, w?.residentTax ?? 0, w ? w.netAmount : r.amount,
-      r.projectName ?? '', r.bankName ? '' : '계좌정보 미등록',
-    ];
+    return [bankCode(r.bankName), r.accountNumber ?? '', w ? w.netAmount : r.amount, mark(r), mark(r), ''];
   });
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }

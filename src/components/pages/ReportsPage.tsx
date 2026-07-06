@@ -53,9 +53,11 @@ export function ReportsPage() {
     filtered.forEach((p) => {
       const amount = eff(p);
       if (amount <= 0) return;
+      // 대표거래처 우선(계열사 분산 발행 통계 보정), 분배 자식은 마스터 기준
+      const base = (x: typeof p) => x.masterClientName || x.clientName;
       const attributed = p.groupType === 'distribution' && p.parentId
-        ? byId.get(p.parentId)?.clientName ?? p.clientName
-        : p.clientName;
+        ? (byId.get(p.parentId) ? base(byId.get(p.parentId)!) : base(p))
+        : base(p);
       const key = attributed || '(미지정)';
       map[key] = (map[key] ?? 0) + amount;
     });
