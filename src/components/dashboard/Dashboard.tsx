@@ -54,9 +54,15 @@ export function Dashboard() {
   const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   const overduePay = paymentRequests.filter((r) => r.status !== '지급완료' && r.dueDate && r.dueDate < todayStr).length;
   const weekEdu = filteredProjects.filter((p) => p.startDate && p.startDate >= todayStr && p.startDate <= weekEnd && p.projectStatus !== '취소/보류').length;
+  // 오늘의 업무 큐: 테이블 요약이 아니라 "지금 처리해야 할 일" 중심 (월말 지급 배치 업무 흐름 반영)
+  const nowMon = todayStr.slice(0, 7);
+  const dueThisMonth = paymentRequests.filter((r) => r.status !== '지급완료' && r.scheduledMonth === nowMon);
+  const noTaxInvoice = filteredProjects.filter((p) => ['확정/준비', '운영중', '보고/정산'].includes(p.projectStatus) && !p.taxInvoiceIssued).length;
   const actions = [
     overduePay > 0 && { label: `연체 지급 ${overduePay}건`, to: '/payments', tone: 'red' },
+    dueThisMonth.length > 0 && { label: `이번 달 말일 지급 ${dueThisMonth.length}건 · ${formatCompactKRW(dueThisMonth.reduce((s, r) => s + r.amount, 0))}`, to: '/payments', tone: 'violet' },
     kpi.unpaidCollection > 0 && { label: `미수금 ${kpi.unpaidCollection}건`, to: '/revenue', tone: 'amber' },
+    noTaxInvoice > 0 && { label: `계산서 미발행 확정 ${noTaxInvoice}건`, to: `/projects?year=${year}`, tone: 'amber' },
     weekEdu > 0 && { label: `이번 주 교육 ${weekEdu}건`, to: `/projects?year=${year}`, tone: 'blue' },
   ].filter(Boolean) as { label: string; to: string; tone: string }[];
 
@@ -70,6 +76,7 @@ export function Dashboard() {
             <button key={a.label} onClick={() => navigate(a.to)}
               className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
                 a.tone === 'red' ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                : a.tone === 'violet' ? 'bg-violet-50 text-violet-600 hover:bg-violet-100'
                 : a.tone === 'amber' ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
                 : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
               {a.label} →

@@ -7,7 +7,9 @@ export interface PaymentRequest {
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;
-  dueDate: string;
+  dueDate?: string;
+  /** 지급 예약월 (YYYY-MM) — 해당 월 말일 일괄 지급 배치 대상 */
+  scheduledMonth?: string;
   status: PaymentStatus;
   memo?: string;
   // 지급 절차 관련 (요청사항: 지급정보 확인 → 매입세금계산서 확인(업체) → 지급요청)

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Project } from '../../types';
@@ -7,7 +6,6 @@ import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
 import { formatDateRange, profitRateLabel } from '../../utils/formatters';
 import { EmptyState } from '../common/EmptyState';
-import { ChevronRight, CornerDownRight } from 'lucide-react';
 
 // 자금 3축(매출·지급·결산) 요약 점: 회색=미시작, 파랑 테두리=진행중, 채움=완료 (상세는 툴팁)
 function FundDot({ label, done, active }: { label: string; done: boolean; active: boolean }) {
@@ -25,28 +23,25 @@ export const GROUP_TYPE_LABEL: Record<string, string> = {
   merged: '묶음',
 };
 
-function Row({ p, child, expandable, expanded, onToggle, highlight, no }: {
-  p: Project; child?: boolean; expandable?: boolean; expanded?: boolean; onToggle?: () => void; highlight?: boolean; no?: number;
+function Row({ p, no, matched, onOpenGroup }: {
+  p: Project; no?: number; matched?: boolean; onOpenGroup?: () => void;
 }) {
   const isGroupMaster = (p.groupChildCount ?? 0) > 0;
   return (
-    <tr className={`group hover:bg-slate-50 ${highlight ? 'bg-yellow-50' : child ? 'bg-slate-50/60' : ''}`}>
+    <tr className="group hover:bg-slate-50">
       <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{no ?? ''}</td>
-      <td className={`py-3 ${child ? 'pl-9 pr-4' : 'px-4'}`}>
+      <td className="px-4 py-3">
         <div className="flex items-center gap-1.5">
-          {expandable && (
-            <button onClick={onToggle} className="rounded p-0.5 text-slate-400 hover:bg-slate-200" title={expanded ? '접기' : `구성 ${p.groupChildCount}건 펼치기`}>
-              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-            </button>
-          )}
-          {child && <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-slate-300" />}
           <div>
             <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
             {isGroupMaster && p.groupType && (
-              <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600">
-                {GROUP_TYPE_LABEL[p.groupType] ?? '그룹'} {p.groupChildCount}건
-              </span>
+              <button onClick={onOpenGroup}
+                title="그룹 구성 보기 (회차/분배 내역 패널)"
+                className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 hover:bg-indigo-100">
+                {GROUP_TYPE_LABEL[p.groupType] ?? '그룹'} {p.groupChildCount}건 ›
+              </button>
             )}
+            {matched && <span className="ml-1.5 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] text-yellow-700">구성 일치</span>}
             <div className="text-xs text-slate-400">{p.clientName}{p.riskFlags.length > 0 && <span className="ml-2 text-red-500">● 주의</span>}</div>
           </div>
         </div>
@@ -79,21 +74,19 @@ function Row({ p, child, expandable, expanded, onToggle, highlight, no }: {
 /**
  * projects: 최상위 행(마스터/독립). childrenIndex가 주어지면 마스터 행을 펼쳐 자식을 들여쓰기로 표시한다.
  */
-export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highlightIds, startNo = 1 }: {
+// 들여쓰기 트리 폐기: 목록은 마스터 한 행만 유지(정렬·가독성 보존)하고,
+// 그룹 구성은 배지 클릭 시 우측 슬라이드 패널에서 확인한다 (사용자 피드백 반영)
+export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startNo = 1, onOpenGroup }: {
   projects: Project[];
   childrenIndex?: Map<string, Project[]>;
   /** 페이지네이션 오프셋 반영 시작 번호 */
   startNo?: number;
-  /** 검색 매칭 등으로 자동 펼칠 마스터 id (수동 토글과 병합) */
-  forceExpandedIds?: Set<string>;
-  /** 하이라이트할 자식 id (검색 매칭 표시) */
-  highlightIds?: Set<string>;
+  /** 검색이 그룹 구성(자식)에 매칭된 마스터 id — 행에 '구성 일치' 배지 표시 */
+  matchedMasterIds?: Set<string>;
+  /** 그룹 배지 클릭 → 구성 패널 열기 */
+  onOpenGroup?: (master: Project) => void;
 }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   if (projects.length === 0) return <EmptyState title="조건에 맞는 프로젝트가 없습니다" desc="필터를 변경해 보세요" />;
-
-  const toggle = (id: string) =>
-    setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <div className="overflow-x-auto">
@@ -112,16 +105,11 @@ export function ProjectTable({ projects, childrenIndex, forceExpandedIds, highli
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {projects.map((p, __idx) => {
-            const kids = childrenIndex?.get(p.id) ?? [];
-            const isOpen = expanded.has(p.id) || !!forceExpandedIds?.has(p.id);
-            return (
-              <FragmentRow key={p.id}>
-                <Row p={p} no={startNo + __idx} expandable={kids.length > 0} expanded={isOpen} onToggle={() => toggle(p.id)} />
-                {isOpen && kids.map((c) => <Row key={c.id} p={c} child highlight={highlightIds?.has(c.id)} />)}
-              </FragmentRow>
-            );
-          })}
+          {projects.map((p, __idx) => (
+            <Row key={p.id} p={p} no={startNo + __idx}
+              matched={matchedMasterIds?.has(p.id)}
+              onOpenGroup={onOpenGroup ? () => onOpenGroup(p) : undefined} />
+          ))}
         </tbody>
       </table>
     </div>

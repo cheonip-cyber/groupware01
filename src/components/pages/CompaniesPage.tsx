@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppData } from '../../store/appData';
+import { useToast } from '../common/toast';
 import { Card, CardHeader } from '../common/Card';
 import { EmptyState } from '../common/EmptyState';
 import { Building2, Plus, Trash2, Pencil, Check, X, Search } from 'lucide-react';
@@ -28,6 +29,7 @@ const taxTypeBadge: Record<string, string> = {
 };
 
 export function CompaniesPage() {
+  const toast = useToast();
   const { companies, loading, addCompany, updateCompany, deleteCompany } = useAppData();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -43,7 +45,8 @@ export function CompaniesPage() {
   const handleAdd = async () => {
     if (!form.companyName) return;
     setSaving(true);
-    await addCompany({
+    try {
+      await addCompany({
       companyName: form.companyName,
       businessDescription: form.businessDescription || undefined,
       ceoName: form.ceoName || undefined,
@@ -54,8 +57,10 @@ export function CompaniesPage() {
       taxType: form.taxType,
       email: form.email || undefined,
     });
+      toast.success('업체가 등록되었습니다 — 목록에서 업체명으로 검색해 확인하세요');
     setSaving(false);
     resetForm();
+    } catch (e: any) { toast.error(`저장 실패: ${e?.message ?? e}`); }
   };
 
   const handleDelete = async (id: string, name: string) => {

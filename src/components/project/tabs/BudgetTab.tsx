@@ -5,7 +5,7 @@ import type { NewProjectCostInput } from '../../../services/dataSource';
 import { Section, Field } from './_shared';
 import { MoneyText } from '../../common/MoneyText';
 import { EmptyState } from '../../common/EmptyState';
-import { Plus, Trash2, Info, X } from 'lucide-react';
+import { Plus, Trash2, Info, X, Pencil, Check } from 'lucide-react';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
@@ -145,12 +145,13 @@ function Row({ label, value, sensitive }: { label: string; value?: string; sensi
   );
 }
 
-export function BudgetTab({ project, requests, instructors, companies, onAddCost, onDeleteCost }: {
+export function BudgetTab({ project, requests, instructors, companies, onAddCost, onUpdateCost, onDeleteCost }: {
   project: Project;
   requests: PaymentRequest[];
   instructors: Instructor[];
   companies: Company[];
   onAddCost: (input: NewProjectCostInput) => Promise<void>;
+  onUpdateCost: (id: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => Promise<void>;
   onDeleteCost: (id: string) => Promise<void>;
 }) {
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
@@ -163,6 +164,8 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   const [remarks, setRemarks] = useState('');
   const [isCard, setIsCard] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ payeeName: '', amount: '' });
 
   const resetForm = () => {
     setCategory('강사비'); setPayeeType('instructor'); setPayeeId('');
@@ -278,10 +281,34 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
               {requests.map((r) => (
                 <tr key={r.id}>
                   <td className="px-5 py-2.5 text-slate-600">{r.payeeType}</td>
-                  <td className="px-3 py-2.5 font-medium text-slate-800">{r.payeeName}</td>
-                  <td className="px-3 py-2.5 text-right"><MoneyText value={r.amount} /></td>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                    {editId === r.id
+                      ? <input value={editForm.payeeName} onChange={(e) => setEditForm((f) => ({ ...f, payeeName: e.target.value }))}
+                          className="w-32 rounded border border-blue-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
+                      : r.payeeName}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {editId === r.id
+                      ? <input type="number" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
+                          className="w-28 rounded border border-blue-200 px-2 py-1 text-right text-sm outline-none focus:border-blue-400" />
+                      : <MoneyText value={r.amount} />}
+                  </td>
                   <td className="px-3 py-2.5 text-xs text-slate-500">{r.status}</td>
                   <td className="px-3 py-2.5">
+                    {editId === r.id ? (
+                      <span className="flex gap-1.5">
+                        <button onClick={async () => {
+                            await onUpdateCost(r.id, { payeeName: editForm.payeeName, budgetAmount: Number(editForm.amount || 0) });
+                            setEditId(null);
+                          }} className="text-emerald-600 hover:text-emerald-700" title="저장"><Check className="h-4 w-4" /></button>
+                        <button onClick={() => setEditId(null)} className="text-slate-400" title="취소"><X className="h-4 w-4" /></button>
+                      </span>
+                    ) : r.status !== '지급완료' && (
+                      <button onClick={() => { setEditId(r.id); setEditForm({ payeeName: r.payeeName, amount: String(r.amount) }); }}
+                        className="mr-1.5 text-slate-400 hover:text-blue-500" title="편집 (지급완료 전까지)">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => { if (confirm(`'${r.payeeName}' 예산 항목을 삭제할까요?`)) onDeleteCost(r.id); }}
                       className="text-slate-400 hover:text-red-500"

@@ -19,6 +19,7 @@ interface AppDataValue {
   createProject: (input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }) => Promise<string>;
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
+  updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
@@ -77,6 +78,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (updated) setPaymentRequests((prev) => prev.map((p) => (p.id === id ? updated : p)));
   }, []);
 
+  const updateProjectCost = useCallback(async (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => {
+    await dataSource.updateProjectCost(costId, patch);
+    const [p, pr] = await Promise.all([projectService.list(), paymentService.list()]);
+    setProjects(p); setPaymentRequests(pr);
+  }, []);
+
   const addProjectCost = useCallback(async (projectId: string, input: NewProjectCostInput) => {
     await dataSource.addProjectCost(projectId, input);
     const [p, pr] = await Promise.all([projectService.list(), paymentService.list()]);
@@ -124,7 +131,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
-      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
+      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost,
       addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
       globalYear, setGlobalYear,
     }}>

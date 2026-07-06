@@ -25,7 +25,7 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const {
     projects, instructors, companies, paymentRequests, loading,
-    refresh, updateProject, updatePaymentRequest, addProjectCost, deleteProjectCost,
+    refresh, updateProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost,
   } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
   const [saving, setSaving] = useState(false);
@@ -151,6 +151,7 @@ export function ProjectDetail() {
               instructors={instructors}
               companies={companies}
               onAddCost={handleAddCost}
+              onUpdateCost={updateProjectCost}
               onDeleteCost={handleDeleteCost}
             />
           )}

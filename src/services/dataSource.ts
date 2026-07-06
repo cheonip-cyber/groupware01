@@ -33,6 +33,7 @@ export interface DataSource {
   getClients(): Promise<Client[]>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
+  updateProjectCost(costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }): Promise<void>;
   addProjectCost(projectId: string, input: NewProjectCostInput): Promise<void>;
   deleteProjectCost(id: string): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
@@ -68,6 +69,7 @@ class SampleDataSource implements DataSource {
   async getProject(id: string) { await delay(60); return clone(this.projects.find((p) => p.id === id)); }
 
   async createProject(): Promise<string> { throw new Error('샘플 모드에서는 프로젝트 생성이 지원되지 않습니다'); }
+  async updateProjectCost(): Promise<void> { throw new Error('샘플 모드 미지원'); }
   async updateProject(id: string, patch: Partial<Project>) {
     await delay(60);
     const idx = this.projects.findIndex((p) => p.id === id);

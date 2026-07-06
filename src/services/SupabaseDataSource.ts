@@ -424,6 +424,13 @@ class SupabaseDataSource implements DataSource {
     return s;
   }
 
+  /** 'YYYY-MM' → 해당 월 말일 'YYYY-MM-DD' */
+  private static endOfMonth(month: string): string {
+    const [y, m] = month.split('-').map(Number);
+    const last = new Date(y, m, 0).getDate();
+    return `${month}-${String(last).padStart(2, '0')}`;
+  }
+
   private async buildPaymentRequests(rows: any[]): Promise<PaymentRequest[]> {
     const instructorIds = [...new Set(rows.filter((r) => r.payee_type === 'instructor' && r.payee_id).map((r) => r.payee_id))];
     const companyIds = [...new Set(rows.filter((r) => r.payee_type === 'company' && r.payee_id).map((r) => r.payee_id))];
@@ -449,7 +456,11 @@ class SupabaseDataSource implements DataSource {
         payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
         amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
-        dueDate: r.status === '지급완료' ? (r.paid_month ?? '') : this.computePaymentDueDate(r.projects?.session_1_date),
+        // 예정일 = 지급 '예약월'의 말일. 구 업무는 월말 일괄 지급 배치 방식이라 예약이 없으면 예정일도 없다
+        // (과거: 시행일 익월말일을 자동 부여 → 예정 개념이 없던 과거 건 전체가 '연체'로 표기되는 문제)
+        dueDate: r.status === '지급완료' ? (r.paid_month ?? '')
+          : r.payment_scheduled_month ? SupabaseDataSource.endOfMonth(r.payment_scheduled_month) : undefined,
+        scheduledMonth: r.payment_scheduled_month ?? undefined,
         status: SupabaseDataSource.dbCostStatusToFrontend(r.status),
         memo: r.remarks ?? undefined,
         payeeAccountInfo: accountInfo,
@@ -491,6 +502,8 @@ class SupabaseDataSource implements DataSource {
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
     // 지급대상 연결(미연결 건 수동 연결용) — 계좌정보 조인의 전제 조건
     if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
+    // 지급월 예약 (해당 월 말일 일괄 지급 배치 대상)
+    if ('scheduledMonth' in patch) dbPatch.payment_scheduled_month = patch.scheduledMonth ?? null;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
     if ('vendorTaxInvoiceDate' in patch) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate ?? null;
 
@@ -508,6 +521,16 @@ class SupabaseDataSource implements DataSource {
 
   async deleteProjectCost(id: string): Promise<void> {
     const { error } = await supabase.from('project_costs').delete().eq('id', Number(id));
+    if (error) throw error;
+  }
+
+  // 예산항목 수정 (기존: 추가/삭제만 가능 — 오타·금액 정정 시 삭제 후 재입력해야 했던 불편 해소)
+  async updateProjectCost(costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }): Promise<void> {
+    const dbPatch: Record<string, unknown> = {};
+    if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
+    if (patch.budgetAmount !== undefined) dbPatch.budget_amount = patch.budgetAmount;
+    if (patch.detail !== undefined) dbPatch.detail = patch.detail;
+    const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(costId));
     if (error) throw error;
   }
 

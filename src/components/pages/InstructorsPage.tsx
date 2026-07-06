@@ -4,6 +4,7 @@ import { Card, CardHeader } from '../common/Card';
 import { Users, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { Instructor } from '../../types';
 import { maskResidentNumber } from '../../utils/withholding';
+import { useToast } from '../common/toast';
 
 type SensitiveForm = {
   name: string;
@@ -18,8 +19,11 @@ const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', addr
 
 export function InstructorsPage() {
   const { instructors, paymentRequests, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
+  const toast = useToast();
   const [panel, setPanel] = useState<Instructor | null>(null);       // 상세 슬라이드 패널
   const [noAccountOnly, setNoAccountOnly] = useState(false);          // 계좌 미등록 필터 (76명 정비용)
+  const [query, setQuery] = useState('');                              // 이름/분야/연락처 검색
+  const [sortKey, setSortKey] = useState<'name' | 'specialty'>('name');
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<SensitiveForm>(emptyForm);
@@ -33,7 +37,8 @@ export function InstructorsPage() {
   const handleAdd = async () => {
     if (!form.name) return;
     setSaving(true);
-    await addInstructor({
+    try {
+      await addInstructor({
       name: form.name,
       phone: form.phone || undefined,
       expertise: [],
@@ -43,8 +48,10 @@ export function InstructorsPage() {
       bankName: form.bankName || undefined,
       accountNumber: form.accountNumber || undefined,
     });
-    setSaving(false);
-    resetForm();
+      toast.success(`'${form.name}' 강사가 등록되었습니다 — 목록에서 이름으로 검색해 확인하세요`);
+      resetForm();
+    } catch (e: any) { toast.error(`저장 실패: ${e?.message ?? e}`); }
+    finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -92,6 +99,8 @@ export function InstructorsPage() {
         icon={<Users className="h-4 w-4 text-slate-400" />}
         action={
           <span className="flex items-center gap-2">
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="이름·분야·연락처 검색"
+              className="w-44 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400 focus:bg-white" />
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-500">
               <input type="checkbox" checked={noAccountOnly} onChange={(e) => setNoAccountOnly(e.target.checked)} className="h-3.5 w-3.5" />
               계좌 미등록만 ({instructors.filter((i) => !i.bankName || !i.accountNumber).length}명)
@@ -128,8 +137,8 @@ export function InstructorsPage() {
         <table className="w-full text-sm">
           <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="w-10 px-4 py-2.5 font-medium">No.</th>
-            <th className="px-5 py-2.5 font-medium">이름</th>
-            <th className="px-3 py-2.5 font-medium">전문분야 / 등급</th>
+            <th className="cursor-pointer px-5 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('name')}>이름 {sortKey === 'name' ? '↓' : ''}</th>
+            <th className="cursor-pointer px-3 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('specialty')}>전문분야 / 등급 {sortKey === 'specialty' ? '↓' : ''}</th>
             <th className="px-3 py-2.5 font-medium">연락처</th>
             <th className="px-3 py-2.5 font-medium">주민등록번호</th>
             <th className="px-3 py-2.5 font-medium">주소</th>
@@ -137,7 +146,16 @@ export function InstructorsPage() {
             <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {(noAccountOnly ? instructors.filter((i) => !i.bankName || !i.accountNumber) : instructors).map((i, __idx) => {
+            {instructors
+              .filter((i) => !noAccountOnly || !i.bankName || !i.accountNumber)
+              .filter((i) => {
+                const q = query.trim().toLowerCase();
+                return !q || `${i.name} ${i.specialty ?? ''} ${i.phone ?? ''} ${i.level ?? ''}`.toLowerCase().includes(q);
+              })
+              .sort((a, b) => (sortKey === 'name'
+                ? a.name.localeCompare(b.name, 'ko')
+                : (a.specialty ?? 'ㅎㅎㅎ').localeCompare(b.specialty ?? 'ㅎㅎㅎ', 'ko')))
+              .map((i, __idx) => {
               const isEditing = editingId === i.id;
               if (isEditing) {
                 return (
@@ -169,20 +187,20 @@ export function InstructorsPage() {
               }
               return (
                 <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setPanel(i)}>
-                  <td className="px-4 py-3 text-xs tabular-nums text-slate-400">{__idx + 1}</td>
-                  <td className="px-5 py-3 font-semibold text-slate-800">
+                  <td className="px-4 py-2 text-xs tabular-nums text-slate-400">{__idx + 1}</td>
+                  <td className="px-5 py-2 font-semibold text-slate-800">
                     {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
                   </td>
-                  <td className="px-3 py-3 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
+                  <td className="px-3 py-2 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
                     {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{i.level}</span> : null}
                   </td>
-                  <td className="px-3 py-3 text-slate-500">{i.phone || '-'}</td>
-                  <td className="px-3 py-3 font-mono text-xs text-slate-500">{maskResidentNumber(i.residentNumber)}</td>
-                  <td className="px-3 py-3 text-slate-500">{i.address || '-'}</td>
-                  <td className="px-3 py-3 font-mono text-xs text-slate-500">
+                  <td className="px-3 py-2 text-slate-500">{i.phone || '-'}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-slate-500">{maskResidentNumber(i.residentNumber)}</td>
+                  <td className="px-3 py-2 text-slate-500">{i.address || '-'}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-slate-500">
                     {i.bankName && i.accountNumber ? `${i.bankName} ${i.accountNumber}` : '-'}
                   </td>
-                  <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1.5">
                       <button onClick={() => startEdit(i)} className="text-slate-400 hover:text-blue-500" title="편집">
                         <Pencil className="h-4 w-4" />
