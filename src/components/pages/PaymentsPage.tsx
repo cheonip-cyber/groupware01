@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEscClose } from '../../hooks/useEscClose';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
@@ -33,6 +34,7 @@ export function PaymentsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
+  useEscClose(!!detail, () => setDetail(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [linkQuery, setLinkQuery] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -279,7 +281,7 @@ export function PaymentsPage() {
         {rows.length === 0 ? <EmptyState title="해당 지급 건이 없습니다" /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+              <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="w-8 px-3 py-2.5">
                   {selectableIds.length > 0 && (
                     <input type="checkbox" checked={selected.size > 0 && selected.size >= selectableIds.length} onChange={toggleAll} className="h-4 w-4" title="전체 선택" />

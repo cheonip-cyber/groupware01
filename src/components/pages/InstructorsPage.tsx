@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useEscClose } from '../../hooks/useEscClose';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { Users, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
@@ -21,6 +22,7 @@ export function InstructorsPage() {
   const { instructors, paymentRequests, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
   const toast = useToast();
   const [panel, setPanel] = useState<Instructor | null>(null);       // 상세 슬라이드 패널
+  useEscClose(!!panel, () => setPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [noAccountOnly, setNoAccountOnly] = useState(false);          // 계좌 미등록 필터 (76명 정비용)
   const [query, setQuery] = useState('');                              // 이름/분야/연락처 검색
   const [sortKey, setSortKey] = useState<'name' | 'specialty'>('name');
@@ -135,7 +137,7 @@ export function InstructorsPage() {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+          <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="w-10 px-4 py-2.5 font-medium">No.</th>
             <th className="cursor-pointer px-5 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('name')} style={{ minWidth: '7rem' }}>이름 {sortKey === 'name' ? '↓' : ''}</th>
             <th className="cursor-pointer px-3 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('specialty')}>전문분야 / 등급 {sortKey === 'specialty' ? '↓' : ''}</th>

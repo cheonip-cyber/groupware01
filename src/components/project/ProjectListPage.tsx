@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useEscClose } from '../../hooks/useEscClose';
 import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { applyProjectFilters, defaultFilterState, projectYear } from '../../utils/filters';
@@ -33,6 +34,7 @@ export function ProjectListPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [groupPanel, setGroupPanel] = useState<Project | null>(null);
+  useEscClose(!!groupPanel, () => setGroupPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
