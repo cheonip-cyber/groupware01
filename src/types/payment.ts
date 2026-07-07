@@ -16,6 +16,10 @@ export interface PaymentRequest {
   taxMode?: string;
   manualIncomeTax?: number;
   manualResidentTax?: number;
+  /** 프로젝트의 고객 입금 여부 (구 지급확인 '입금' 컬럼) */
+  projectPaymentReceived?: boolean;
+  /** 프로젝트의 세금계산서 발행 여부 (구 지급확인 '세발' 컬럼) */
+  projectTaxInvoiceIssued?: boolean;
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;

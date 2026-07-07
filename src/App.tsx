@@ -1,4 +1,5 @@
 import React from 'react';
+import { MyCardsPage } from './components/pages/MyCardsPage';
 import { Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="/settlement" element={<SettlementPage />} />
           <Route path="/instructors" element={<InstructorsPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
+          <Route path="/my-cards" element={<MyCardsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/overview" element={<RequireAdmin><AdminOverviewPage /></RequireAdmin>} />

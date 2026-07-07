@@ -294,7 +294,10 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 font-medium">지급처</th>
                 <th className="px-3 py-2.5 font-medium">유형</th>
                 <th className="px-3 py-2.5 font-medium">프로젝트</th>
+                <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금 여부">입금</th>
+                <th className="px-2 py-2.5 text-center font-medium" title="세금계산서 발행 여부">세발</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
+                <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
                 <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : '지급월'}</th>
                 <th className="px-3 py-2.5 font-medium">상태</th>
@@ -303,7 +306,7 @@ export function PaymentsPage() {
               <tbody className="divide-y divide-slate-50">
                 {monthGroups.map((g) => [
                   <tr key={`h-${g.key}`} className="bg-slate-50/80">
-                    <td colSpan={10} className="px-4 py-1.5 text-xs font-bold text-slate-500">
+                    <td colSpan={12} className="px-4 py-1.5 text-xs font-bold text-slate-500">
                       {g.key === '' ? '지급월 미지정' : `${g.key.replace('-', '년 ')}월`}{g.key === nowMonth ? ' · 이번 달' : ''}
                       <span className="ml-2 font-normal text-slate-400">{g.items.length}건 · 이체액 {g.items.reduce((t, r) => t + netOf(r), 0).toLocaleString('ko-KR')}원</span>
                     </td>
@@ -326,13 +329,24 @@ export function PaymentsPage() {
                       <td className="max-w-[200px] truncate px-3 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
                         <Link to={`/projects/${r.projectId}`} className="text-slate-500 hover:text-blue-600 hover:underline">{r.projectName}</Link>
                       </td>
+                      <td className="px-2 py-3 text-center text-xs">{r.projectPaymentReceived ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}</td>
+                      <td className="px-2 py-3 text-center text-xs">{r.projectTaxInvoiceIssued ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}</td>
                       <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
-                      <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={netOf(r)} /></td>
+                      <td className="px-3 py-3 text-right text-xs">
+                        {(() => { const w = calcWithholdingFor(r);
+                          return w.totalTax > 0
+                            ? <span className="text-red-500">-{w.incomeTax.toLocaleString('ko-KR')} / -{w.residentTax.toLocaleString('ko-KR')}</span>
+                            : <span className="text-slate-300">-</span>; })()}
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold text-slate-800"><MoneyText value={netOf(r)} /></td>
                       <td className={`px-3 py-3 ${overdue ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
                         {tab === 'pending'
-                          ? r.dueDate
-                            ? <>{formatDate(r.dueDate)}{overdue && <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}</>
-                            : <span className="text-xs text-slate-300">예약 전</span>
+                          ? <span onClick={(e) => e.stopPropagation()}>
+                              <input type="month" value={r.scheduledMonth ?? ''} title="지급월 즉시 변경 (말일 배치)"
+                                onChange={(e) => e.target.value && updatePaymentRequest(r.id, { scheduledMonth: e.target.value })}
+                                className={`w-[7.2rem] rounded border bg-transparent px-1 py-0.5 text-xs outline-none ${overdue ? 'border-red-200 font-semibold text-red-600' : r.scheduledMonth ? 'border-transparent hover:border-slate-200' : 'border-amber-200 text-amber-600'}`} />
+                              {overdue && <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
+                            </span>
                           : (r.paidMonth ?? '-')}
                       </td>
                       <td className="px-3 py-3">
