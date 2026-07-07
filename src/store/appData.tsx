@@ -47,8 +47,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const paymentRequestsRef = useRef<PaymentRequest[]>([]);
   useEffect(() => { paymentRequestsRef.current = paymentRequests; }, [paymentRequests]);
 
+  const initialLoadedRef = useRef(false);
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // 최초 1회만 로딩 화면 표시. 이후 저장·수정 뒤의 재조회는 조용히 진행한다 —
+    // 로딩 전환이 열려 있는 팝업과 화면 상태를 파괴해 오류(#300)와 깜빡임을 일으키던 문제의 근본 수정.
+    if (!initialLoadedRef.current) setLoading(true);
     const [p, i, co, c, pr] = await Promise.all([
       projectService.list(),
       dataSource.getInstructors(),
@@ -58,6 +61,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ]);
     setProjects(p); setInstructors(i); setCompanies(co); setClients(c); setPaymentRequests(pr);
     setLoading(false);
+    initialLoadedRef.current = true;
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);

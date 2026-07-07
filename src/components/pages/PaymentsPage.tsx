@@ -33,6 +33,8 @@ export function PaymentsPage() {
   const [payMonth, setPayMonth] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
+  // 월말 배치 준비용 일괄 예약 지급월 — 반드시 조기 반환(로딩)보다 위에 선언 (React 훅 규칙, 오류 #300 방지)
+  const [bulkScheduleMonth, setBulkScheduleMonth] = useState(nextMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
   useEscClose(!!detail, () => setDetail(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [busy, setBusy] = useState(false);
@@ -164,8 +166,6 @@ export function PaymentsPage() {
     finally { setBusy(false); setSelected(new Set()); }
   };
 
-  // 월말 배치 준비용: 선택 건들을 특정 지급월(말일)로 일괄 예약 (과거 이관 미지급 건 정리에 사용)
-  const [bulkScheduleMonth, setBulkScheduleMonth] = useState(nextMonth);
   const bulkSchedule = () => runBulk(
     (r) => updatePaymentRequest(r.id, { scheduledMonth: bulkScheduleMonth }),
     `선택한 ${selectedRows.length}건의 지급월을 ${bulkScheduleMonth}(말일 배치)로 예약할까요?`);
