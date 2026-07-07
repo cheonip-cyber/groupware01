@@ -5,7 +5,7 @@ import type { NewProjectCostInput } from '../../../services/dataSource';
 import { Section, Field } from './_shared';
 import { MoneyText } from '../../common/MoneyText';
 import { EmptyState } from '../../common/EmptyState';
-import { Plus, Trash2, Info, X, Pencil, Check } from 'lucide-react';
+import { Plus, Trash2, Info, X, Pencil } from 'lucide-react';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
@@ -336,7 +336,17 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
           instructors={instructors}
           companies={companies}
           onClose={() => setEditRow(null)}
-          onSave={async (patch) => { await onUpdateCost(editRow.id, patch); setEditRow(null); }}
+          onSave={async (patch) => {
+            // 검색 결과에 없는 새 이름이면 강사/업체 DB에 자동 등록 후 연결 (추가 폼과 동일 규칙, 강사는 노션 자동 생성)
+            let finalPayeeId = patch.payeeId;
+            if (patch.payeeType === 'instructor' && !finalPayeeId && patch.payeeName) {
+              finalPayeeId = await addInstructor({ name: patch.payeeName, expertise: [], defaultFee: 0 });
+            } else if (patch.payeeType === 'company' && !finalPayeeId && patch.payeeName) {
+              finalPayeeId = await addCompany({ companyName: patch.payeeName });
+            }
+            await onUpdateCost(editRow.id, { ...patch, payeeId: patch.payeeType !== 'etc' ? finalPayeeId : null });
+            setEditRow(null);
+          }}
         />
       )}
     </div>

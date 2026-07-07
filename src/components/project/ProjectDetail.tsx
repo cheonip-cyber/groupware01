@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
-import type { Project, PaymentRequest, PrepItem } from '../../types';
+import type { Project, PaymentRequest } from '../../types';
 import type { NewProjectCostInput } from '../../services/dataSource';
 import { OverviewTab } from './tabs/OverviewTab';
 import { OperationTab } from './tabs/OperationTab';
@@ -51,13 +51,6 @@ export function ProjectDetail() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleTogglePrep = async (prepId: string) => {
-    const newItems = project.prepItems.map((item: PrepItem) =>
-      item.id === prepId ? { ...item, completed: !item.completed } : item,
-    );
-    await handleUpdate({ prepItems: newItems });
   };
 
   const handleUpdateRequest = async (rid: string, patch: Partial<PaymentRequest>) => {

@@ -8,7 +8,7 @@ import { formatDate } from '../../../utils/formatters';
 
 // 완료 처리 시 날짜를 선택할 수 있는 인라인 액션 (세금계산서 발행일 / 수금완료일 공용)
 function DateCompleteAction({
-  done, dateValue, onComplete, onUndo, tone = 'blue', label,
+  done, onComplete, onUndo, tone = 'blue', label,
 }: {
   done: boolean;
   dateValue?: string;

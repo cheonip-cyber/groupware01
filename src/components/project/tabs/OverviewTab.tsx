@@ -2,7 +2,7 @@ import type { Project, Instructor } from '../../../types';
 import { Field, Section } from './_shared';
 import { StatusBadge } from '../../common/StatusBadge';
 import { projectStatusStyle, priorityStyle } from '../../../utils/statusConfig';
-import { formatDate, formatDateRange } from '../../../utils/formatters';
+import { formatDate } from '../../../utils/formatters';
 import { ExternalLink, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Project } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
@@ -77,7 +76,7 @@ function Row({ p, no, matched, onOpenGroup }: {
  */
 // 들여쓰기 트리 폐기: 목록은 마스터 한 행만 유지(정렬·가독성 보존)하고,
 // 그룹 구성은 배지 클릭 시 우측 슬라이드 패널에서 확인한다 (사용자 피드백 반영)
-export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startNo = 1, onOpenGroup }: {
+export function ProjectTable({ projects, childrenIndex: _childrenIndex, matchedMasterIds, startNo = 1, onOpenGroup }: {
   projects: Project[];
   childrenIndex?: Map<string, Project[]>;
   /** 페이지네이션 오프셋 반영 시작 번호 */
@@ -118,6 +117,3 @@ export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startN
 }
 
 // tbody 내 key를 유지하면서 여러 tr을 묶기 위한 래퍼
-function FragmentRow({ children }: { children: ReactNode }) {
-  return <>{children}</>;
-}

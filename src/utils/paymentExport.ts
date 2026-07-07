@@ -2,7 +2,7 @@
 // 구 그룹웨어(samsotta_management)의 '자금이체양식'/'사업소득지급내역' CSV 양식을 이식하고,
 // 판관비 내역·통합 이체(프로젝트 지급 + 판관비) 양식을 추가했다. 민감정보 포함이므로 관리자 전용 화면에서만 호출할 것.
 import type { PaymentRequest } from '../types';
-import { calcWithholdingFor, calcWithholding } from './withholding';
+import { calcWithholdingFor } from './withholding';
 
 const esc = (v: unknown) => {
   const s = v === null || v === undefined ? '' : String(v);

@@ -80,7 +80,6 @@ export function ReportsPage() {
       rate: rateRev > 0 ? ((rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0) / rateRev) * 100).toFixed(1) : '0',
     };
   }, [filtered]);
-  const totalRev = totals.confirmed + totals.expected;
 
   if (loading) return <PageSkeleton />;
 

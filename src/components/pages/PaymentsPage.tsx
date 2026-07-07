@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEscClose } from '../../hooks/useEscClose';
-import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { Card } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { paymentStatusStyle } from '../../utils/statusConfig';
-import { formatDate, formatCompactKRW } from '../../utils/formatters';
+import { formatCompactKRW } from '../../utils/formatters';
 import { calcWithholdingFor } from '../../utils/withholding';
-import { Search, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
+import { Search, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { MonthPicker } from '../common/MonthPicker';
 import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
 import { EmptyState } from '../common/EmptyState';
@@ -21,7 +20,7 @@ import type { PaymentRequest } from '../../types';
 const netOf = (r: PaymentRequest) => calcWithholdingFor(r).netAmount;
 
 export function PaymentsPage() {
-  const { paymentRequests, instructors, companies, loading, updatePaymentRequest } = useAppData();
+  const { paymentRequests, loading, updatePaymentRequest } = useAppData();
   const nowMonth = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();

@@ -39,7 +39,6 @@ interface CostRow {
 function buildProject(row: any, clientName: string, managerName: string, costs: CostRow[]): Project {
   const expectedCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.budget_amount ?? 0) : 0), 0);
   const actualCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.actual_payment_amount ?? 0) : 0), 0);
-  const costForProfit = actualCost > 0 ? actualCost : expectedCost;
   const finalEstimate = Number(row.final_estimate ?? 0);
   const totalAmount = Number(row.total_amount ?? finalEstimate); // VAT 포함/별도 반영된 실제 계약금액
   const supplyAmount = Number(row.supply_amount ?? 0); // 공급가액(VAT 제외, 실매출 기준)
@@ -418,15 +417,6 @@ class SupabaseDataSource implements DataSource {
     }));
   }
 
-  // 지급기한: 요청사항 4 — "시행일(session_1_date) 기준 익월 말일 지급"
-  private computePaymentDueDate(sessionDate?: string | null): string {
-    if (!sessionDate) return '';
-    const d = new Date(sessionDate);
-    if (isNaN(d.getTime())) return '';
-    const due = new Date(d.getFullYear(), d.getMonth() + 2, 0); // 익월의 마지막 날
-    return due.toISOString().slice(0, 10);
-  }
-
   // DB(project_costs.status: 미지급/지급요청/지급완료) ↔ 프론트(PaymentStatus: 지급대상/지급요청/지급완료/보류) 매핑
   private static dbCostStatusToFrontend(s: string): PaymentRequest['status'] {
     if (s === '미지급') return '지급대상';
@@ -574,7 +564,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
     if (patch.budgetAmount !== undefined) dbPatch.budget_amount = patch.budgetAmount;
     if (patch.detail !== undefined) dbPatch.detail = patch.detail;
-    if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType;
+    if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType !== 'etc' ? patch.payeeType : null;
     if ('payeeId' in patch) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     if (patch.isCardPayment !== undefined) {
       dbPatch.is_card_payment = patch.isCardPayment;
