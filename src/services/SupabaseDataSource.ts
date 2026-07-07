@@ -477,6 +477,9 @@ class SupabaseDataSource implements DataSource {
         costType: r.cost_type ?? undefined,
         isCardPayment: !!r.is_card_payment,
         isPayable: r.is_payable !== false,
+        taxMode: r.tax_mode ?? 'rate33',
+        manualIncomeTax: Number(r.manual_income_tax ?? 0),
+        manualResidentTax: Number(r.manual_resident_tax ?? 0),
         payeeAccountInfo: accountInfo,
         payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
         bankName: acct?.bank_name ?? undefined,
@@ -511,6 +514,10 @@ class SupabaseDataSource implements DataSource {
       if (patch.status === '지급요청') dbPatch.paid_month = null;
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
+    // 지급 상세: 세금 방식 (구 그룹웨어 3.3/8.8/용역수동 이식)
+    if (patch.taxMode !== undefined) dbPatch.tax_mode = patch.taxMode;
+    if (patch.manualIncomeTax !== undefined) dbPatch.manual_income_tax = patch.manualIncomeTax;
+    if (patch.manualResidentTax !== undefined) dbPatch.manual_resident_tax = patch.manualResidentTax;
     // 지급대상 연결(미연결 건 수동 연결용) — 계좌정보 조인의 전제 조건
     if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     // 지급월 예약 (해당 월 말일 일괄 지급 배치 대상)

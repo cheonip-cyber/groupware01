@@ -12,6 +12,10 @@ export interface PaymentRequest {
   /** 카드결제 건 (이체 대상 아님 — 지급관리 제외, 예산탭 표시) */
   isCardPayment?: boolean;
   isPayable?: boolean;
+  /** 세금 방식: rate33(기본 3.3%) | rate88(8.8%) | manual(용역비 수동/면제) */
+  taxMode?: string;
+  manualIncomeTax?: number;
+  manualResidentTax?: number;
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;

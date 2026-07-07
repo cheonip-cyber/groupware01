@@ -2,7 +2,7 @@
 // 구 그룹웨어(samsotta_management)의 '자금이체양식'/'사업소득지급내역' CSV 양식을 이식하고,
 // 판관비 내역·통합 이체(프로젝트 지급 + 판관비) 양식을 추가했다. 민감정보 포함이므로 관리자 전용 화면에서만 호출할 것.
 import type { PaymentRequest } from '../types';
-import { calcWithholding } from './withholding';
+import { calcWithholdingFor, calcWithholding } from './withholding';
 
 const esc = (v: unknown) => {
   const s = v === null || v === undefined ? '' : String(v);
@@ -39,9 +39,8 @@ export function downloadTransferSheet(requests: PaymentRequest[], label: string)
   const headers = ['입금은행', '입금계좌번호', '입금액(원)', '출금통장표시', '입금통장표시', 'CMS코드'];
   const mark = (r: PaymentRequest) => (r.projectName || r.payeeName).slice(0, 20); // 통장표시 최대 20자
   const rows = requests.map((r) => {
-    const isPerson = r.payeeType === '강사';
-    const w = isPerson ? calcWithholding(r.amount) : null;
-    return [bankCode(r.bankName), r.accountNumber ?? '', w ? w.netAmount : r.amount, mark(r), mark(r), ''];
+    const w = calcWithholdingFor(r);
+    return [bankCode(r.bankName), r.accountNumber ?? '', w.netAmount, mark(r), mark(r), ''];
   });
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }
@@ -52,7 +51,7 @@ export function downloadBusinessIncomeSheet(requests: PaymentRequest[], month: s
   const rows = requests
     .filter((r) => r.payeeType === '강사')
     .map((r) => {
-      const w = calcWithholding(r.amount);
+      const w = calcWithholdingFor(r);
       return [
         month, r.paidMonth ?? month, r.payeeName, r.residentNumber ?? '', r.address ?? '',
         r.amount, w.rate, w.incomeTax, w.residentTax, w.netAmount, r.projectName ?? '',
@@ -80,7 +79,7 @@ export function downloadSgaSheet(rows: SgaRow[], label: string) {
 export function downloadCombinedTransferSheet(requests: PaymentRequest[], sga: SgaRow[], label: string) {
   const headers = ['구분', '지급처', '은행명', '계좌번호', '실지급액', '내용/프로젝트'];
   const projectRows: (string | number)[][] = requests.map((r) => {
-    const net = r.payeeType === '강사' ? calcWithholding(r.amount).netAmount : r.amount;
+    const net = calcWithholdingFor(r).netAmount;
     return ['프로젝트 지급', r.payeeName, r.bankName ?? '', r.accountNumber ?? '', net, r.projectName ?? ''];
   });
   const sgaRows: (string | number)[][] = sga.map((r) => [

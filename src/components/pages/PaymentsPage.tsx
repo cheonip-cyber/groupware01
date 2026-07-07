@@ -8,14 +8,14 @@ import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { paymentStatusStyle } from '../../utils/statusConfig';
 import { formatDate, formatCompactKRW } from '../../utils/formatters';
-import { calcWithholding, maskResidentNumber } from '../../utils/withholding';
+import { calcWithholdingFor, calcWithholding, maskResidentNumber } from '../../utils/withholding';
 import { Search, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
 import type { PaymentRequest } from '../../types';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
-const netOf = (r: PaymentRequest) => (r.payeeType === '강사' ? calcWithholding(r.amount).netAmount : r.amount);
+const netOf = (r: PaymentRequest) => calcWithholdingFor(r).netAmount;
 
 export function PaymentsPage() {
   const { paymentRequests, instructors, companies, loading, updatePaymentRequest } = useAppData();

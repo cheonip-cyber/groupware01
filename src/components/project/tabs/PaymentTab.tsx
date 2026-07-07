@@ -7,12 +7,14 @@ import { formatDate } from '../../../utils/formatters';
 import { ActionButton } from './_shared';
 import { EmptyState } from '../../common/EmptyState';
 import { ChevronDown, ChevronUp, CreditCard } from 'lucide-react';
+import { PaymentDetailModal } from '../PaymentDetailModal';
 
 function PaymentRow({ r, onUpdateRequest }: {
   r: PaymentRequest;
   onUpdateRequest: (id: string, patch: Partial<PaymentRequest>) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const isVendor = r.payeeType === '업체';
   // 요청사항: 업체는 매입세금계산서 발행 확인 전에는 지급완료 처리 불가
@@ -37,10 +39,11 @@ function PaymentRow({ r, onUpdateRequest }: {
         <td className="px-3 py-3 text-slate-500">{formatDate(r.dueDate)}</td>
         <td className="px-3 py-3"><StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" /></td>
         <td className="px-3 py-3">
-          {r.status === '지급대상' && (
-            r.infoConfirmed
-              ? <ActionButton onClick={() => onUpdateRequest(r.id, { status: '지급요청' })}>지급요청 생성</ActionButton>
-              : <span className="text-xs text-amber-600">지급정보 확인 필요 →</span>
+          {r.status === '지급대상' && !r.isCardPayment && (
+            <ActionButton onClick={() => setDetail(true)}>{r.infoConfirmed ? '지급 상세 / 요청' : '지급정보 확인'}</ActionButton>
+          )}
+          {r.status === '지급요청' && (
+            <button onClick={() => setDetail(true)} className="mr-1.5 text-xs text-slate-400 underline hover:text-blue-600">상세</button>
           )}
           {r.status === '지급요청' && (
             vendorBlocking
@@ -51,6 +54,7 @@ function PaymentRow({ r, onUpdateRequest }: {
           {r.status === '보류' && <span className="text-xs text-slate-400">보류</span>}
         </td>
       </tr>
+      {detail && <PaymentDetailModal r={r} onClose={() => setDetail(false)} onUpdateRequest={onUpdateRequest} />}
       {open && (
         <tr className="bg-slate-50">
           <td colSpan={6} className="px-5 py-4">
