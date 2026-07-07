@@ -26,6 +26,7 @@ export function ProjectDetail() {
   const {
     projects, instructors, companies, paymentRequests, loading,
     refresh, updateProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink,
+    addInstructor, addCompany,
   } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
   const [saving, setSaving] = useState(false);
@@ -164,6 +165,8 @@ export function ProjectDetail() {
               onAddCost={handleAddCost}
               onUpdateCost={updateProjectCost}
               onDeleteCost={handleDeleteCost}
+              addInstructor={addInstructor}
+              addCompany={addCompany}
             />
           )}
           {activeTab === '정산/결산' && <SettlementTab project={project} requests={projectRequests} onUpdate={handleUpdate} />}

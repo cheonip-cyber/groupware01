@@ -23,11 +23,11 @@ export interface DataSource {
   updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined>;
   createProject(input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }): Promise<string>;
   getInstructors(): Promise<Instructor[]>;
-  addInstructor(input: Omit<Instructor, 'id'>): Promise<void>;
+  addInstructor(input: Omit<Instructor, 'id'>): Promise<string>;
   updateInstructor(id: string, patch: Partial<Instructor>): Promise<void>;
   deleteInstructor(id: string): Promise<void>;
   getCompanies(): Promise<Company[]>;
-  addCompany(input: Omit<Company, 'id'>): Promise<void>;
+  addCompany(input: Omit<Company, 'id'>): Promise<string>;
   updateCompany(id: string, patch: Partial<Company>): Promise<void>;
   deleteCompany(id: string): Promise<void>;
   getClients(): Promise<Client[]>;
@@ -108,7 +108,9 @@ class SampleDataSource implements DataSource {
   async getCompanies() { await delay(); return []; }
   async addInstructor(input: Omit<Instructor, 'id'>) {
     await delay(60);
-    this.instructors.push({ ...input, id: `in-sample-${Date.now()}` });
+    const id = `in-sample-${Date.now()}`;
+    this.instructors.push({ ...input, id });
+    return id;
   }
   async updateInstructor(id: string, patch: Partial<Instructor>) {
     await delay(60);
@@ -120,7 +122,7 @@ class SampleDataSource implements DataSource {
     await delay(60);
     this.instructors = this.instructors.filter((i) => i.id !== id);
   }
-  async addCompany() { await delay(60); }
+  async addCompany() { await delay(60); return `co-sample-${Date.now()}`; }
   async updateCompany() { await delay(60); }
   async deleteCompany() { await delay(60); }
 

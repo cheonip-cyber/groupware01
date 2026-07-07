@@ -22,10 +22,10 @@ interface AppDataValue {
   updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
   recoverNotionLink: (id: string) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
-  addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
+  addInstructor: (input: Omit<Instructor, 'id'>) => Promise<string>;
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
   deleteInstructor: (id: string) => Promise<void>;
-  addCompany: (input: Omit<Company, 'id'>) => Promise<void>;
+  addCompany: (input: Omit<Company, 'id'>) => Promise<string>;
   updateCompany: (id: string, patch: Partial<Company>) => Promise<void>;
   deleteCompany: (id: string) => Promise<void>;
 }
@@ -150,8 +150,9 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const addInstructor = useCallback(async (input: Omit<Instructor, 'id'>) => {
-    await dataSource.addInstructor(input);
+    const id = await dataSource.addInstructor(input);
     setInstructors(await dataSource.getInstructors());
+    return id;
   }, []);
 
   const updateInstructor = useCallback(async (id: string, patch: Partial<Instructor>) => {
@@ -165,8 +166,9 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const addCompany = useCallback(async (input: Omit<Company, 'id'>) => {
-    await dataSource.addCompany(input);
+    const id = await dataSource.addCompany(input);
     setCompanies(await dataSource.getCompanies());
+    return id;
   }, []);
 
   const updateCompany = useCallback(async (id: string, patch: Partial<Company>) => {

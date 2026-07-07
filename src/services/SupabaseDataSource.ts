@@ -316,8 +316,8 @@ class SupabaseDataSource implements DataSource {
     }));
   }
 
-  async addInstructor(input: Omit<Instructor, 'id'>): Promise<void> {
-    const { error } = await supabase.from('instructors').insert({
+  async addInstructor(input: Omit<Instructor, 'id'>): Promise<string> {
+    const { data, error } = await supabase.from('instructors').insert({
       name: input.name,
       contact: input.phone ?? null,
       email: input.email ?? null,
@@ -328,8 +328,9 @@ class SupabaseDataSource implements DataSource {
       resident_number: input.residentNumber ?? null,
       address: input.address ?? null,
       is_active: true,
-    });
+    }).select('id').single();
     if (error) throw error;
+    return String(data.id);
   }
 
   async updateInstructor(id: string, patch: Partial<Instructor>): Promise<void> {
@@ -367,8 +368,8 @@ class SupabaseDataSource implements DataSource {
     }));
   }
 
-  async addCompany(input: Omit<Company, 'id'>): Promise<void> {
-    const { error } = await supabase.from('companies').insert({
+  async addCompany(input: Omit<Company, 'id'>): Promise<string> {
+    const { data, error } = await supabase.from('companies').insert({
       company_name: input.companyName,
       ceo_name: input.ceoName ?? null,
       business_number: input.businessNumber ?? null,
@@ -379,8 +380,9 @@ class SupabaseDataSource implements DataSource {
       email: input.email ?? null,
       business_description: input.businessDescription ?? null,
       is_active: true,
-    });
+    }).select('id').single();
     if (error) throw error;
+    return String(data.id);
   }
 
   async updateCompany(id: string, patch: Partial<Company>): Promise<void> {

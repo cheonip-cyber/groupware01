@@ -7,10 +7,9 @@ import { calcWithholdingFor, maskResidentNumber } from '../../utils/withholding'
 import { useEscClose } from '../../hooks/useEscClose';
 import { MonthPicker } from '../common/MonthPicker';
 import { useToast } from '../common/toast';
-import { CheckCircle2, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
-// 지급 상세 정보 (구 그룹웨어 '3. 지급 상세 정보' 이식):
-// 최종 지급 전 검토 단계 — 대상 정보 확인·계좌 수정·대상 재검색·세금 방식(3.3/8.8/용역수동) 조정 후 지급요청 확정
+// 지급 정보 확인 (지급관리·프로젝트 지급 탭 공용 팝업)
 export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   r: PaymentRequest;
   onClose: () => void;
@@ -18,8 +17,11 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
 }) {
   useEscClose(true, onClose);
   const { instructors, companies, refresh } = useAppData();
+  const toast = useToast();
   const isPerson = r.payeeType === '강사';
-  const payee: Instructor | Company | undefined = useMemo(() => {
+  const isVendor = r.payeeType === '업체';
+
+  const currentPayee: Instructor | Company | undefined = useMemo(() => {
     if (!r.payeeId) return undefined;
     return isPerson ? instructors.find((i) => String(i.id) === String(r.payeeId))
                     : companies.find((c) => String(c.id) === String(r.payeeId));
@@ -29,17 +31,18 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [mIncome, setMIncome] = useState(r.manualIncomeTax ?? 0);
   const [mResident, setMResident] = useState(r.manualResidentTax ?? 0);
   const [schedule, setSchedule] = useState(r.scheduledMonth ?? new Date().toISOString().slice(0, 7));
-  const toast = useToast();
-  const [justRequested, setJustRequested] = useState(false);
+  const [confirmed, setConfirmed] = useState(!!r.infoConfirmed);
   const [query, setQuery] = useState('');
+  const [pendingPayee, setPendingPayee] = useState<{ id: string; label: string; sub: string } | null>(null);
   const [bank, setBank] = useState('');
   const [account, setAccount] = useState('');
   const [editAcct, setEditAcct] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmed, setConfirmed] = useState(!!r.infoConfirmed);
+  const [justRequested, setJustRequested] = useState(false);
 
   const w = calcWithholdingFor({ payeeType: r.payeeType, amount: r.amount, taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident });
 
+  // 검색: 강사/업체명 + 업체 대표자명 모두 매칭
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 1) return [];
@@ -52,12 +55,38 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     return list.slice(0, 6);
   }, [query, isPerson, instructors, companies]);
 
-  const saveDetail = (extra: Partial<PaymentRequest> = {}) => {
-    onUpdateRequest(r.id, {
-      taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident,
-      scheduledMonth: schedule,
-      ...extra,
-    });
+  // 실제 화면에 표시할 지급처 정보: 재검색으로 임시 선택한 대상이 있으면 그걸 우선 표시(저장 전 미리보기)
+  const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: isPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
+  const linked = !!displayPayee;
+
+  const buildPatch = (extra: Partial<PaymentRequest> = {}): Partial<PaymentRequest> => ({
+    ...(pendingPayee ? { payeeId: pendingPayee.id, payeeName: pendingPayee.label } : {}),
+    taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident,
+    scheduledMonth: schedule,
+    ...extra,
+  });
+
+  const handleSave = () => {
+    onUpdateRequest(r.id, buildPatch());
+    toast.success('저장되었습니다');
+    setPendingPayee(null);
+  };
+
+  const handleRequest = () => {
+    if (r.status === '지급대상') {
+      if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
+      if (!confirmed) { alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.'); return; }
+    }
+    onUpdateRequest(r.id, buildPatch({ status: '지급요청', infoConfirmed: true }));
+    setJustRequested(true);
+    toast.success('지급요청 완료');
+    setTimeout(onClose, 600);
+  };
+
+  const handleCancelRequest = () => {
+    onUpdateRequest(r.id, buildPatch({ status: '지급대상', infoConfirmed: false }));
+    toast.success('지급요청이 취소되었습니다');
+    onClose();
   };
 
   const saveAccount = async () => {
@@ -71,84 +100,72 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     } finally { setBusy(false); }
   };
 
-  const linked = !!r.payeeId;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} />
       <div className="relative max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">지급 상세 정보</h3>
-            <p className="mt-0.5 text-xs text-slate-500">[{r.costType ?? r.payeeType}] {r.payeeName}{r.detail ? ` · ${r.detail}` : ''}</p>
-          </div>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900">지급 정보 확인</h3>
           <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
         </div>
 
-        {/* 프로젝트 / 비고 (지급 정보 확인 팝업과 통일) */}
-        {(r.projectName || r.memo) && (
-          <div className="mb-4 space-y-1 text-xs">
-            {r.projectName && <div className="flex justify-between border-b border-slate-50 pb-1"><span className="text-slate-400">프로젝트</span><span className="text-slate-700">{r.projectName}</span></div>}
-            {r.memo && <div className="flex justify-between pb-1"><span className="text-slate-400">비고</span><span className="text-slate-700">{r.memo}</span></div>}
-          </div>
-        )}
-
-        {/* 매칭 상태 (구: 인사/업체 정보 매칭) */}
-        <div className={`mb-4 flex items-start gap-2.5 rounded-xl border p-3 ${linked ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}>
-          {linked ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <Search className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />}
-          <div className="text-xs">
-            <p className={`font-bold ${linked ? 'text-emerald-700' : 'text-red-600'}`}>
-              {linked ? `${isPerson ? '강사' : '업체'} 정보 매칭 완료` : '대상 미연결 — 아래에서 검색해 연결하세요'}
-            </p>
-            {linked && payee && (
-              <div className="mt-1.5 space-y-0.5 text-slate-600">
-                {isPerson ? (
-                  <>
-                    <p>주민등록번호: {maskResidentNumber((payee as Instructor).residentNumber)}</p>
-                    <p>주소: {(payee as Instructor).address || '-'}</p>
+        {/* 기본 정보 (요청 디자인: 단순 항목 나열) */}
+        <div className="mb-4 space-y-2 text-sm">
+          <Row label="지급처">
+            {displayPayee ? <>{displayPayee.label} <span className="text-xs text-slate-400">({r.payeeType})</span></> : <span className="text-amber-600">대상 미연결</span>}
+          </Row>
+          {r.projectName && <Row label="프로젝트">{r.projectName}</Row>}
+          <Row label="은행 / 계좌">
+            {!editAcct ? (
+              currentPayee?.bankName
+                ? <>{currentPayee.bankName} | {currentPayee.accountNumber}
+                    <button onClick={() => { setBank(currentPayee.bankName ?? ''); setAccount(currentPayee.accountNumber ?? ''); setEditAcct(true); }}
+                      className="ml-2 text-xs text-blue-600 underline">수정</button>
                   </>
-                ) : (
-                  <p>대표: {(payee as Company).ceoName || '-'} · 사업자번호: {(payee as Company).businessNumber || '-'}</p>
-                )}
-                {!editAcct ? (
-                  <p>계좌: {payee.bankName ? `${payee.bankName} ${payee.accountNumber ?? ''}` : <span className="text-red-500">미등록</span>}
-                    <button onClick={() => { setBank(payee.bankName ?? ''); setAccount(payee.accountNumber ?? ''); setEditAcct(true); }}
-                      className="ml-2 text-blue-600 underline">수정</button>
-                  </p>
-                ) : (
-                  <span className="flex items-center gap-1.5 pt-1">
-                    <input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="은행" className="w-20 rounded border border-slate-200 px-1.5 py-1 outline-none" />
-                    <input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="계좌번호" className="w-36 rounded border border-slate-200 px-1.5 py-1 outline-none" />
-                    <button onClick={saveAccount} disabled={busy} className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">저장</button>
-                    <button onClick={() => setEditAcct(false)} className="text-slate-400">취소</button>
-                  </span>
-                )}
+                : linked ? <span className="text-red-500">미등록</span> : <span className="text-slate-400">-</span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="은행" className="w-20 rounded border border-slate-200 px-1.5 py-1 text-xs outline-none" />
+                <input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="계좌번호" className="w-36 rounded border border-slate-200 px-1.5 py-1 text-xs outline-none" />
+                <button onClick={saveAccount} disabled={busy} className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-50">저장</button>
+                <button onClick={() => setEditAcct(false)} className="text-xs text-slate-400">취소</button>
+              </span>
+            )}
+          </Row>
+          {isPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
+          {isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
+          {r.memo && <Row label="비고">{r.memo}</Row>}
+        </div>
+
+        {/* 대상 재검색 (강사/업체/업체 대표자명 통합 검색) — 선택 후 하단 저장 버튼으로 반영 */}
+        {(isPerson || isVendor) && (
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-300" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off"
+                placeholder={`${isPerson ? '강사' : '업체'} 재검색 (대상이 잘못된 경우 다시 연결)`}
+                className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-400" />
+            </div>
+            {searchResults.length > 0 && (
+              <div className="mt-1 space-y-1 rounded-lg border border-blue-100 bg-blue-50/50 p-1.5">
+                {searchResults.map((it) => (
+                  <button key={it.id} onClick={() => { setPendingPayee(it); setQuery(''); }}
+                    className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:border-blue-400">
+                    <span>{it.label}</span><span className="text-slate-400">{it.sub}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {pendingPayee && (
+              <div className="mt-1.5 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs">
+                <span><span className="font-semibold text-emerald-700">{pendingPayee.label}</span> <span className="text-emerald-600">{pendingPayee.sub}</span> 선택됨 — 저장을 눌러 반영</span>
+                <button onClick={() => setPendingPayee(null)} className="text-slate-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
               </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* 대상 재검색 (구: 기존 인사/업체 정보 검색 → 재연결) */}
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-300" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off"
-              placeholder={`${isPerson ? '강사' : '업체'} 재검색 (대상이 잘못된 경우 다시 연결)`}
-              className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-400" />
-          </div>
-          {searchResults.length > 0 && (
-            <div className="mt-1 space-y-1 rounded-lg border border-blue-100 bg-blue-50/50 p-1.5">
-              {searchResults.map((it) => (
-                <button key={it.id} onClick={() => { onUpdateRequest(r.id, { payeeId: it.id }); setQuery(''); }}
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:border-blue-400">
-                  <span>{it.label}</span><span className="text-slate-400">{it.sub}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 세금 계산 (강사만 — 구: 3.3% 기본 / 8.8% 세율 / 용역비 수동·면제) */}
+        {/* 세금 계산 (강사만) */}
         {isPerson && (
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -179,7 +196,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           </div>
         )}
 
-        {/* 지급 예정 (예약월 — 말일 일괄 배치) */}
+        {/* 지급 예정월 */}
         <div className="mb-4 flex items-center justify-between">
           <label className="text-xs font-bold text-slate-600">지급 예정월 (말일 배치)</label>
           <MonthPicker value={schedule} onChange={setSchedule} />
@@ -193,31 +210,33 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           </label>
         )}
 
+        {/* 하단 버튼: 상태 전환(넓게) + 저장(파랗고 좁게) */}
         <div className="flex gap-2">
-          {r.status === '지급요청' && !justRequested && (
-            <button onClick={() => { saveDetail({ status: '지급대상', infoConfirmed: false }); onClose(); }}
-              className="flex-1 rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100">요청 취소</button>
-          )}
           {r.status === '지급완료' ? (
-            <button disabled className="flex-[2] cursor-default rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-400">지급완료됨</button>
+            <button disabled className="flex-1 cursor-default rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-400">지급완료됨</button>
+          ) : r.status === '지급요청' ? (
+            <button onClick={handleCancelRequest} className="flex-1 rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100">지급요청 취소</button>
           ) : (
-            <button onClick={() => {
-              if (r.status === '지급대상') {
-                if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
-                if (!confirmed) { alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.'); return; }
-              }
-              saveDetail({ status: '지급요청', infoConfirmed: true });
-              setJustRequested(true);
-              toast.success('지급요청 완료');
-              setTimeout(onClose, 600);
-            }}
-              className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
-              disabled={justRequested || (r.status === '지급대상' && !confirmed)}>
+            <button onClick={handleRequest} disabled={justRequested}
+              className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60">
               {justRequested ? '지급요청 완료' : '지급요청'}
             </button>
           )}
+          {r.status !== '지급완료' && (
+            <button onClick={handleSave}
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">저장</button>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-50 pb-2 last:border-0">
+      <span className="shrink-0 text-xs font-medium text-slate-400">{label}</span>
+      <span className="text-right text-slate-700">{children}</span>
     </div>
   );
 }

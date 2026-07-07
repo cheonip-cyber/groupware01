@@ -71,14 +71,16 @@ function PayeePicker({
         <div className="relative">
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); onSelect('', e.target.value); }}
             placeholder="이름 검색 (강사·업체·대표자명 통합)"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
           />
           {query && (
             <div className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
               {results.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-slate-400">검색 결과 없음</div>
+                <div className="px-3 py-2 text-xs text-slate-400">
+                  검색 결과 없음 — {payeeType === 'instructor' ? '강사' : '업체'}에 등록됩니다. 저장 후 관리 메뉴에서 상세 정보를 입력하세요.
+                </div>
               ) : results.map((r) => (
                 <button
                   key={`${r.kind}-${r.id}`}
@@ -145,7 +147,7 @@ function Row({ label, value, sensitive }: { label: string; value?: string; sensi
   );
 }
 
-export function BudgetTab({ project, requests, instructors, companies, onAddCost, onUpdateCost, onDeleteCost }: {
+export function BudgetTab({ project, requests, instructors, companies, onAddCost, onUpdateCost, onDeleteCost, addInstructor, addCompany }: {
   project: Project;
   requests: PaymentRequest[];
   instructors: Instructor[];
@@ -153,6 +155,8 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   onAddCost: (input: NewProjectCostInput) => Promise<void>;
   onUpdateCost: (id: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
   onDeleteCost: (id: string) => Promise<void>;
+  addInstructor: (input: Omit<Instructor, 'id'>) => Promise<string>;
+  addCompany: (input: Omit<Company, 'id'>) => Promise<string>;
 }) {
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
   const [open, setOpen] = useState(false);
@@ -175,16 +179,26 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
     const finalPayeeName = payeeType === 'etc' ? payeeName : payeeName;
     if (!finalPayeeName || !amount) return;
     setSaving(true);
-    await onAddCost({
-      category,
-      payeeType,
-      payeeId: payeeType !== 'etc' ? payeeId : undefined,
-      payeeName: finalPayeeName,
-      budgetAmount: Number(amount),
-      isCardPayment: isCard,
-      remarks: remarks || undefined,
-    });
-    setSaving(false);
+    try {
+      // 검색 결과에 없어 새로 입력한 이름인 경우, 저장 시 강사/업체 DB에 먼저 자동 등록 후 연결
+      let finalPayeeId = payeeId;
+      if (payeeType === 'instructor' && !finalPayeeId) {
+        finalPayeeId = await addInstructor({ name: finalPayeeName, expertise: [], defaultFee: 0 });
+      } else if (payeeType === 'company' && !finalPayeeId) {
+        finalPayeeId = await addCompany({ companyName: finalPayeeName });
+      }
+      await onAddCost({
+        category,
+        payeeType,
+        payeeId: payeeType !== 'etc' ? finalPayeeId : undefined,
+        payeeName: finalPayeeName,
+        budgetAmount: Number(amount),
+        isCardPayment: isCard,
+        remarks: remarks || undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
     resetForm();
   };
 
