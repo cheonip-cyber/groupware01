@@ -6,7 +6,7 @@ import { formatDate } from '../../../utils/formatters';
 import { ExternalLink, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
-export function OverviewTab({ project, instructors, onRecover }: { project: Project; instructors: Instructor[]; onRecover: () => Promise<void> }) {
+export function OverviewTab({ project, instructors, onRecover, onDelete }: { project: Project; instructors: Instructor[]; onRecover: () => Promise<void>; onDelete: () => Promise<void> }) {
   const trainers = instructors.filter((i) => project.trainerIds.includes(i.id));
   const [recovering, setRecovering] = useState(false);
   return (
@@ -21,13 +21,27 @@ export function OverviewTab({ project, instructors, onRecover }: { project: Proj
               (기존 페이지가 되살아나는 것은 아니며, 노션에서만 따로 남겼던 댓글·하위 내용은 복원되지 않습니다).
             </p>
           </div>
-          <button
-            onClick={async () => { setRecovering(true); try { await onRecover(); } finally { setRecovering(false); } }}
-            disabled={recovering}
-            className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            {recovering ? '복구 중…' : '복구하기'}
-          </button>
+          <span className="flex shrink-0 flex-col gap-1.5">
+            <button
+              onClick={async () => { setRecovering(true); try { await onRecover(); } finally { setRecovering(false); } }}
+              disabled={recovering}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {recovering ? '복구 중…' : '복구하기'}
+            </button>
+            <button
+              onClick={async () => {
+                if (!confirm(`'${project.projectName}' 프로젝트를 그룹웨어에서 완전히 삭제할까요?\n예산 항목도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+                setRecovering(true);
+                try { await onDelete(); } finally { setRecovering(false); }
+              }}
+              disabled={recovering}
+              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+              title="노션과 그룹웨어 양쪽에서 더 이상 쓰지 않는 프로젝트를 정리합니다"
+            >
+              완전 삭제
+            </button>
+          </span>
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

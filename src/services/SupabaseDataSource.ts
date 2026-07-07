@@ -294,6 +294,7 @@ class SupabaseDataSource implements DataSource {
     return (data ?? []).map((r: any) => ({
       id: String(r.id),
       name: r.name,
+      notionMissing: !!r.notion_missing,
       expertise: r.lecture_topics ?? [],
       phone: r.contact ?? undefined,
       email: r.email ?? undefined,
@@ -470,8 +471,7 @@ class SupabaseDataSource implements DataSource {
         scheduledMonth: r.payment_scheduled_month ?? undefined,
         status: SupabaseDataSource.dbCostStatusToFrontend(r.status),
         memo: r.remarks ?? undefined,
-        detail: r.detail ?? undefined,
-        costType: r.cost_type ?? undefined,
+        costType: r.category ?? undefined,
         isCardPayment: !!r.is_card_payment,
         isPayable: r.is_payable !== false,
         taxMode: r.tax_mode ?? 'rate33',
@@ -542,6 +542,16 @@ class SupabaseDataSource implements DataSource {
   }
 
   // 예산항목 수정 (기존: 추가/삭제만 가능 — 오타·금액 정정 시 삭제 후 재입력해야 했던 불편 해소)
+  // 노션 원본이 삭제된 프로젝트의 최종 삭제 (관리자 확인 후) — 예산 항목은 함께 삭제(CASCADE),
+  // 그룹 자식·지급이력이 참조 중이면 DB 제약이 막으므로 오류 메시지로 안내된다
+  async deleteProject(id: string): Promise<void> {
+    const { error } = await supabase.from('projects').delete().eq('id', Number(id));
+    if (error) {
+      if (error.code === '23503') throw new Error('이 프로젝트를 참조하는 데이터(그룹 구성, 지급 이력 등)가 있어 삭제할 수 없습니다. 구성 해제 후 다시 시도하세요.');
+      throw error;
+    }
+  }
+
   async recoverNotionLink(id: string): Promise<void> {
     // 노션 원본이 삭제된 경우 복구: 기존 연결을 끊고 현재 그룹웨어 데이터로 노션에 새 페이지를 재생성한다
     // (원래 페이지가 되살아나는 것이 아니라, 현재 데이터 기준의 새 페이지가 만들어진다)
@@ -556,14 +566,14 @@ class SupabaseDataSource implements DataSource {
   }
 
   async updateProjectCost(costId: string, patch: {
-    payeeName?: string; budgetAmount?: number; detail?: string;
+    payeeName?: string; budgetAmount?: number; remarks?: string;
     payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null;
     isCardPayment?: boolean; category?: string;
   }): Promise<void> {
     const dbPatch: Record<string, unknown> = {};
     if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
     if (patch.budgetAmount !== undefined) dbPatch.budget_amount = patch.budgetAmount;
-    if (patch.detail !== undefined) dbPatch.detail = patch.detail;
+    if (patch.remarks !== undefined) dbPatch.remarks = patch.remarks;
     if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType !== 'etc' ? patch.payeeType : null;
     if ('payeeId' in patch) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     if (patch.isCardPayment !== undefined) {

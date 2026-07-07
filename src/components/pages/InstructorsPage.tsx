@@ -193,6 +193,7 @@ export function InstructorsPage() {
                   <td className="px-4 py-2 text-xs tabular-nums text-slate-400">{__idx + 1}</td>
                   <td className="whitespace-nowrap px-5 py-2 font-semibold text-slate-800">
                     {i.name}{i.honorific ? <span className="ml-1 text-xs font-normal text-slate-400">{i.honorific}</span> : null}
+                    {i.notionMissing && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600" title="노션에서 원본이 삭제되었습니다 — 필요 없으면 여기서 삭제하세요">⚠ 노션삭제</span>}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
                     {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{i.level}</span> : null}

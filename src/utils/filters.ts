@@ -2,7 +2,7 @@ import type { Project } from '../types';
 
 export interface ProjectFilterState {
   search: string;
-  status: string;        // '' = 전체
+  statuses: string[];    // 빈 배열 = 전체 (상태 태그 ON/OFF 다중 선택)
   clientId: string;
   manager: string;
   year: string;          // 'YYYY' | '전체' | '미지정' — 매출월(없으면 교육일) 기준
@@ -20,7 +20,7 @@ export const projectYear = (p: Project): string | null => {
 
 // 기본 필터: 올해 기준 (과거 수백 건이 매번 쏟아지는 문제 방지)
 export const defaultFilterState: ProjectFilterState = {
-  search: '', status: '', clientId: '', manager: '',
+  search: '', statuses: [], clientId: '', manager: '',
   year: String(new Date().getFullYear()), month: '', priority: '',
   sort: 'startDate', sortDir: 'desc',
 };
@@ -32,7 +32,7 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
       const hay = `${p.projectName} ${p.clientName} ${p.courseName} ${p.managerName} ${p.topic}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (f.status && p.projectStatus !== f.status) return false;
+    if (f.statuses.length > 0 && !f.statuses.includes(p.projectStatus)) return false;
     if (f.clientId && p.clientId !== f.clientId) return false;
     if (f.manager && p.managerName !== f.manager) return false;
     if (f.priority && p.priority !== f.priority) return false;

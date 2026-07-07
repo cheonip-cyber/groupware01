@@ -297,8 +297,8 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
                   <td className="px-4 py-2.5 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                   <td className="px-3 py-2.5 text-slate-600">
                     {r.isCardPayment ? <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600">카드</span> : r.payeeType}
-                    {(r.costType || r.detail) && (
-                      <span className="ml-1.5 text-[11px] text-slate-400">{[r.costType, r.detail].filter(Boolean).join(' · ')}</span>
+                    {(r.costType || r.memo) && (
+                      <span className="ml-1.5 text-[11px] text-slate-400">{[r.costType, r.memo].filter(Boolean).join(' · ')}</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 font-medium text-slate-800">{r.payeeName}</td>
@@ -359,14 +359,14 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
   instructors: Instructor[];
   companies: Company[];
   onClose: () => void;
-  onSave: (patch: { payeeName: string; budgetAmount: number; detail?: string; payeeType: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment: boolean; category?: string }) => void;
+  onSave: (patch: { payeeName: string; budgetAmount: number; remarks?: string; payeeType: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment: boolean; category?: string }) => void;
 }) {
   const initType: 'instructor' | 'company' | 'etc' = row.payeeType === '강사' ? 'instructor' : row.payeeType === '업체' ? 'company' : 'etc';
   const [payeeType, setPayeeType] = useState<'instructor' | 'company' | 'etc'>(initType);
   const [payeeId, setPayeeId] = useState(row.payeeId ?? '');
   const [payeeName, setPayeeName] = useState(row.payeeName);
   const [amount, setAmount] = useState(String(row.amount));
-  const [detail, setDetail] = useState(row.detail ?? '');
+  const [remarks, setRemarks] = useState(row.memo ?? '');
   const [category, setCategory] = useState(row.costType ?? CATEGORIES[0]);
   const [isCard, setIsCard] = useState(!!row.isCardPayment);
   const inputCls = 'rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400';
@@ -405,7 +405,7 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
           )}
 
           <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="예산금액" className={inputCls} />
-          <input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="세부내용" className={inputCls} />
+          <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="세부내용" className={inputCls} />
           <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600">
             <input type="checkbox" checked={isCard} onChange={(e) => setIsCard(e.target.checked)} />
             카드결제(지급요청 제외)
@@ -414,7 +414,7 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
         <div className="mt-4 flex gap-2">
           <button
             onClick={() => onSave({
-              payeeName, budgetAmount: Number(amount || 0), detail: detail || undefined,
+              payeeName, budgetAmount: Number(amount || 0), remarks: remarks || undefined,
               payeeType, payeeId: payeeType !== 'etc' ? (payeeId || null) : null,
               isCardPayment: isCard, category,
             })}

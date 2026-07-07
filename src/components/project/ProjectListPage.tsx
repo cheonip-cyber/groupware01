@@ -27,7 +27,7 @@ export function ProjectListPage() {
   const [f, setF] = useState<ProjectFilterState>(() => ({
     ...defaultFilterState,
     search: params.get('search') ?? defaultFilterState.search,
-    status: params.get('status') ?? defaultFilterState.status,
+    statuses: params.get('status') ? [params.get('status')!] : defaultFilterState.statuses,
     year: params.get('year') ?? globalYear ?? defaultFilterState.year,
     month: params.get('month') ?? defaultFilterState.month,
   }));
@@ -129,9 +129,25 @@ export function ProjectListPage() {
             {years.ys.map((y) => <option key={y} value={y}>{y}년</option>)}
             {years.hasUnknown && <option value="미지정">연도 미지정</option>}
           </select>
-          <select value={f.status} onChange={(e) => set({ status: e.target.value })} className={selCls}>
-            <option value="">상태 전체</option>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {STATUSES.map((st) => {
+              const on = f.statuses.includes(st);
+              return (
+                <button key={st} type="button"
+                  onClick={() => set({ statuses: on ? f.statuses.filter((x) => x !== st) : [...f.statuses, st] })}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${on
+                    ? 'border-blue-500 bg-blue-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600'}`}
+                  title={on ? '필터 해제' : '이 상태만 보기 (복수 선택 가능)'}>
+                  {st}
+                </button>
+              );
+            })}
+            {f.statuses.length > 0 && (
+              <button type="button" onClick={() => set({ statuses: [] })}
+                className="text-xs text-slate-400 underline hover:text-slate-600">전체</button>
+            )}
+          </div>
           <select value={f.clientId} onChange={(e) => set({ clientId: e.target.value })} className={selCls}>
             <option value="">고객사 전체</option>{clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>

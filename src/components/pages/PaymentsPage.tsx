@@ -24,13 +24,11 @@ export function PaymentsPage() {
   const nowMonth = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
-  const [reqMonth, setReqMonth] = useState<Record<string, string>>({}); // 행별 지급월 예약 선택
 
   const [tab, setTab] = useState<'pending' | 'done'>('pending');
   const [search, setSearch] = useState('');
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');
-  const [subFilter, setSubFilter] = useState<'전체' | '지급대상' | '지급요청'>('전체');
   const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>('전체');
   const [payMonth, setPayMonth] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -40,7 +38,8 @@ export function PaymentsPage() {
   const [busy, setBusy] = useState(false);
 
   const transferable = useMemo(() => paymentRequests.filter((r) => !r.isCardPayment && r.isPayable !== false), [paymentRequests]);
-  const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급대상' || r.status === '지급요청'), [transferable]);
+  // 지급관리에는 '지급요청'된 항목만 표시 — 요청 전 건은 각 프로젝트의 지급 탭에서 검토·요청한다 (혼재로 복잡해 보이던 문제 해소)
+  const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급요청'), [transferable]);
   const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
 
   // 탭별 기준일: 대기=지급예정일(dueDate), 완료=지급월(paidMonth)
@@ -49,7 +48,6 @@ export function PaymentsPage() {
   // 완료 탭 진입 시 데이터가 있는 최근 연도 자동 선택 (구 시스템 개선 이력 이식)
   useEffect(() => {
     setSelected(new Set());
-    setSubFilter('전체');
     if (tab === 'done') {
       const ys = [...new Set(doneAll.map((r) => (r.paidMonth ?? '').slice(0, 4)).filter(Boolean))].sort().reverse();
       setYear(ys[0] ?? '전체');
@@ -75,17 +73,18 @@ export function PaymentsPage() {
       const base = baseOf(r);
       if (year !== '전체' && !base.startsWith(year)) return false;
       if (month !== '전체' && base.slice(5, 7) !== month) return false;
-      if (tab === 'pending' && subFilter !== '전체' && r.status !== subFilter) return false;
       if (typeFilter !== '전체' && r.payeeType !== typeFilter) return false;
       if (q && !`${r.payeeName} ${r.projectName ?? ''} ${r.clientName ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-    // 정렬: 대기=예정일 임박순(없으면 뒤로), 완료=지급월 최신순
-    return filtered.sort((a, b) => tab === 'pending'
-      ? (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
-      : (b.paidMonth ?? '').localeCompare(a.paidMonth ?? ''));
+    // 정렬: 같은 프로젝트끼리 묶이고, 프로젝트 안에서는 강사 → 업체 → 기타, 같은 유형끼리는 이름순
+    const typeOrder = (t: string) => (t === '강사' ? 0 : t === '업체' ? 1 : 2);
+    return filtered.sort((a, b) =>
+      (a.projectName ?? '').localeCompare(b.projectName ?? '', 'ko')
+      || typeOrder(a.payeeType) - typeOrder(b.payeeType)
+      || a.payeeName.localeCompare(b.payeeName, 'ko'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAll, doneAll, tab, search, year, month, subFilter, typeFilter]);
+  }, [pendingAll, doneAll, tab, search, year, month, typeFilter]);
 
   // 요약 카운터 (구 시스템 '미요청 N건' 배지 이식)
   // 카운터는 '전체'가 아니라 현재 연/월 필터 기준 (구 그룹웨어 개발 시 확정된 원칙: 통계 카드는 선택 기간 기준)
@@ -99,8 +98,8 @@ export function PaymentsPage() {
     const pend = pendingAll.filter((r) => !month && year === '전체' ? true : inPeriod(r));
     const dueThis = pendingAll.filter((r) => r.scheduledMonth === nowMonth);
     return {
-      unrequested: pend.filter((r) => r.status === '지급대상').length,
-      requested: pend.filter((r) => r.status === '지급요청').length,
+      unrequested: transferable.filter((r) => r.status === '지급대상').length,
+      requested: pend.length,
       doneThisMonth: doneAll.filter((r) => r.paidMonth === nowMonth).length,
       dueThisCount: dueThis.length,
       dueThisTotal: dueThis.reduce((s, r) => s + netOf(r), 0),
@@ -174,13 +173,6 @@ export function PaymentsPage() {
     (r) => updatePaymentRequest(r.id, { status: '지급요청' }),
     `선택한 ${selectedRows.length}건의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`);
 
-  // 지급요청 생성 게이트: 공통=지급정보 확인, 업체=매입 세금계산서 수취까지 (구 시스템 관행)
-  const requestable = (r: PaymentRequest) =>
-    !!r.infoConfirmed && (r.payeeType !== '업체' || !!r.vendorTaxInvoiceReceived);
-  const gateHint = (r: PaymentRequest) =>
-    !r.infoConfirmed ? '상세에서 지급정보 확인 필요'
-      : r.payeeType === '업체' && !r.vendorTaxInvoiceReceived ? '상세에서 매입 세금계산서 수취 확인 필요' : '';
-
   const tabBtn = (t: 'pending' | 'done', label: string, count: number) => (
     <button onClick={() => setTab(t)}
       className={`rounded-lg px-3.5 py-2 text-sm font-semibold ${tab === t ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
@@ -192,12 +184,11 @@ export function PaymentsPage() {
     <div className="space-y-4">
       {/* 요약 카운터 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <button onClick={() => { setTab('pending'); setSubFilter('지급대상'); }}
-          className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-left hover:border-amber-300">
-          <p className="text-xs text-amber-600">미요청 (지급대상)</p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3" title="요청 전 항목은 각 프로젝트의 지급 탭에서 검토 후 지급요청하세요">
+          <p className="text-xs text-amber-600">미요청 (프로젝트에서 요청)</p>
           <p className="text-xl font-bold text-amber-700">{counters.unrequested}건</p>
-        </button>
-        <button onClick={() => { setTab('pending'); setSubFilter('지급요청'); }}
+        </div>
+        <button onClick={() => setTab('pending')}
           className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-left hover:border-blue-300">
           <p className="text-xs text-blue-600">요청됨 (이체 대기)</p>
           <p className="text-xl font-bold text-blue-700">{counters.requested}건</p>
@@ -256,12 +247,7 @@ export function PaymentsPage() {
             className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
             <option value="전체">유형 전체</option><option value="강사">강사</option><option value="업체">업체</option><option value="기타">기타</option>
           </select>
-          {tab === 'pending' && (
-            <select value={subFilter} onChange={(e) => setSubFilter(e.target.value as typeof subFilter)}
-              className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
-              <option value="전체">상태 전체</option><option value="지급대상">미요청</option><option value="지급요청">요청됨</option>
-            </select>
-          )}
+
         </div>
       </Card>
 
@@ -371,19 +357,8 @@ export function PaymentsPage() {
                           : <StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" />}
                       </td>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                        {r.status === '지급대상' && (
-                          <span className="flex items-center gap-1.5">
-                            <MonthPicker value={reqMonth[r.id] ?? nextMonth} onChange={(ym) => setReqMonth((s) => ({ ...s, [r.id]: ym }))}
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-blue-400" />
-                            <button onClick={() => updatePaymentRequest(r.id, { status: '지급요청', scheduledMonth: reqMonth[r.id] ?? nextMonth })}
-                              disabled={!requestable(r)} title={gateHint(r) || '선택한 지급월 말일 배치로 지급요청 생성'}
-                              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">지급요청</button>
-                          </span>
-                        )}
                         {r.status === '지급요청' && (
                           <span className="flex items-center gap-1.5">
-                            <MonthPicker value={r.scheduledMonth ?? nowMonth} onChange={(ym) => updatePaymentRequest(r.id, { scheduledMonth: ym })}
-                              className="rounded-lg border border-violet-200 bg-violet-50/50 px-2 py-1 text-xs text-violet-700 hover:border-violet-400" />
                             <MonthPicker value={payMonth[r.id] ?? nowMonth} onChange={(ym) => setPayMonth((s) => ({ ...s, [r.id]: ym }))}
                               className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-blue-400" />
                             <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}

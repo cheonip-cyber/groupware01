@@ -1,6 +1,8 @@
 export interface Instructor {
   id: string;
   name: string;
+  /** 노션 원본이 삭제(휴지통 포함)되어 연결이 끊긴 상태 */
+  notionMissing?: boolean;
   expertise: string[];
   phone?: string;
   email?: string;

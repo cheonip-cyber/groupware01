@@ -19,8 +19,9 @@ interface AppDataValue {
   createProject: (input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }) => Promise<string>;
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
-  updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
+  updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; remarks?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
   recoverNotionLink: (id: string) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<string>;
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
@@ -123,7 +124,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  const updateProjectCost = useCallback(async (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => {
+  const updateProjectCost = useCallback(async (costId: string, patch: { payeeName?: string; budgetAmount?: number; remarks?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => {
     await dataSource.updateProjectCost(costId, patch);
     const [p, pr] = await Promise.all([projectService.list(), paymentService.list()]);
     setProjects(p); setPaymentRequests(pr);
@@ -133,6 +134,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     await dataSource.recoverNotionLink(id);
     const p = await projectService.list();
     setProjects(p);
+  }, []);
+
+  const deleteProject = useCallback(async (id: string) => {
+    await dataSource.deleteProject(id);
+    setProjects((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   const addProjectCost = useCallback(async (projectId: string, input: NewProjectCostInput) => {
@@ -184,7 +190,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
-      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink,
+      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink, deleteProject,
       addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
       globalYear, setGlobalYear,
     }}>

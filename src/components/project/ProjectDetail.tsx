@@ -25,7 +25,7 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const {
     projects, instructors, companies, paymentRequests, loading,
-    refresh, updateProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink,
+    refresh, updateProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink, deleteProject,
     addInstructor, addCompany,
   } = useAppData();
   const [activeTab, setActiveTab] = useState<Tab>('개요');
@@ -144,7 +144,11 @@ export function ProjectDetail() {
           {activeTab === '개요' && (
             <div className="space-y-4">
               <GroupSection project={project} allProjects={projects} onChanged={refresh} />
-              <OverviewTab project={project} instructors={instructors} onRecover={() => recoverNotionLink(project.id)} />
+              <OverviewTab project={project} instructors={instructors} onRecover={() => recoverNotionLink(project.id)}
+                onDelete={async () => {
+                  try { await deleteProject(project.id); navigate('/projects'); }
+                  catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+                }} />
             </div>
           )}
           {activeTab === '운영' && <OperationTab project={project} onUpdate={handleUpdate} />}
