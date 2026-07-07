@@ -75,6 +75,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     clientName,
     masterClientName: row.master_client_name ?? undefined,
     notionManager: row.notion_manager ?? undefined,
+    clientContactName: row.client_contact_name ?? undefined,
     clientPaymentMemo: row.client_payment_memo ?? undefined,
     courseName: row.project_name ?? '',
     topic: '',
