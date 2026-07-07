@@ -70,6 +70,8 @@ export interface Project extends NotionSyncFields {
   clientName: string;
   /** 대표거래처 — 계열사 분산 계산서 발행 시 통계 집계용 (구 그룹웨어 확정 기능) */
   masterClientName?: string;
+  /** 노션 '업무 담당자'(person) — 노션→그룹웨어 단방향 */
+  notionManager?: string;
   /** 고객사 입금 메모 — 입금 지연 사유 등 (구 그룹웨어 확정 기능) */
   clientPaymentMemo?: string;
   courseName: string;

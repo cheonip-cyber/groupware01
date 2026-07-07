@@ -15,7 +15,7 @@ export function OverviewTab({ project, instructors }: { project: Project; instru
         <Field label="제안 마감일">{project.proposalDueDate ? formatDate(project.proposalDueDate) : '-'}</Field>
         {/* 교육일자(1차수)(2차수)는 각각의 일정이므로 '~' 기간이 아니라 ','로 병기 */}
         <Field label="교육 일정">{[project.startDate, project.endDate].filter(Boolean).map((d) => formatDate(d)).join(', ') || '-'}</Field>
-        <Field label="업무 담당자">{project.managerName}</Field>
+        <Field label="업무 담당자">{project.notionManager || project.managerName || '-'}</Field>
       </Section>
       <Section title="진행 / 배정">
         <Field label="프로젝트 상태"><StatusBadge label={project.projectStatus} style={projectStatusStyle[project.projectStatus]} /></Field>
