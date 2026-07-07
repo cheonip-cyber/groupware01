@@ -151,7 +151,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   instructors: Instructor[];
   companies: Company[];
   onAddCost: (input: NewProjectCostInput) => Promise<void>;
-  onUpdateCost: (id: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => Promise<void>;
+  onUpdateCost: (id: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
   onDeleteCost: (id: string) => Promise<void>;
 }) {
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
@@ -164,8 +164,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   const [remarks, setRemarks] = useState('');
   const [isCard, setIsCard] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ payeeName: '', amount: '' });
+  const [editRow, setEditRow] = useState<PaymentRequest | null>(null); // 전체 필드 편집 팝업 대상
 
   const resetForm = () => {
     setCategory('강사비'); setPayeeType('instructor'); setPayeeId('');
@@ -288,34 +287,16 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
                       <span className="ml-1.5 text-[11px] text-slate-400">{[r.costType, r.detail].filter(Boolean).join(' · ')}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-medium text-slate-800">
-                    {editId === r.id
-                      ? <input value={editForm.payeeName} onChange={(e) => setEditForm((f) => ({ ...f, payeeName: e.target.value }))}
-                          className="w-32 rounded border border-blue-200 px-2 py-1 text-sm outline-none focus:border-blue-400" />
-                      : r.payeeName}
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    {editId === r.id
-                      ? <input type="number" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
-                          className="w-28 rounded border border-blue-200 px-2 py-1 text-right text-sm outline-none focus:border-blue-400" />
-                      : <MoneyText value={r.amount} />}
-                  </td>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">{r.payeeName}</td>
+                  <td className="px-3 py-2.5 text-right"><MoneyText value={r.amount} /></td>
                   <td className="px-3 py-2.5 text-xs text-slate-500">
                     {r.status === '지급완료' && r.paidMonth
                       ? <span className="font-medium text-emerald-600">{r.paidMonth} 지급</span>
                       : r.status}
                   </td>
                   <td className="px-3 py-2.5">
-                    {editId === r.id ? (
-                      <span className="flex gap-1.5">
-                        <button onClick={async () => {
-                            await onUpdateCost(r.id, { payeeName: editForm.payeeName, budgetAmount: Number(editForm.amount || 0) });
-                            setEditId(null);
-                          }} className="text-emerald-600 hover:text-emerald-700" title="저장"><Check className="h-4 w-4" /></button>
-                        <button onClick={() => setEditId(null)} className="text-slate-400" title="취소"><X className="h-4 w-4" /></button>
-                      </span>
-                    ) : r.status !== '지급완료' && (
-                      <button onClick={() => { setEditId(r.id); setEditForm({ payeeName: r.payeeName, amount: String(r.amount) }); }}
+                    {r.status !== '지급완료' && (
+                      <button onClick={() => setEditRow(r)}
                         className="mr-1.5 text-slate-400 hover:text-blue-500" title="편집 (지급완료 전까지)">
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -333,6 +314,91 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
             </tbody>
           </table>
         )}
+      </div>
+
+      {editRow && (
+        <BudgetItemEditModal
+          row={editRow}
+          instructors={instructors}
+          companies={companies}
+          onClose={() => setEditRow(null)}
+          onSave={async (patch) => { await onUpdateCost(editRow.id, patch); setEditRow(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// 예산 항목 전체 필드 편집 팝업 (지급대상/유형/금액/세부내용/카드결제 여부 전부 수정 가능)
+function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
+  row: PaymentRequest;
+  instructors: Instructor[];
+  companies: Company[];
+  onClose: () => void;
+  onSave: (patch: { payeeName: string; budgetAmount: number; detail?: string; payeeType: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment: boolean; category?: string }) => void;
+}) {
+  const initType: 'instructor' | 'company' | 'etc' = row.payeeType === '강사' ? 'instructor' : row.payeeType === '업체' ? 'company' : 'etc';
+  const [payeeType, setPayeeType] = useState<'instructor' | 'company' | 'etc'>(initType);
+  const [payeeId, setPayeeId] = useState(row.payeeId ?? '');
+  const [payeeName, setPayeeName] = useState(row.payeeName);
+  const [amount, setAmount] = useState(String(row.amount));
+  const [detail, setDetail] = useState(row.detail ?? '');
+  const [category, setCategory] = useState(row.costType ?? CATEGORIES[0]);
+  const [isCard, setIsCard] = useState(!!row.isCardPayment);
+  const inputCls = 'rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-800">예산 항목 편집</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={payeeType} onChange={(e) => { setPayeeType(e.target.value as typeof payeeType); setPayeeId(''); }} className={inputCls}>
+            <option value="instructor">강사</option>
+            <option value="company">업체</option>
+            <option value="etc">기타(직접입력)</option>
+          </select>
+
+          {payeeType === 'etc' ? (
+            <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="지급대상명 직접 입력" className={`${inputCls} col-span-2`} />
+          ) : (
+            <div className="col-span-2">
+              <PayeePicker
+                payeeType={payeeType}
+                instructors={instructors}
+                companies={companies}
+                selectedId={payeeId}
+                onSelect={(id, name) => { setPayeeId(id); setPayeeName(name); }}
+                onTypeChange={(t) => { setPayeeType(t); setPayeeId(''); }}
+              />
+              <p className="mt-1 text-[11px] text-slate-400">현재: {payeeName || '(미지정)'}</p>
+            </div>
+          )}
+
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="예산금액" className={inputCls} />
+          <input value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="세부내용" className={inputCls} />
+          <label className="col-span-2 flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" checked={isCard} onChange={(e) => setIsCard(e.target.checked)} />
+            카드결제(지급요청 제외)
+          </label>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => onSave({
+              payeeName, budgetAmount: Number(amount || 0), detail: detail || undefined,
+              payeeType, payeeId: payeeType !== 'etc' ? (payeeId || null) : null,
+              isCardPayment: isCard, category,
+            })}
+            disabled={!payeeName || !amount}
+            className="flex-1 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+          >저장</button>
+          <button onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-500 hover:bg-slate-50">취소</button>
+        </div>
       </div>
     </div>
   );

@@ -122,7 +122,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
         <Layers className="h-4 w-4 text-indigo-400" />
         <h4 className="text-sm font-semibold text-slate-700">그룹 구성</h4>
         {project.groupType && children.length > 0 && (
-          <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600">
+          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
             {GROUP_TYPE_LABEL[project.groupType] ?? project.groupType} · {children.length}건 · 합계 <MoneyText value={groupTotal} />
           </span>
         )}
@@ -132,7 +132,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
       </div>
 
       {children.length > 0 && (
-        <ul className="mb-4 divide-y divide-slate-50 rounded-lg border border-slate-100">
+        <ul className="mb-4 divide-y divide-indigo-100 rounded-lg border border-indigo-200 bg-indigo-50/40">
           {children.map((c) => {
             const editable = !c.notionPageId; // 노션 연동 자식은 노션이 원천이므로 수정 잠금
             const deletable = isAdmin && c.sourceType === 'manual_groupware' && !c.notionPageId;

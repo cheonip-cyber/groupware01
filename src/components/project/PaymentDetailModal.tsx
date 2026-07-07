@@ -36,6 +36,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [account, setAccount] = useState('');
   const [editAcct, setEditAcct] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState(!!r.infoConfirmed);
 
   const w = calcWithholdingFor({ payeeType: r.payeeType, amount: r.amount, taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident });
 
@@ -83,6 +84,14 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           </div>
           <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>
         </div>
+
+        {/* 프로젝트 / 비고 (지급 정보 확인 팝업과 통일) */}
+        {(r.projectName || r.memo) && (
+          <div className="mb-4 space-y-1 text-xs">
+            {r.projectName && <div className="flex justify-between border-b border-slate-50 pb-1"><span className="text-slate-400">프로젝트</span><span className="text-slate-700">{r.projectName}</span></div>}
+            {r.memo && <div className="flex justify-between pb-1"><span className="text-slate-400">비고</span><span className="text-slate-700">{r.memo}</span></div>}
+          </div>
+        )}
 
         {/* 매칭 상태 (구: 인사/업체 정보 매칭) */}
         <div className={`mb-4 flex items-start gap-2.5 rounded-xl border p-3 ${linked ? 'border-emerald-100 bg-emerald-50' : 'border-red-100 bg-red-50'}`}>
@@ -171,10 +180,18 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
         )}
 
         {/* 지급 예정 (예약월 — 말일 일괄 배치) */}
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <label className="text-xs font-bold text-slate-600">지급 예정월 (말일 배치)</label>
           <MonthPicker value={schedule} onChange={setSchedule} />
         </div>
+
+        {r.status !== '지급완료' && (
+          <label className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="h-4 w-4" />
+            지급 정보(계좌·금액)를 확인했습니다
+            <span className="text-[11px] text-slate-400">— 확인 후 요청 가능</span>
+          </label>
+        )}
 
         <div className="flex gap-2">
           {r.status === '지급요청' && !justRequested && (
@@ -185,13 +202,17 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
             <button disabled className="flex-[2] cursor-default rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-400">지급완료됨</button>
           ) : (
             <button onClick={() => {
-              if (r.status === '지급대상' && !linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
+              if (r.status === '지급대상') {
+                if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
+                if (!confirmed) { alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.'); return; }
+              }
               saveDetail({ status: '지급요청', infoConfirmed: true });
               setJustRequested(true);
               toast.success('지급요청 완료');
               setTimeout(onClose, 600);
             }}
-              className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" disabled={justRequested}>
+              className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60"
+              disabled={justRequested || (r.status === '지급대상' && !confirmed)}>
               {justRequested ? '지급요청 완료' : '지급요청'}
             </button>
           )}

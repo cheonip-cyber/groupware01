@@ -8,12 +8,13 @@ import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { paymentStatusStyle } from '../../utils/statusConfig';
 import { formatDate, formatCompactKRW } from '../../utils/formatters';
-import { calcWithholdingFor, calcWithholding, maskResidentNumber } from '../../utils/withholding';
+import { calcWithholdingFor } from '../../utils/withholding';
 import { Search, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { MonthPicker } from '../common/MonthPicker';
 import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
+import { PaymentDetailModal } from '../project/PaymentDetailModal';
 import type { PaymentRequest } from '../../types';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
@@ -37,7 +38,6 @@ export function PaymentsPage() {
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
   useEscClose(!!detail, () => setDetail(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
-  const [linkQuery, setLinkQuery] = useState('');
   const [busy, setBusy] = useState(false);
 
   const transferable = useMemo(() => paymentRequests.filter((r) => !r.isCardPayment && r.isPayable !== false), [paymentRequests]);
@@ -333,7 +333,7 @@ export function PaymentsPage() {
                   const overdue = tab === 'pending' && !!r.dueDate && r.dueDate < today;
                   const canSelect = tab === 'pending' ? r.status === '지급요청' : true;
                   return (
-                    <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => { setDetail(r); setLinkQuery(r.payeeName); }}>
+                    <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setDetail(r)}>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {canSelect && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="h-4 w-4" />}
                       </td>
@@ -409,112 +409,8 @@ export function PaymentsPage() {
         )}
       </Card>
 
-      {/* 지급 상세 확인 모달 */}
-      {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setDetail(null)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-800">지급 정보 확인</h3>
-              <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="space-y-2.5 text-sm">
-              <Row k="지급처">{detail.payeeName} <span className="text-xs text-slate-400">({detail.payeeType})</span></Row>
-              <Row k="프로젝트">{detail.projectName ?? '-'}</Row>
-              <Row k="은행 / 계좌">
-                {detail.bankName ? `${detail.bankName} | ${detail.accountNumber}` :
-                  detail.payeeId
-                    ? <span className="text-red-500">미등록 — 강사/업체 관리에서 계좌 등록 필요</span>
-                    : <span className="text-amber-600">대상 미연결 — 아래에서 연결하세요</span>}
-              </Row>
-              {!detail.payeeId && (detail.payeeType === '강사' || detail.payeeType === '업체') && (
-                <div className="rounded-lg border border-amber-100 bg-amber-50/60 p-2.5">
-                  <p className="mb-1.5 text-[11px] font-medium text-amber-700">
-                    지급처가 {detail.payeeType} DB와 연결되어 있지 않아 계좌를 표시할 수 없습니다. 연결할 대상을 선택하세요.
-                  </p>
-                  <input value={linkQuery} onChange={(e) => setLinkQuery(e.target.value)} placeholder={`${detail.payeeType}명 검색`}
-                    className="mb-1.5 w-full rounded-lg border border-amber-200 px-2.5 py-1.5 text-xs outline-none focus:border-amber-400" />
-                  <ul className="max-h-36 divide-y divide-amber-100 overflow-y-auto">
-                    {(detail.payeeType === '강사'
-                      ? instructors.filter((i) => i.name.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
-                          .map((i) => ({ id: i.id, name: i.name, sub: i.accountInfo ?? '계좌 미등록' }))
-                      : companies.filter((c) => `${c.companyName} ${c.ceoName ?? ''}`.toLowerCase().includes(linkQuery.trim().toLowerCase())).slice(0, 8)
-                          .map((c) => ({ id: c.id, name: c.ceoName ? `${c.companyName} (대표 ${c.ceoName})` : c.companyName, sub: c.bankName ? `${c.bankName} ${c.accountNumber ?? ''}` : '계좌 미등록' }))
-                    ).map((cand) => (
-                      <li key={cand.id} className="flex items-center gap-2 py-1.5 text-xs">
-                        <span className="font-medium text-slate-700">{cand.name}</span>
-                        <span className="text-slate-400">{cand.sub}</span>
-                        <button
-                          onClick={async () => {
-                            await updatePaymentRequest(detail.id, { payeeId: cand.id });
-                            setDetail(null);
-                          }}
-                          className="ml-auto rounded bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600">연결</button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {detail.payeeType === '강사' && (
-                <>
-                  <Row k="주민등록번호"><span className="font-mono">{maskResidentNumber(detail.residentNumber)}</span></Row>
-                  <Row k="지급총액(세전)"><MoneyText value={detail.amount} /></Row>
-                  {(() => { const w = calcWithholding(detail.amount); return (
-                    <>
-                      <Row k="소득세 (3%)"><span className="text-red-500">-<MoneyText value={w.incomeTax} /></span></Row>
-                      <Row k="지방소득세 (0.3%)"><span className="text-red-500">-<MoneyText value={w.residentTax} /></span></Row>
-                      <Row k="실지급액"><span className="font-bold text-emerald-600"><MoneyText value={w.netAmount} /></span></Row>
-                    </>
-                  ); })()}
-                </>
-              )}
-              {detail.payeeType === '업체' && (
-                <>
-                  <Row k="지급금액"><MoneyText value={detail.amount} /></Row>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                    <input type="checkbox" checked={!!detail.vendorTaxInvoiceReceived}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        // 낙관적 업데이트: 화면 먼저 반영 후 저장 — 서버 왕복 동안 미반응으로 보여 이중 클릭이 꼬이는 문제 방지
-                        setDetail({ ...detail, vendorTaxInvoiceReceived: checked, vendorTaxInvoiceDate: checked ? today : undefined });
-                        updatePaymentRequest(detail.id, {
-                          vendorTaxInvoiceReceived: checked,
-                          vendorTaxInvoiceDate: checked ? today : undefined,
-                        }).catch(() => setDetail((d) => (d ? { ...d, vendorTaxInvoiceReceived: !checked } : d)));
-                      }} className="h-4 w-4" />
-                    매입 세금계산서 수취 확인
-                    {detail.vendorTaxInvoiceReceived && detail.vendorTaxInvoiceDate && (
-                      <span className="text-xs text-slate-400">({formatDate(detail.vendorTaxInvoiceDate)})</span>
-                    )}
-                  </label>
-                </>
-              )}
-              {detail.memo && <Row k="비고">{detail.memo}</Row>}
-              {detail.status === '지급대상' && (
-                <label className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-                  <input type="checkbox" checked={!!detail.infoConfirmed}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setDetail({ ...detail, infoConfirmed: checked }); // 낙관적 업데이트 (즉시 반영)
-                      updatePaymentRequest(detail.id, { infoConfirmed: checked })
-                        .catch(() => setDetail((d) => (d ? { ...d, infoConfirmed: !checked } : d)));
-                    }} className="h-4 w-4" />
-                  지급 정보(계좌·금액)를 확인했습니다
-                  <span className="text-[11px] text-slate-400">{detail.payeeType === '업체' ? '— 계산서 수취와 함께 요청 가능' : '— 확인 후 요청 가능'}</span>
-                </label>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Row({ k, children }: { k: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-3 border-b border-slate-50 pb-2 last:border-0">
-      <span className="shrink-0 text-xs font-medium text-slate-400">{k}</span>
-      <span className="text-right text-slate-700">{children}</span>
+      {/* 지급 상세 정보 (프로젝트 지급 탭과 동일한 통합 팝업 사용) */}
+      {detail && <PaymentDetailModal r={detail} onClose={() => setDetail(null)} onUpdateRequest={updatePaymentRequest} />}
     </div>
   );
 }

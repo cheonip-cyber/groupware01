@@ -524,6 +524,8 @@ class SupabaseDataSource implements DataSource {
     if (patch.manualResidentTax !== undefined) dbPatch.manual_resident_tax = patch.manualResidentTax;
     // 지급대상 연결(미연결 건 수동 연결용) — 계좌정보 조인의 전제 조건
     if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
+    // 대상 재연결 시 표시 이름도 함께 갱신 (누락 시 계좌만 바뀌고 화면 이름은 그대로 남아 "반영 안 됨"처럼 보이던 버그)
+    if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
     // 지급월 예약 (해당 월 말일 일괄 지급 배치 대상)
     if ('scheduledMonth' in patch) dbPatch.payment_scheduled_month = patch.scheduledMonth ?? null;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
@@ -547,11 +549,22 @@ class SupabaseDataSource implements DataSource {
   }
 
   // 예산항목 수정 (기존: 추가/삭제만 가능 — 오타·금액 정정 시 삭제 후 재입력해야 했던 불편 해소)
-  async updateProjectCost(costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }): Promise<void> {
+  async updateProjectCost(costId: string, patch: {
+    payeeName?: string; budgetAmount?: number; detail?: string;
+    payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null;
+    isCardPayment?: boolean; category?: string;
+  }): Promise<void> {
     const dbPatch: Record<string, unknown> = {};
     if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
     if (patch.budgetAmount !== undefined) dbPatch.budget_amount = patch.budgetAmount;
     if (patch.detail !== undefined) dbPatch.detail = patch.detail;
+    if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType;
+    if ('payeeId' in patch) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
+    if (patch.isCardPayment !== undefined) {
+      dbPatch.is_card_payment = patch.isCardPayment;
+      dbPatch.is_payable = !patch.isCardPayment;
+    }
+    if (patch.category !== undefined) dbPatch.category = patch.category;
     const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(costId));
     if (error) throw error;
   }

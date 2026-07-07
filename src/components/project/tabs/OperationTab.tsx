@@ -9,8 +9,9 @@ const STATUS_ITEMS = ['강사 안내 메일 발송', '교재 준비', '교구재
 export function OperationTab({ project, onUpdate }:
   { project: Project; onUpdate: (patch: Partial<Project>) => void }) {
   const checks = project.prepChecklist ?? {};
+  // 변경된 키만 보낸다 (전체 객체를 다시 보내면 연속 클릭 시 앞선 변경이 store 병합 전 값 기준으로 덮어써질 수 있음)
   const toggle = (key: string) =>
-    onUpdate({ prepChecklist: { ...checks, [key]: !checks[key] } });
+    onUpdate({ prepChecklist: { [key]: !checks[key] } });
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

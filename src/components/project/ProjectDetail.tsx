@@ -42,8 +42,14 @@ export function ProjectDetail() {
 
   const handleUpdate = async (patch: Partial<Project>) => {
     setSaving(true);
-    await updateProject(project.id, patch);
-    setSaving(false);
+    try {
+      await updateProject(project.id, patch);
+    } catch (e) {
+      console.error(e);
+      // 실패 시 사용자에게 알리고 로딩 상태를 반드시 해제한다 (무한 "저장 중" 방지)
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleTogglePrep = async (prepId: string) => {
@@ -55,8 +61,13 @@ export function ProjectDetail() {
 
   const handleUpdateRequest = async (rid: string, patch: Partial<PaymentRequest>) => {
     setSaving(true);
-    await updatePaymentRequest(rid, patch);
-    setSaving(false);
+    try {
+      await updatePaymentRequest(rid, patch);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddCost = async (input: NewProjectCostInput) => {

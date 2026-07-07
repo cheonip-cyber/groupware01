@@ -19,7 +19,7 @@ interface AppDataValue {
   createProject: (input: { projectName: string; clientName: string; finalEstimate: number; revenueMonth?: string; startDate?: string; status?: string }) => Promise<string>;
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
-  updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => Promise<void>;
+  updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
@@ -42,6 +42,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [companies, setCompanies] = useState<Company[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const paymentRequestsRef = useRef<PaymentRequest[]>([]);
+  useEffect(() => { paymentRequestsRef.current = paymentRequests; }, [paymentRequests]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -65,31 +67,62 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return newId;
   }, []);
 
+  // 체크박스 연타 시 경쟁 조건 방지용 프로젝트별 저장 큐 (동일 id의 서버 저장을 순서대로 직렬화)
+  const pendingWritesRef = useRef<Map<string, Promise<unknown>>>(new Map());
+
   const updateProject = useCallback(async (id: string, patch: Partial<Project>) => {
-    // 낙관적 업데이트: 체크박스·토글 등은 클릭 즉시 화면에 반영하고,
-    // 서버 저장·재조회는 뒤에서 진행한다. 실패 시에만 이전 상태로 되돌린다.
-    const snapshot = projectsRef.current;
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-    try {
-      const updated = await projectService.update(id, patch);
+    // 낙관적 업데이트: 클릭 즉시 화면에 반영한다.
+    // prepChecklist처럼 객체 전체를 담는 필드는, 화면에 표시된(구버전일 수 있는) 값을 기준으로
+    // 다시 만든 patch를 그대로 덮어쓰면 "연속 클릭 시 앞선 변경이 사라지는" 문제가 생긴다.
+    // 그래서 항상 setProjects의 함수형 갱신에서 "가장 최신 상태"를 기준으로 병합해 이 문제를 없앤다.
+    let toSend: Partial<Project> = patch;
+    setProjects((prev) => prev.map((p) => {
+      if (p.id !== id) return p;
+      const merged: Project = { ...p, ...patch };
+      if (patch.prepChecklist) {
+        merged.prepChecklist = { ...(p.prepChecklist ?? {}), ...patch.prepChecklist };
+        toSend = { ...patch, prepChecklist: merged.prepChecklist };
+      }
+      return merged;
+    }));
+
+    // 동일 프로젝트에 대한 저장은 순서대로 직렬화 — 나중에 도착한 저장이 앞선 저장을 덮어쓰지 않도록 한다.
+    const prevChain = pendingWritesRef.current.get(id) ?? Promise.resolve();
+    const chain = prevChain.catch(() => undefined).then(async () => {
+      const updated = await projectService.update(id, toSend);
       // 단건 응답에는 그룹 파생 통계(effectiveAmount 등)가 없어 일시적 이중계상이 생기므로,
       // 비용 추가와 동일하게 전체 재조회로 그룹/유효매출 일관성을 맞춘다 (조용히 뒤에서 진행).
       if (updated) {
         const p = await projectService.list();
         setProjects(p);
       }
+    });
+    pendingWritesRef.current.set(id, chain);
+    try {
+      await chain;
     } catch (e) {
-      setProjects(snapshot); // 실패 시 원복
+      // 실패 시 해당 프로젝트만 서버 최신 상태로 재조회해 되돌린다 (전체 스냅샷 원복은 다른 진행 중인 저장을 지울 수 있어 사용하지 않는다)
+      const p = await projectService.list().catch(() => null);
+      if (p) setProjects(p);
       throw e;
+    } finally {
+      if (pendingWritesRef.current.get(id) === chain) pendingWritesRef.current.delete(id);
     }
   }, []);
 
   const updatePaymentRequest = useCallback(async (id: string, patch: Partial<PaymentRequest>) => {
-    const updated = await paymentService.update(id, patch);
-    if (updated) setPaymentRequests((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    const snapshot = paymentRequestsRef.current;
+    setPaymentRequests((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p))); // 낙관적 반영
+    try {
+      const updated = await paymentService.update(id, patch);
+      if (updated) setPaymentRequests((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } catch (e) {
+      setPaymentRequests(snapshot); // 실패 시 원복
+      throw e;
+    }
   }, []);
 
-  const updateProjectCost = useCallback(async (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string }) => {
+  const updateProjectCost = useCallback(async (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => {
     await dataSource.updateProjectCost(costId, patch);
     const [p, pr] = await Promise.all([projectService.list(), paymentService.list()]);
     setProjects(p); setPaymentRequests(pr);
