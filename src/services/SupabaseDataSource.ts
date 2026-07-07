@@ -128,6 +128,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     trainerIds: [...new Set(costs.filter((c) => c.payee_type === 'instructor' && c.payee_id).map((c) => String(c.payee_id)))],
     vendorIds: [...new Set(costs.filter((c) => c.payee_type === 'company' && c.payee_id).map((c) => String(c.payee_id)))],
     prepItems,
+    prepChecklist: (row.prep_checklist ?? {}) as Record<string, boolean>,
     clientRequest: undefined,
     internalMemo: row.etc_notes ?? undefined,
 
@@ -258,6 +259,7 @@ class SupabaseDataSource implements DataSource {
     if ('collectionDoneDate' in patch) dbPatch.client_payment_date = patch.collectionDoneDate ?? null;
     if (patch.internalMemo !== undefined) dbPatch.etc_notes = patch.internalMemo;
     if ('clientPaymentMemo' in patch) dbPatch.client_payment_memo = patch.clientPaymentMemo || null;
+    if (patch.prepChecklist !== undefined) dbPatch.prep_checklist = patch.prepChecklist;
     if ('masterClientName' in patch) dbPatch.master_client_name = patch.masterClientName || null;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
     // 상태 변경 (수기 프로젝트 수명주기 관리 — DB 원본 상태 8종 그대로 저장)
@@ -470,6 +472,10 @@ class SupabaseDataSource implements DataSource {
         scheduledMonth: r.payment_scheduled_month ?? undefined,
         status: SupabaseDataSource.dbCostStatusToFrontend(r.status),
         memo: r.remarks ?? undefined,
+        detail: r.detail ?? undefined,
+        costType: r.cost_type ?? undefined,
+        isCardPayment: !!r.is_card_payment,
+        isPayable: r.is_payable !== false,
         payeeAccountInfo: accountInfo,
         payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
         bankName: acct?.bank_name ?? undefined,
@@ -488,10 +494,7 @@ class SupabaseDataSource implements DataSource {
     const { data, error } = await supabase
       .from('project_costs')
       .select('*, projects(project_name, session_1_date, clients(name))')
-      // 카드 결제 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙, 카드는 관리자 카드 화면에서 관리)
-      .or('is_card_payment.is.null,is_card_payment.eq.false')
-      // 비지급 대상 비용(is_payable=false: 내부 배부·감가 등)은 지급 목록에서 제외
-      .or('is_payable.is.null,is_payable.eq.true')
+      // 카드/비지급 제외는 화면별 정책이 달라(예산탭=표시, 지급관리=제외) 프론트에서 필터한다
       .order('created_at', { ascending: false });
     if (error) throw error;
     return this.buildPaymentRequests(data ?? []);

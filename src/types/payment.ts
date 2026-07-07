@@ -5,6 +5,13 @@ export interface PaymentRequest {
   projectId: string;
   projectName?: string;
   clientName?: string;
+  /** 비용 세부내용 */
+  detail?: string;
+  /** 비용 유형 (강사비/대관비 등) */
+  costType?: string;
+  /** 카드결제 건 (이체 대상 아님 — 지급관리 제외, 예산탭 표시) */
+  isCardPayment?: boolean;
+  isPayable?: boolean;
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;

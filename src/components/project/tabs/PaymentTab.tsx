@@ -28,7 +28,11 @@ function PaymentRow({ r, onUpdateRequest }: {
           </button>
           {r.memo && <div className="ml-5 text-xs font-normal text-slate-400">{r.memo}</div>}
         </td>
-        <td className="px-3 py-3 text-slate-500">{r.payeeType}</td>
+        <td className="px-3 py-3 text-slate-500">
+        {r.isCardPayment
+          ? <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600">카드</span>
+          : r.payeeType}
+      </td>
         <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
         <td className="px-3 py-3 text-slate-500">{formatDate(r.dueDate)}</td>
         <td className="px-3 py-3"><StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" /></td>

@@ -1,4 +1,5 @@
 import { profitRateLabel } from '../../../utils/formatters';
+import { formatDate } from '../../../utils/formatters';
 import type { ReactNode } from 'react';
 import type { Project, PaymentRequest } from '../../../types';
 import { Section, Field, ActionButton } from './_shared';
@@ -78,20 +79,21 @@ export function SettlementTab({ project, requests, onUpdate }:
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="정산 확인 상태">
         <CheckRow
-          label="제안서 제출"
+          label="1. 제안서 제출"
           state={project.proposalSubmitted ? 'done' : 'pending'}
           onToggle={notionLocked ? undefined : () => onUpdate({ proposalSubmitted: !project.proposalSubmitted })}
           hint={notionLocked ? notionEditHint : undefined}
         />
         <CheckRow
-          label="거래명세서 제출"
+          label="2. 거래명세서 제출"
           state={project.statementSubmitted ? 'done' : 'pending'}
-          onToggle={() => onUpdate({ statementSubmitted: !project.statementSubmitted })}
+          onToggle={notionLocked ? undefined : () => onUpdate({ statementSubmitted: !project.statementSubmitted })}
+          hint={notionLocked ? notionEditHint : undefined}
         />
-        <CheckRow label="고객사 세금계산서 발행" state={project.taxInvoiceIssued ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
-        <CheckRow label="고객사 수금" state={project.collectionCompleted ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
+        <CheckRow label="3. 고객사 세금계산서 발행" state={project.taxInvoiceIssued ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
+        <CheckRow label="4. 고객사 수금" state={project.collectionCompleted ? 'done' : 'pending'} hint="※ 매출 탭에서 설정" />
         <CheckRow
-          label="지급업체 매입세금계산서 발행"
+          label="5. 지급업체 매입세금계산서 발행"
           state={vendorState}
           detail={vendorRows.length > 0 ? `${vendorRows.filter((r) => r.vendorTaxInvoiceReceived).length}/${vendorRows.length}건` : '해당없음'}
           hint={
@@ -102,9 +104,9 @@ export function SettlementTab({ project, requests, onUpdate }:
         />
         {dueInfo && (
           <CheckRow
-            label="지급월 해당 여부"
+            label="6. 지급 기준월"
             state={dueInfo.isDueMonth ? 'done' : 'pending'}
-            detail={`지급기한 ${dueInfo.dueLabel}`}
+            detail={`지급기한 ${dueInfo.dueLabel} · 교육 일정 ${[project.startDate, project.endDate].filter(Boolean).map((d) => formatDate(d)).join(', ') || '-'}`}
           />
         )}
         <div className="pt-2">

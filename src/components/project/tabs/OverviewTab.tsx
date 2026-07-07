@@ -2,7 +2,7 @@ import type { Project, Instructor } from '../../../types';
 import { Field, Section } from './_shared';
 import { StatusBadge } from '../../common/StatusBadge';
 import { projectStatusStyle, priorityStyle } from '../../../utils/statusConfig';
-import { formatDateRange } from '../../../utils/formatters';
+import { formatDate, formatDateRange } from '../../../utils/formatters';
 import { ExternalLink } from 'lucide-react';
 
 export function OverviewTab({ project, instructors }: { project: Project; instructors: Instructor[] }) {
@@ -12,11 +12,10 @@ export function OverviewTab({ project, instructors }: { project: Project; instru
       <Section title="기본 정보">
         <Field label="프로젝트명">{project.projectName}</Field>
         <Field label="고객사">{project.clientName}</Field>
-        <Field label="과정명">{project.courseName}</Field>
-        <Field label="교육 주제">{project.topic}</Field>
-        <Field label="교육 내용">{project.description}</Field>
-        <Field label="교육 일정">{formatDateRange(project.startDate, project.endDate)}</Field>
-        <Field label="담당자">{project.managerName}</Field>
+        <Field label="제안 마감일">{project.proposalDueDate ? formatDate(project.proposalDueDate) : '-'}</Field>
+        {/* 교육일자(1차수)(2차수)는 각각의 일정이므로 '~' 기간이 아니라 ','로 병기 */}
+        <Field label="교육 일정">{[project.startDate, project.endDate].filter(Boolean).map((d) => formatDate(d)).join(', ') || '-'}</Field>
+        <Field label="업무 담당자">{project.managerName}</Field>
       </Section>
       <Section title="진행 / 배정">
         <Field label="프로젝트 상태"><StatusBadge label={project.projectStatus} style={projectStatusStyle[project.projectStatus]} /></Field>

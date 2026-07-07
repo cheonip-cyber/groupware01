@@ -60,20 +60,14 @@ export function RevenueTab({ project, onUpdate }:
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.vatType === '별도' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
               {project.vatType ?? '포함'}
             </span>
-            {project.notionPageId ? (
-              <span className="text-[11px] text-slate-400">
-                Notion 원천 항목 — {project.notionUrl
-                  ? <a href={project.notionUrl} target="_blank" rel="noreferrer" className="text-blue-600 underline">Notion에서 수정</a>
-                  : 'Notion에서 수정'}
-              </span>
-            ) : (
-              <button
-                onClick={() => onUpdate({ vatType: project.vatType === '별도' ? '포함' : '별도' })}
-                className="text-xs text-slate-400 underline hover:text-blue-600"
-              >
-                {project.vatType === '별도' ? '"포함"으로 변경' : '"별도"로 변경'}
-              </button>
-            )}
+            {/* 양방향 전환(그룹웨어 수정 → Notion 자동 반영) — 수정검토 지시 */}
+            <button
+              onClick={() => onUpdate({ vatType: project.vatType === '별도' ? '포함' : '별도' })}
+              className="text-xs text-slate-400 underline hover:text-blue-600"
+            >
+              {project.vatType === '별도' ? '"포함"으로 변경' : '"별도"로 변경'}
+            </button>
+            {project.notionPageId && <span className="text-[10px] text-slate-300">변경 시 Notion에도 반영</span>}
           </div>
         </Field>
         <Field label="공급가액 (VAT 제외)"><MoneyText value={project.supplyAmount} /></Field>
@@ -115,10 +109,6 @@ export function RevenueTab({ project, onUpdate }:
         <Field label="입금 메모">
           <InlineTextSave value={project.clientPaymentMemo ?? ''} placeholder="입금 지연 사유·특이사항 (구 그룹웨어 입금 메모)"
             onSave={(v) => onUpdate({ clientPaymentMemo: v })} />
-        </Field>
-        <Field label="대표거래처">
-          <InlineTextSave value={project.masterClientName ?? ''} placeholder="계열사 분산 발행 시 통계 집계용 대표거래처"
-            onSave={(v) => onUpdate({ masterClientName: v })} />
         </Field>
       </Section>
     </div>

@@ -38,8 +38,9 @@ export function PaymentsPage() {
   const [linkQuery, setLinkQuery] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const pendingAll = useMemo(() => paymentRequests.filter((r) => r.status === '지급대상' || r.status === '지급요청'), [paymentRequests]);
-  const doneAll = useMemo(() => paymentRequests.filter((r) => r.status === '지급완료'), [paymentRequests]);
+  const transferable = useMemo(() => paymentRequests.filter((r) => !r.isCardPayment && r.isPayable !== false), [paymentRequests]);
+  const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급대상' || r.status === '지급요청'), [transferable]);
+  const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
 
   // 탭별 기준일: 대기=지급예정일(dueDate), 완료=지급월(paidMonth)
   const baseOf = (r: PaymentRequest) => (tab === 'pending' ? r.dueDate ?? '' : r.paidMonth ?? '');
@@ -65,6 +66,8 @@ export function PaymentsPage() {
   }, [pendingAll, doneAll, tab]);
 
   const rows = useMemo(() => {
+    // 카드결제·비지급 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙)
+
     const src = tab === 'pending' ? pendingAll : doneAll;
     const q = search.trim().toLowerCase();
     const filtered = src.filter((r) => {

@@ -142,7 +142,7 @@ export function ProjectDetail() {
               <OverviewTab project={project} instructors={instructors} />
             </div>
           )}
-          {activeTab === '운영' && <OperationTab project={project} onTogglePrep={handleTogglePrep} />}
+          {activeTab === '운영' && <OperationTab project={project} onUpdate={handleUpdate} />}
           {activeTab === '매출' && <RevenueTab project={project} onUpdate={handleUpdate} />}
           {activeTab === '예산/비용' && (
             <BudgetTab

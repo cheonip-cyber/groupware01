@@ -134,6 +134,8 @@ export interface Project extends NotionSyncFields {
   trainerIds: string[];
   vendorIds: string[];
   prepItems: PrepItem[];
+  /** 준비 체크 상태 (그룹웨어 전용 저장, 노션 미연동) */
+  prepChecklist?: Record<string, boolean>;
   clientRequest?: string;
   internalMemo?: string;
 

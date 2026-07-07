@@ -271,16 +271,23 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
         {requests.length === 0 ? <EmptyState title="등록된 예산 항목이 없습니다" /> : (
           <table className="w-full text-sm">
             <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-              <th className="px-5 py-2.5 font-medium">항목</th>
+              <th className="px-4 py-2.5 font-medium">No.</th>
+              <th className="px-3 py-2.5 font-medium">항목</th>
               <th className="px-3 py-2.5 font-medium">지급대상</th>
               <th className="px-3 py-2.5 text-right font-medium">예산금액</th>
               <th className="px-3 py-2.5 font-medium">상태</th>
               <th className="px-3 py-2.5 font-medium">삭제</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-50">
-              {requests.map((r) => (
+              {requests.map((r, idx) => (
                 <tr key={r.id}>
-                  <td className="px-5 py-2.5 text-slate-600">{r.payeeType}</td>
+                  <td className="px-4 py-2.5 text-xs tabular-nums text-slate-400">{idx + 1}</td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {r.isCardPayment ? <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-600">카드</span> : r.payeeType}
+                    {(r.costType || r.detail) && (
+                      <span className="ml-1.5 text-[11px] text-slate-400">{[r.costType, r.detail].filter(Boolean).join(' · ')}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 font-medium text-slate-800">
                     {editId === r.id
                       ? <input value={editForm.payeeName} onChange={(e) => setEditForm((f) => ({ ...f, payeeName: e.target.value }))}
@@ -293,7 +300,11 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
                           className="w-28 rounded border border-blue-200 px-2 py-1 text-right text-sm outline-none focus:border-blue-400" />
                       : <MoneyText value={r.amount} />}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{r.status}</td>
+                  <td className="px-3 py-2.5 text-xs text-slate-500">
+                    {r.status === '지급완료' && r.paidMonth
+                      ? <span className="font-medium text-emerald-600">{r.paidMonth} 지급</span>
+                      : r.status}
+                  </td>
                   <td className="px-3 py-2.5">
                     {editId === r.id ? (
                       <span className="flex gap-1.5">
