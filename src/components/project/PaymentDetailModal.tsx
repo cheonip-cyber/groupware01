@@ -33,7 +33,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [schedule, setSchedule] = useState(r.scheduledMonth ?? new Date().toISOString().slice(0, 7));
   const [confirmed, setConfirmed] = useState(!!r.infoConfirmed);
   const [query, setQuery] = useState('');
-  const [pendingPayee, setPendingPayee] = useState<{ id: string; label: string; sub: string } | null>(null);
+  const [pendingPayee, setPendingPayee] = useState<{ id: string; label: string; sub: string; kind: 'instructor' | 'company' } | null>(null);
   const [bank, setBank] = useState('');
   const [account, setAccount] = useState('');
   const [editAcct, setEditAcct] = useState(false);
@@ -42,25 +42,29 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
 
   const w = calcWithholdingFor({ payeeType: r.payeeType, amount: r.amount, taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident });
 
-  // 검색: 강사/업체명 + 업체 대표자명 모두 매칭
+  // 검색: 강사·업체를 유형 구분 없이 통합 검색 (업체 대표자명 포함) — 다른 유형 결과를 선택하면 지급유형도 함께 전환
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 1) return [];
-    const list: { id: string; label: string; sub: string }[] = [];
-    if (isPerson) {
-      for (const i of instructors) if (i.name.toLowerCase().includes(q)) list.push({ id: String(i.id), label: i.name, sub: i.specialty ?? '강사' });
-    } else {
-      for (const c of companies) if (c.companyName.toLowerCase().includes(q) || (c.ceoName ?? '').toLowerCase().includes(q)) list.push({ id: String(c.id), label: c.companyName, sub: c.ceoName ? `대표 ${c.ceoName}` : '업체' });
-    }
-    return list.slice(0, 6);
+    const instr = instructors
+      .filter((i) => i.name.toLowerCase().includes(q))
+      .map((i) => ({ kind: 'instructor' as const, id: String(i.id), label: i.name, sub: i.specialty ?? '강사' }));
+    const comp = companies
+      .filter((c) => c.companyName.toLowerCase().includes(q) || (c.ceoName ?? '').toLowerCase().includes(q))
+      .map((c) => ({ kind: 'company' as const, id: String(c.id), label: c.companyName, sub: c.ceoName ? `대표 ${c.ceoName}` : '업체' }));
+    const ordered = isPerson ? [...instr, ...comp] : [...comp, ...instr];
+    return ordered.slice(0, 8);
   }, [query, isPerson, instructors, companies]);
+
+  // 재검색으로 다른 유형을 선택한 경우, 화면 표시도 그 유형 기준으로 전환
+  const effectiveIsPerson = pendingPayee ? pendingPayee.kind === 'instructor' : isPerson;
 
   // 실제 화면에 표시할 지급처 정보: 재검색으로 임시 선택한 대상이 있으면 그걸 우선 표시(저장 전 미리보기)
   const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: isPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
   const linked = !!displayPayee;
 
   const buildPatch = (extra: Partial<PaymentRequest> = {}): Partial<PaymentRequest> => ({
-    ...(pendingPayee ? { payeeId: pendingPayee.id, payeeName: pendingPayee.label } : {}),
+    ...(pendingPayee ? { payeeId: pendingPayee.id, payeeName: pendingPayee.label, payeeType: pendingPayee.kind === 'instructor' ? '강사' : '업체' } : {}),
     taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident,
     scheduledMonth: schedule,
     ...extra,
@@ -132,8 +136,8 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
               </span>
             )}
           </Row>
-          {isPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
-          {isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
+          {effectiveIsPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
+          {!effectiveIsPerson && isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
           {r.memo && <Row label="비고">{r.memo}</Row>}
         </div>
 
@@ -143,22 +147,25 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-300" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} autoComplete="off"
-                placeholder={`${isPerson ? '강사' : '업체'} 재검색 (대상이 잘못된 경우 다시 연결)`}
+                placeholder="강사·업체·대표자명 통합 검색 (대상이 잘못된 경우 다시 연결)"
                 className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-xs outline-none focus:border-blue-400" />
             </div>
             {searchResults.length > 0 && (
               <div className="mt-1 space-y-1 rounded-lg border border-blue-100 bg-blue-50/50 p-1.5">
                 {searchResults.map((it) => (
-                  <button key={it.id} onClick={() => { setPendingPayee(it); setQuery(''); }}
-                    className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:border-blue-400">
-                    <span>{it.label}</span><span className="text-slate-400">{it.sub}</span>
+                  <button key={`${it.kind}-${it.id}`} onClick={() => { setPendingPayee(it); setQuery(''); }}
+                    className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:border-blue-400">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${it.kind === 'instructor' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
+                      {it.kind === 'instructor' ? '강사' : '업체'}
+                    </span>
+                    <span className="flex-1 truncate">{it.label}</span><span className="text-slate-400">{it.sub}</span>
                   </button>
                 ))}
               </div>
             )}
             {pendingPayee && (
               <div className="mt-1.5 flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs">
-                <span><span className="font-semibold text-emerald-700">{pendingPayee.label}</span> <span className="text-emerald-600">{pendingPayee.sub}</span> 선택됨 — 저장을 눌러 반영</span>
+                <span><span className="font-semibold text-emerald-700">{pendingPayee.label}</span> <span className="text-emerald-600">({pendingPayee.kind === 'instructor' ? '강사' : '업체'} · {pendingPayee.sub})</span> 선택됨 — 저장을 눌러 반영</span>
                 <button onClick={() => setPendingPayee(null)} className="text-slate-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
               </div>
             )}
@@ -166,7 +173,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
         )}
 
         {/* 세금 계산 (강사만) */}
-        {isPerson && (
+        {effectiveIsPerson && (
           <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-bold text-blue-900">세금 계산</p>
