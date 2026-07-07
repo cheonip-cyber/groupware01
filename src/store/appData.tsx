@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { Project, Instructor, Client, PaymentRequest, Company } from '../types';
 import { projectService } from '../services/projectService';
 import { paymentService } from '../services/paymentService';
@@ -36,6 +36,8 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // 전역 기간 컨텍스트: 대시보드·리포트·목록이 동일 연도를 공유 (화면 이동 시 초기화 방지)
   const [globalYear, setGlobalYear] = useState<string>(String(new Date().getFullYear()));
   const [projects, setProjects] = useState<Project[]>([]);
+  const projectsRef = useRef<Project[]>([]);
+  useEffect(() => { projectsRef.current = projects; }, [projects]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -64,12 +66,21 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   const updateProject = useCallback(async (id: string, patch: Partial<Project>) => {
-    const updated = await projectService.update(id, patch);
-    // 단건 응답에는 그룹 파생 통계(effectiveAmount 등)가 없어 일시적 이중계상이 생기므로,
-    // 비용 추가와 동일하게 전체 재조회로 그룹/유효매출 일관성을 유지한다.
-    if (updated) {
-      const p = await projectService.list();
-      setProjects(p);
+    // 낙관적 업데이트: 체크박스·토글 등은 클릭 즉시 화면에 반영하고,
+    // 서버 저장·재조회는 뒤에서 진행한다. 실패 시에만 이전 상태로 되돌린다.
+    const snapshot = projectsRef.current;
+    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+    try {
+      const updated = await projectService.update(id, patch);
+      // 단건 응답에는 그룹 파생 통계(effectiveAmount 등)가 없어 일시적 이중계상이 생기므로,
+      // 비용 추가와 동일하게 전체 재조회로 그룹/유효매출 일관성을 맞춘다 (조용히 뒤에서 진행).
+      if (updated) {
+        const p = await projectService.list();
+        setProjects(p);
+      }
+    } catch (e) {
+      setProjects(snapshot); // 실패 시 원복
+      throw e;
     }
   }, []);
 

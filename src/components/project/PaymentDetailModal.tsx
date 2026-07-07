@@ -5,6 +5,8 @@ import { dataSource } from '../../services/dataSource';
 import { MoneyText } from '../common/MoneyText';
 import { calcWithholdingFor, maskResidentNumber } from '../../utils/withholding';
 import { useEscClose } from '../../hooks/useEscClose';
+import { MonthPicker } from '../common/MonthPicker';
+import { useToast } from '../common/toast';
 import { CheckCircle2, Search, X } from 'lucide-react';
 
 // 지급 상세 정보 (구 그룹웨어 '3. 지급 상세 정보' 이식):
@@ -26,7 +28,9 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [taxMode, setTaxMode] = useState(r.taxMode ?? 'rate33');
   const [mIncome, setMIncome] = useState(r.manualIncomeTax ?? 0);
   const [mResident, setMResident] = useState(r.manualResidentTax ?? 0);
-  const [schedule, setSchedule] = useState(r.scheduledMonth ?? '');
+  const [schedule, setSchedule] = useState(r.scheduledMonth ?? new Date().toISOString().slice(0, 7));
+  const toast = useToast();
+  const [justRequested, setJustRequested] = useState(false);
   const [query, setQuery] = useState('');
   const [bank, setBank] = useState('');
   const [account, setAccount] = useState('');
@@ -42,7 +46,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     if (isPerson) {
       for (const i of instructors) if (i.name.toLowerCase().includes(q)) list.push({ id: String(i.id), label: i.name, sub: i.specialty ?? '강사' });
     } else {
-      for (const c of companies) if (c.companyName.toLowerCase().includes(q)) list.push({ id: String(c.id), label: c.companyName, sub: c.ceoName ? `대표 ${c.ceoName}` : '업체' });
+      for (const c of companies) if (c.companyName.toLowerCase().includes(q) || (c.ceoName ?? '').toLowerCase().includes(q)) list.push({ id: String(c.id), label: c.companyName, sub: c.ceoName ? `대표 ${c.ceoName}` : '업체' });
     }
     return list.slice(0, 6);
   }, [query, isPerson, instructors, companies]);
@@ -50,7 +54,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const saveDetail = (extra: Partial<PaymentRequest> = {}) => {
     onUpdateRequest(r.id, {
       taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident,
-      ...(schedule ? { scheduledMonth: schedule } : {}),
+      scheduledMonth: schedule,
       ...extra,
     });
   };
@@ -169,21 +173,27 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
         {/* 지급 예정 (예약월 — 말일 일괄 배치) */}
         <div className="mb-5 flex items-center justify-between">
           <label className="text-xs font-bold text-slate-600">지급 예정월 (말일 배치)</label>
-          <input type="month" value={schedule} onChange={(e) => setSchedule(e.target.value)}
-            className="rounded-lg border border-slate-200 px-2 py-1 text-xs outline-none" />
+          <MonthPicker value={schedule} onChange={setSchedule} />
         </div>
 
         <div className="flex gap-2">
-          {r.status === '지급요청' && (
+          {r.status === '지급요청' && !justRequested && (
             <button onClick={() => { saveDetail({ status: '지급대상', infoConfirmed: false }); onClose(); }}
               className="flex-1 rounded-xl bg-red-50 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100">요청 취소</button>
           )}
-          {r.status === '지급대상' ? (
-            <button onClick={() => { if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; } saveDetail({ status: '지급요청', infoConfirmed: true }); onClose(); }}
-              className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800">확인완료 (지급요청)</button>
+          {r.status === '지급완료' ? (
+            <button disabled className="flex-[2] cursor-default rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-400">지급완료됨</button>
           ) : (
-            <button onClick={() => { saveDetail(); onClose(); }}
-              className="flex-[2] rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700">변경사항 저장</button>
+            <button onClick={() => {
+              if (r.status === '지급대상' && !linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
+              saveDetail({ status: '지급요청', infoConfirmed: true });
+              setJustRequested(true);
+              toast.success('지급요청 완료');
+              setTimeout(onClose, 600);
+            }}
+              className="flex-[2] rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" disabled={justRequested}>
+              {justRequested ? '지급요청 완료' : '지급요청'}
+            </button>
           )}
         </div>
       </div>

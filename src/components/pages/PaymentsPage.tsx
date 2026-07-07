@@ -10,6 +10,8 @@ import { paymentStatusStyle } from '../../utils/statusConfig';
 import { formatDate, formatCompactKRW } from '../../utils/formatters';
 import { calcWithholdingFor, calcWithholding, maskResidentNumber } from '../../utils/withholding';
 import { Search, X, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
+import { MonthPicker } from '../common/MonthPicker';
+import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
 import type { PaymentRequest } from '../../types';
@@ -219,9 +221,25 @@ export function PaymentsPage() {
 
       {/* 탭 / 필터 / 다운로드 */}
       <Card className="p-4">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {tabBtn('pending', '지급 대기', pendingAll.length)}
+            {tabBtn('done', '지급 완료', doneAll.length)}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => {
+                const pw = prompt('주민등록번호가 포함된 자료입니다. 다운로드 비밀번호를 입력하세요.');
+                if (pw !== '0511') { if (pw !== null) alert('비밀번호가 올바르지 않습니다.'); return; }
+                downloadBusinessIncomeSheet(doneAll.filter((r) => r.paidMonth === nowMonth), nowMonth);
+              }}
+              title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
+              className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
+            <button onClick={() => downloadTransferSheet(pendingAll.filter((r) => r.status === '지급요청'), nowMonth)}
+              title="지급요청 상태 전체 자금이체 양식 다운로드"
+              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">자금이체</button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
-          {tabBtn('pending', '지급 대기', pendingAll.length)}
-          {tabBtn('done', '지급 완료', doneAll.length)}
           <div className="relative min-w-[180px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="지급처·프로젝트 검색"
@@ -341,11 +359,10 @@ export function PaymentsPage() {
                       <td className="px-3 py-3 text-right font-semibold text-slate-800"><MoneyText value={netOf(r)} /></td>
                       <td className={`px-3 py-3 ${overdue ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
                         {tab === 'pending'
-                          ? <span onClick={(e) => e.stopPropagation()}>
-                              <input type="month" value={r.scheduledMonth ?? ''} title="지급월 즉시 변경 (말일 배치)"
-                                onChange={(e) => e.target.value && updatePaymentRequest(r.id, { scheduledMonth: e.target.value })}
-                                className={`w-[7.2rem] rounded border bg-transparent px-1 py-0.5 text-xs outline-none ${overdue ? 'border-red-200 font-semibold text-red-600' : r.scheduledMonth ? 'border-transparent hover:border-slate-200' : 'border-amber-200 text-amber-600'}`} />
-                              {overdue && <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
+                          ? <span onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                              <MonthPicker value={r.scheduledMonth ?? nowMonth} onChange={(ym) => updatePaymentRequest(r.id, { scheduledMonth: ym })}
+                                className={`rounded border bg-transparent px-1.5 py-0.5 text-xs ${overdue ? 'border-red-200 font-semibold text-red-600' : r.scheduledMonth ? 'border-transparent hover:border-slate-200' : 'border-amber-200 text-amber-600'}`} />
+                              {overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
                             </span>
                           : (r.paidMonth ?? '-')}
                       </td>
@@ -357,10 +374,8 @@ export function PaymentsPage() {
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {r.status === '지급대상' && (
                           <span className="flex items-center gap-1.5">
-                            <input type="month" value={reqMonth[r.id] ?? nextMonth}
-                              onChange={(e) => setReqMonth((s) => ({ ...s, [r.id]: e.target.value }))}
-                              title="지급월 선택 — 해당 월 말일 일괄 지급 배치에 포함 (예정일 자동 설정)"
-                              className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs text-slate-600 outline-none focus:border-blue-400" />
+                            <MonthPicker value={reqMonth[r.id] ?? nextMonth} onChange={(ym) => setReqMonth((s) => ({ ...s, [r.id]: ym }))}
+                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-blue-400" />
                             <button onClick={() => updatePaymentRequest(r.id, { status: '지급요청', scheduledMonth: reqMonth[r.id] ?? nextMonth })}
                               disabled={!requestable(r)} title={gateHint(r) || '선택한 지급월 말일 배치로 지급요청 생성'}
                               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">지급요청</button>
@@ -368,14 +383,10 @@ export function PaymentsPage() {
                         )}
                         {r.status === '지급요청' && (
                           <span className="flex items-center gap-1.5">
-                            <input type="month" value={r.scheduledMonth ?? ''} placeholder="예약월"
-                              onChange={(e) => updatePaymentRequest(r.id, { scheduledMonth: e.target.value || undefined })}
-                              title="지급 예약월 변경 (말일 배치 기준)"
-                              className="rounded-lg border border-violet-200 bg-violet-50/50 px-1.5 py-1 text-xs text-violet-700 outline-none focus:border-violet-400" />
-                            <input type="month" value={payMonth[r.id] ?? nowMonth} max={nowMonth}
-                              onChange={(e) => setPayMonth((s) => ({ ...s, [r.id]: e.target.value }))}
-                              title="지급월 (소급 처리 시 변경)"
-                              className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs text-slate-600 outline-none focus:border-blue-400" />
+                            <MonthPicker value={r.scheduledMonth ?? nowMonth} onChange={(ym) => updatePaymentRequest(r.id, { scheduledMonth: ym })}
+                              className="rounded-lg border border-violet-200 bg-violet-50/50 px-2 py-1 text-xs text-violet-700 hover:border-violet-400" />
+                            <MonthPicker value={payMonth[r.id] ?? nowMonth} onChange={(ym) => setPayMonth((s) => ({ ...s, [r.id]: ym }))}
+                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-blue-400" />
                             <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
                               className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료</button>
                           </span>

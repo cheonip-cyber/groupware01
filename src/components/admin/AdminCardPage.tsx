@@ -105,9 +105,12 @@ export function AdminCardPage() {
 
   const toggleProjectLinked = async (t: any) => {
     const next = !t.project_linked;
+    setCardTxns((prev) => prev.map((x) => (x.id === t.id ? { ...x, project_linked: next } : x))); // 낙관적 반영
     const { error: err } = await cardSupabase.from('card_transactions').update({ project_linked: next }).eq('id', t.id);
-    if (err) { toast.error(`변경 실패: ${err.message}`); return; }
-    setCardTxns((prev) => prev.map((x) => (x.id === t.id ? { ...x, project_linked: next } : x)));
+    if (err) {
+      setCardTxns((prev) => prev.map((x) => (x.id === t.id ? { ...x, project_linked: !next } : x))); // 실패 시 원복
+      toast.error(`변경 실패: ${err.message}`); return;
+    }
     toast.success(next ? '프로젝트 귀속으로 표시 — 회사비용 합계에서 제외됩니다' : '일반 비용으로 변경되었습니다');
   };
 

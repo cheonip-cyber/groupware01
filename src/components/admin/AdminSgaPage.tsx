@@ -116,9 +116,13 @@ export function AdminSgaPage() {
 
   const toggleStatus = async (r: ManualExpense) => {
     const next = r.status === 'paid' ? 'pending' : 'paid';
+    const prevStatus = r.status;
+    setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x))); // 낙관적 반영
     const { error: err } = await cardSupabase.from('manual_expenses').update({ status: next }).eq('id', r.id);
-    if (err) { toast.error(`상태 변경 실패: ${err.message}`); return; }
-    setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: next } : x)));
+    if (err) {
+      setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: prevStatus } : x))); // 실패 시 원복
+      toast.error(`상태 변경 실패: ${err.message}`);
+    }
   };
 
   if (loading) return <PageSkeleton />;
