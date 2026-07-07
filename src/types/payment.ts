@@ -34,6 +34,8 @@ export interface PaymentRequest {
   vendorTaxInvoiceDate?: string;
   /** 지급완료 시 기록되는 지급월(YYYY-MM). 소급 처리를 위해 사용자가 선택 가능 */
   paidMonth?: string;
+  /** 지급요청(예산 항목) 생성월 — 예약월이 비어있을 때 지급 예정월 기본값으로 사용 */
+  createdMonth?: string;
   // 지급 상세 확인·이체양식 다운로드용 (강사/업체 DB에서 조인)
   payeeId?: string;
   bankName?: string;

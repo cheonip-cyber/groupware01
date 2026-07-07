@@ -487,6 +487,7 @@ class SupabaseDataSource implements DataSource {
         vendorTaxInvoiceReceived: !!r.vendor_tax_invoice_received,
         vendorTaxInvoiceDate: r.vendor_tax_invoice_date ?? undefined,
         paidMonth: r.paid_month ?? undefined,
+        createdMonth: r.created_at ? String(r.created_at).slice(0, 7) : undefined,
       } as PaymentRequest;
     });
   }

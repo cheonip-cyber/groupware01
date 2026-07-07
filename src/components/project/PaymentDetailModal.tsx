@@ -30,7 +30,12 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [taxMode, setTaxMode] = useState(r.taxMode ?? 'rate33');
   const [mIncome, setMIncome] = useState(r.manualIncomeTax ?? 0);
   const [mResident, setMResident] = useState(r.manualResidentTax ?? 0);
-  const [schedule, setSchedule] = useState(r.scheduledMonth ?? new Date().toISOString().slice(0, 7));
+  // 지급 예정월 초기값: 지급완료 건은 실제 지급된 월, 미지급 건은 예약월 > 지급요청 생성월 > 현재월 순
+  const [schedule, setSchedule] = useState(
+    r.status === '지급완료'
+      ? (r.paidMonth ?? r.scheduledMonth ?? new Date().toISOString().slice(0, 7))
+      : (r.scheduledMonth ?? r.createdMonth ?? new Date().toISOString().slice(0, 7))
+  );
   const [confirmed, setConfirmed] = useState(!!r.infoConfirmed);
   const [query, setQuery] = useState('');
   const [pendingPayee, setPendingPayee] = useState<{ id: string; label: string; sub: string; kind: 'instructor' | 'company' } | null>(null);
@@ -205,8 +210,10 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
 
         {/* 지급 예정월 */}
         <div className="mb-4 flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-600">지급 예정월 (말일 배치)</label>
-          <MonthPicker value={schedule} onChange={setSchedule} />
+          <label className="text-xs font-bold text-slate-600">{r.status === '지급완료' ? '지급월' : '지급 예정월 (말일 배치)'}</label>
+          {r.status === '지급완료'
+            ? <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700">{Number(schedule.slice(5, 7))}월 지급</span>
+            : <MonthPicker value={schedule} onChange={setSchedule} />}
         </div>
 
         {r.status !== '지급완료' && (
