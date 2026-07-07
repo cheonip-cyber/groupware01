@@ -34,6 +34,7 @@ function Row({ p, no, matched, onOpenGroup }: {
         <div className="flex items-center gap-1.5">
           <div>
             <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
+            {p.notionMissing && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600" title="노션에서 원본이 삭제되었습니다">⚠ 노션삭제</span>}
             {isGroupMaster && p.groupType && (
               <button onClick={onOpenGroup}
                 title="그룹 구성 보기 (회차/분배 내역 패널)"

@@ -20,6 +20,7 @@ interface AppDataValue {
   updatePaymentRequest: (id: string, patch: Partial<PaymentRequest>) => Promise<void>;
   addProjectCost: (projectId: string, input: NewProjectCostInput) => Promise<void>;
   updateProjectCost: (costId: string, patch: { payeeName?: string; budgetAmount?: number; detail?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }) => Promise<void>;
+  recoverNotionLink: (id: string) => Promise<void>;
   deleteProjectCost: (id: string) => Promise<void>;
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<void>;
   updateInstructor: (id: string, patch: Partial<Instructor>) => Promise<void>;
@@ -128,6 +129,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProjects(p); setPaymentRequests(pr);
   }, []);
 
+  const recoverNotionLink = useCallback(async (id: string) => {
+    await dataSource.recoverNotionLink(id);
+    const p = await projectService.list();
+    setProjects(p);
+  }, []);
+
   const addProjectCost = useCallback(async (projectId: string, input: NewProjectCostInput) => {
     await dataSource.addProjectCost(projectId, input);
     const [p, pr] = await Promise.all([projectService.list(), paymentService.list()]);
@@ -175,7 +182,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <Ctx.Provider value={{
       loading, projects, instructors, companies, clients, paymentRequests,
-      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost,
+      refresh, updateProject, createProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink,
       addInstructor, updateInstructor, deleteInstructor, addCompany, updateCompany, deleteCompany,
       globalYear, setGlobalYear,
     }}>

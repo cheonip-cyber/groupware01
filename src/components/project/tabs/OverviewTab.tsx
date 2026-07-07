@@ -3,12 +3,34 @@ import { Field, Section } from './_shared';
 import { StatusBadge } from '../../common/StatusBadge';
 import { projectStatusStyle, priorityStyle } from '../../../utils/statusConfig';
 import { formatDate, formatDateRange } from '../../../utils/formatters';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 
-export function OverviewTab({ project, instructors }: { project: Project; instructors: Instructor[] }) {
+export function OverviewTab({ project, instructors, onRecover }: { project: Project; instructors: Instructor[]; onRecover: () => Promise<void> }) {
   const trainers = instructors.filter((i) => project.trainerIds.includes(i.id));
+  const [recovering, setRecovering] = useState(false);
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="space-y-4">
+      {project.notionMissing && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+          <div className="flex-1 text-sm">
+            <p className="font-bold text-red-700">⚠ 노션에서 원본이 삭제되었습니다</p>
+            <p className="mt-0.5 text-xs text-red-500">
+              연결된 노션 페이지를 찾을 수 없습니다. "복구하기"를 누르면 현재 그룹웨어 데이터로 노션에 새 페이지가 생성됩니다
+              (기존 페이지가 되살아나는 것은 아니며, 노션에서만 따로 남겼던 댓글·하위 내용은 복원되지 않습니다).
+            </p>
+          </div>
+          <button
+            onClick={async () => { setRecovering(true); try { await onRecover(); } finally { setRecovering(false); } }}
+            disabled={recovering}
+            className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {recovering ? '복구 중…' : '복구하기'}
+          </button>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="기본 정보">
         <Field label="프로젝트명">{project.projectName}</Field>
         <Field label="고객사">{project.clientName}</Field>
@@ -37,6 +59,7 @@ export function OverviewTab({ project, instructors }: { project: Project; instru
           ) : project.syncStatus === 'synced' ? '동기화됨' : project.notionPageId ? project.syncStatus : '해당 없음'}
         </Field>
       </Section>
+    </div>
     </div>
   );
 }

@@ -140,6 +140,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     updatedAt: row.updated_at ?? new Date().toISOString(),
 
     notionPageId: row.notion_page_id ?? undefined,
+    notionMissing: !!row.notion_missing,
     dbStatus: row.status ?? undefined,
     finalEstimate: row.final_estimate != null ? Number(row.final_estimate) : undefined,
     sourceType: row.source_type ?? undefined,
@@ -549,6 +550,19 @@ class SupabaseDataSource implements DataSource {
   }
 
   // 예산항목 수정 (기존: 추가/삭제만 가능 — 오타·금액 정정 시 삭제 후 재입력해야 했던 불편 해소)
+  async recoverNotionLink(id: string): Promise<void> {
+    // 노션 원본이 삭제된 경우 복구: 기존 연결을 끊고 현재 그룹웨어 데이터로 노션에 새 페이지를 재생성한다
+    // (원래 페이지가 되살아나는 것이 아니라, 현재 데이터 기준의 새 페이지가 만들어진다)
+    const { error: updErr } = await supabase.from('projects').update({
+      notion_page_id: null, notion_missing: false, notion_missing_checked_at: new Date().toISOString(),
+    }).eq('id', Number(id));
+    if (updErr) throw updErr;
+    const { error: qErr } = await supabase.from('notion_push_queue').insert({
+      entity_type: 'project', entity_id: Number(id), status: 'pending',
+    });
+    if (qErr) throw qErr;
+  }
+
   async updateProjectCost(costId: string, patch: {
     payeeName?: string; budgetAmount?: number; detail?: string;
     payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null;
