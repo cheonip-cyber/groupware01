@@ -25,7 +25,7 @@ export function PaymentsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
 
-  const [tab, setTab] = useState<'pending' | 'done'>('pending');
+  const [tab, setTab] = useState<'pending' | 'done' | 'target'>('pending');
   const [search, setSearch] = useState('');
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');
@@ -43,9 +43,29 @@ export function PaymentsPage() {
   // 지급관리에는 '지급요청'된 항목만 표시 — 요청 전 건은 각 프로젝트의 지급 탭에서 검토·요청한다 (혼재로 복잡해 보이던 문제 해소)
   const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급요청'), [transferable]);
   const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
+  // 지급대상(미요청) 전체 — 아직 요청 전 상태
+  const targetAllRaw = useMemo(() => transferable.filter((r) => r.status === '지급대상'), [transferable]);
 
-  // 탭별 기준일: 대기=지급예정일(dueDate), 완료=지급월(paidMonth)
-  const baseOf = (r: PaymentRequest) => (tab === 'pending' ? r.dueDate ?? '' : r.paidMonth ?? '');
+  // 지급대상 대시보드: 기준1(교육일정이 이번 달 이하 = 이미 지났거나 이번 달) 또는
+  // 기준2(교육일정 미확인 시, 같은 프로젝트의 지급대상 중 50% 이상이 이미 지급완료 — 누락 의심)로 필터링
+  const projectDoneRatio = useMemo(() => {
+    const byProject = new Map<string, { total: number; done: number }>();
+    for (const r of transferable) {
+      const cur = byProject.get(r.projectId) ?? { total: 0, done: 0 };
+      cur.total += 1;
+      if (r.status === '지급완료') cur.done += 1;
+      byProject.set(r.projectId, cur);
+    }
+    return byProject;
+  }, [transferable]);
+  const targetAll = useMemo(() => targetAllRaw.filter((r) => {
+    if (r.projectStartDate) return r.projectStartDate.slice(0, 7) <= nowMonth; // 기준1
+    const stat = projectDoneRatio.get(r.projectId);
+    return !!stat && stat.total > 0 && stat.done / stat.total >= 0.5; // 기준2 (교육일정 미확인 시)
+  }), [targetAllRaw, nowMonth, projectDoneRatio]);
+
+  // 탭별 기준일: 대기=지급예정일(dueDate), 완료=지급월(paidMonth), 대상=교육일정(projectStartDate)
+  const baseOf = (r: PaymentRequest) => (tab === 'pending' ? r.dueDate ?? '' : tab === 'done' ? r.paidMonth ?? '' : r.projectStartDate ?? '');
 
   // 완료 탭 진입 시 데이터가 있는 최근 연도 자동 선택 (구 시스템 개선 이력 이식)
   useEffect(() => {
@@ -61,15 +81,15 @@ export function PaymentsPage() {
   }, [tab]);
 
   const years = useMemo(() => {
-    const src = tab === 'pending' ? pendingAll : doneAll;
+    const src = tab === 'pending' ? pendingAll : tab === 'done' ? doneAll : targetAll;
     return [...new Set(src.map((r) => baseOf(r).slice(0, 4)).filter(Boolean))].sort().reverse();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAll, doneAll, tab]);
+  }, [pendingAll, doneAll, targetAll, tab]);
 
   const rows = useMemo(() => {
     // 카드결제·비지급 항목은 이체 대상이 아니므로 지급관리에서 제외 (구 그룹웨어 규칙)
 
-    const src = tab === 'pending' ? pendingAll : doneAll;
+    const src = tab === 'pending' ? pendingAll : tab === 'done' ? doneAll : targetAll;
     const q = search.trim().toLowerCase();
     const filtered = src.filter((r) => {
       const base = baseOf(r);
@@ -86,7 +106,7 @@ export function PaymentsPage() {
       || typeOrder(a.payeeType) - typeOrder(b.payeeType)
       || a.payeeName.localeCompare(b.payeeName, 'ko'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAll, doneAll, tab, search, year, month, typeFilter]);
+  }, [pendingAll, doneAll, targetAll, tab, search, year, month, typeFilter]);
 
   // 요약 카운터 (구 시스템 '미요청 N건' 배지 이식)
   // 카운터는 '전체'가 아니라 현재 연/월 필터 기준 (구 그룹웨어 개발 시 확정된 원칙: 통계 카드는 선택 기간 기준)
@@ -115,7 +135,9 @@ export function PaymentsPage() {
   // 월별 분리 표시 (구 그룹웨어 UX): 현재월 섹션이 최상단, 이후 미래월(가까운순)→과거월(최근순)→미지정
   const monthGroups = useMemo(() => {
     const keyOf = (r: PaymentRequest) => {
-      const base = tab === 'pending' ? (r.scheduledMonth || (r.dueDate ?? '').slice(0, 7)) : (r.paidMonth ?? '');
+      const base = tab === 'pending' ? (r.scheduledMonth || (r.dueDate ?? '').slice(0, 7))
+        : tab === 'done' ? (r.paidMonth ?? '')
+        : (r.projectStartDate ?? '').slice(0, 7);
       return base && base.length >= 7 ? base.slice(0, 7) : '';
     };
     const map = new Map<string, PaymentRequest[]>();
@@ -173,7 +195,7 @@ export function PaymentsPage() {
     (r) => updatePaymentRequest(r.id, { status: '지급요청' }),
     `선택한 ${selectedRows.length}건의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`);
 
-  const tabBtn = (t: 'pending' | 'done', label: string, count: number) => (
+  const tabBtn = (t: 'pending' | 'done' | 'target', label: string, count: number) => (
     <button onClick={() => setTab(t)}
       className={`rounded-lg px-3.5 py-2 text-sm font-semibold ${tab === t ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
       {label} <span className="ml-1 text-xs font-normal opacity-70">{count}</span>
@@ -184,10 +206,12 @@ export function PaymentsPage() {
     <div className="space-y-4">
       {/* 요약 카운터 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3" title="요청 전 항목은 각 프로젝트의 지급 탭에서 검토 후 지급요청하세요">
-          <p className="text-xs text-amber-600">미요청 (프로젝트에서 요청)</p>
-          <p className="text-xl font-bold text-amber-700">{counters.unrequested}건</p>
-        </div>
+        <button onClick={() => setTab('target')}
+          className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-left hover:border-amber-300" title="교육일정이 이번 달 이하이거나, 같은 프로젝트 지급대상의 50% 이상이 이미 지급완료된 건(누락 의심) — 클릭 시 지급대상 탭으로 이동">
+          <p className="text-xs text-amber-600">지급대상 (검토 필요)</p>
+          <p className="text-xl font-bold text-amber-700">{targetAll.length}건</p>
+          <p className="text-[10px] text-amber-500">전체 미요청 {counters.unrequested}건 중</p>
+        </button>
         <button onClick={() => setTab('pending')}
           className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-left hover:border-blue-300">
           <p className="text-xs text-blue-600">요청됨 (이체 대기)</p>
@@ -203,7 +227,7 @@ export function PaymentsPage() {
           <p className="text-xl font-bold text-emerald-700">{counters.doneThisMonth}건</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-3" title="현재 탭·필터에 조회된 건들의 실지급액 합계 (강사 3.3% 공제 후)">
-          <p className="text-xs text-slate-500">{tab === 'pending' ? '조회 결과 지급 예정액' : '조회 결과 지급액'}</p>
+          <p className="text-xs text-slate-500">{tab === 'pending' ? '조회 결과 지급 예정액' : tab === 'done' ? '조회 결과 지급액' : '조회 결과 검토 필요액'}</p>
           <p className="text-xl font-bold text-slate-800">{formatCompactKRW(visibleNetTotal)}</p>
           <p className="text-[10px] text-slate-400">{visibleNetTotal.toLocaleString('ko-KR')}원 · {rows.length}건</p>
         </div>
@@ -215,6 +239,7 @@ export function PaymentsPage() {
           <div className="flex items-center gap-2">
             {tabBtn('pending', '지급 대기', pendingAll.length)}
             {tabBtn('done', '지급 완료', doneAll.length)}
+            {tabBtn('target', '지급대상', targetAll.length)}
           </div>
           <div className="flex items-center gap-1.5">
             <button onClick={() => {
@@ -236,7 +261,7 @@ export function PaymentsPage() {
               className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white" />
           </div>
           <select value={year} onChange={(e) => setYear(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
-            <option value="전체">{tab === 'pending' ? '예정 연도 전체' : '지급 연도 전체'}</option>
+            <option value="전체">{tab === 'pending' ? '예정 연도 전체' : tab === 'done' ? '지급 연도 전체' : '교육일정 연도 전체'}</option>
             {years.map((y) => <option key={y} value={y}>{y}년</option>)}
           </select>
           <select value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-sm outline-none">
@@ -289,7 +314,7 @@ export function PaymentsPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="w-8 px-3 py-2.5">
-                  {selectableIds.length > 0 && (
+                  {tab !== 'target' && selectableIds.length > 0 && (
                     <input type="checkbox" checked={selected.size > 0 && selected.size >= selectableIds.length} onChange={toggleAll} className="h-4 w-4" title="전체 선택" />
                   )}
                 </th>
@@ -302,7 +327,7 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
                 <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
-                <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : '지급월'}</th>
+                <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : tab === 'done' ? '지급월' : '교육일정'}</th>
                 <th className="px-3 py-2.5 font-medium">상태</th>
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
@@ -315,8 +340,10 @@ export function PaymentsPage() {
                     </td>
                   </tr>,
                   ...g.items.map((r, idx) => {
-                  const overdue = tab === 'pending' && !!r.dueDate && r.dueDate < today;
-                  const canSelect = tab === 'pending' ? r.status === '지급요청' : true;
+                  const overdue = tab === 'pending' ? (!!r.dueDate && r.dueDate < today)
+                    : tab === 'target' ? (!!r.projectStartDate && r.projectStartDate < today)
+                    : false;
+                  const canSelect = tab === 'pending' ? r.status === '지급요청' : tab === 'done';
                   return (
                     <tr key={r.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setDetail(r)}>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
@@ -349,7 +376,10 @@ export function PaymentsPage() {
                                 className={`rounded border bg-transparent px-1.5 py-0.5 text-xs ${overdue ? 'border-red-200 font-semibold text-red-600' : r.scheduledMonth ? 'border-transparent hover:border-slate-200' : 'border-amber-200 text-amber-600'}`} />
                               {overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
                             </span>
-                          : (r.paidMonth ?? '-')}
+                          : tab === 'done' ? (r.paidMonth ?? '-')
+                          : r.projectStartDate
+                            ? <span className="flex items-center gap-1">{r.projectStartDate}{overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />기준1</span>}</span>
+                            : <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-600" title="교육일정 미확인 — 같은 프로젝트 지급대상의 50% 이상이 지급완료라 누락 의심으로 표시됨">일정 미확인·기준2</span>}
                       </td>
                       <td className="px-3 py-3">
                         {r.status === '지급완료' && r.paidMonth
@@ -371,6 +401,11 @@ export function PaymentsPage() {
                             className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 hover:bg-amber-50 hover:text-amber-600">
                             <Undo2 className="h-3.5 w-3.5" /> 취소
                           </button>
+                        )}
+                        {r.status === '지급대상' && (
+                          <button onClick={() => setDetail(r)}
+                            title="지급 정보 확인 후 지급요청"
+                            className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">검토·지급요청</button>
                         )}
                       </td>
                     </tr>

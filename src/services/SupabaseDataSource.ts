@@ -514,6 +514,7 @@ class SupabaseDataSource implements DataSource {
         // 구 지급확인 '입금/세발' 컬럼: 지급 판단에 필수인 프로젝트 수금·계산서 상태
         projectPaymentReceived: !!r.projects?.client_payment_received,
         projectTaxInvoiceIssued: !!r.projects?.is_tax_invoice_issued,
+        projectStartDate: r.projects?.session_1_date ?? undefined,
         payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
         // 실지급액(actual_payment_amount)은 미지급 건에서 항상 0으로 초기화되어 있어,
