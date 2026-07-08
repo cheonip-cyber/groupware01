@@ -1,6 +1,7 @@
 import type { Project, Instructor } from '../../../types';
 import { Field, Section } from './_shared';
 import { StatusBadge } from '../../common/StatusBadge';
+import { StatusPipeline } from '../../common/StatusPipeline';
 import { projectStatusStyle, priorityStyle } from '../../../utils/statusConfig';
 import { formatDate } from '../../../utils/formatters';
 import { ExternalLink, AlertTriangle } from 'lucide-react';
@@ -44,6 +45,9 @@ export function OverviewTab({ project, instructors, onRecover, onDelete }: { pro
           </span>
         </div>
       )}
+      <div className="rounded-[--radius-card] border border-slate-200 bg-white px-4 py-3 shadow-[--shadow-card]">
+        <StatusPipeline status={project.projectStatus} />
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="기본 정보">
         <Field label="프로젝트명">{project.projectName}</Field>

@@ -192,8 +192,8 @@ export function ProjectListPage() {
 
       {/* 그룹 구성 패널: 들여쓰기 트리 대신 우측 슬라이드로 회차/분배 구성 확인 */}
       {groupPanel && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setGroupPanel(null)}>
-          <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-[--color-ink-950]/40 backdrop-blur-[2px]" onClick={() => setGroupPanel(null)}>
+          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-800">{groupPanel.projectName}</h3>
               <button onClick={() => setGroupPanel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">✕</button>
@@ -223,8 +223,8 @@ export function ProjectListPage() {
         </div>
       )}
       {createOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setCreateOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[--color-ink-950]/40 p-4 backdrop-blur-[2px]" onClick={() => setCreateOpen(false)}>
+          <div className="modal-pop w-full max-w-md rounded-[--radius-card] bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-800">새 프로젝트</h3>
               <button onClick={() => setCreateOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>

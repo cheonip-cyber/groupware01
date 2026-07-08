@@ -111,8 +111,8 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} />
-      <div className="relative max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="modal-overlay absolute inset-0 bg-[--color-ink-950]/40 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="modal-pop relative max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-[--radius-card] bg-white p-5 shadow-[--shadow-pop]">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-slate-900">지급 정보 확인</h3>
           <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="h-4 w-4" /></button>

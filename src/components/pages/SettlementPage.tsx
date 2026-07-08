@@ -15,7 +15,7 @@ export function SettlementPage() {
       <CardHeader title="정산/결산 현황" icon={<ClipboardCheck className="h-4 w-4 text-slate-400" />} />
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+          <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="px-5 py-2.5 font-medium">프로젝트</th>
             <th className="px-3 py-2.5 font-medium">결산상태</th>
             <th className="px-3 py-2.5 font-medium">보고서</th>

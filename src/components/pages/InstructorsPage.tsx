@@ -138,7 +138,7 @@ export function InstructorsPage() {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+          <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="w-10 px-4 py-2.5 font-medium">No.</th>
             <th className="cursor-pointer px-5 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('name')} style={{ minWidth: '7rem' }}>이름 {sortKey === 'name' ? '↓' : ''}</th>
             <th className="cursor-pointer px-3 py-2.5 font-medium hover:text-slate-600" onClick={() => setSortKey('specialty')}>전문분야 / 등급 {sortKey === 'specialty' ? '↓' : ''}</th>
@@ -222,8 +222,8 @@ export function InstructorsPage() {
       </div>
       {/* 강사 상세 슬라이드 패널: 복원된 프로필 필드 + 참여 프로젝트/지급 이력 */}
       {panel && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/20" onClick={() => setPanel(null)}>
-          <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-[--color-ink-950]/40 backdrop-blur-[2px]" onClick={() => setPanel(null)}>
+          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-800">
                 {panel.name}{panel.honorific && <span className="ml-1 text-sm font-normal text-slate-400">{panel.honorific}</span>}

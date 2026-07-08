@@ -104,8 +104,8 @@ function PayeePicker({
       {dupWarning && <p className="mt-1 text-[11px] text-amber-600">⚠ {dupWarning}</p>}
 
       {showDetail && selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setShowDetail(false)}>
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[--color-ink-950]/40 p-4 backdrop-blur-[2px]" onClick={() => setShowDetail(false)}>
+          <div className="modal-pop w-full max-w-sm rounded-[--radius-card] bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-sm font-bold text-slate-800">세부정보 확인</h4>
               <button onClick={() => setShowDetail(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
@@ -373,8 +373,8 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
   const inputCls = 'rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[--color-ink-950]/40 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div className="modal-pop w-full max-w-lg rounded-[--radius-card] bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-bold text-slate-800">예산 항목 편집</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>

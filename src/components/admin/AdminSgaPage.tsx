@@ -279,8 +279,8 @@ export function AdminSgaPage() {
 
       {/* 입력 / 수정 모달 */}
       {form && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setForm(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-[--color-ink-950]/40 p-4 backdrop-blur-[2px]" onClick={() => setForm(null)}>
+          <div className="modal-pop w-full max-w-sm rounded-[--radius-card] bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-800">{form.id == null ? '판관비 항목 추가' : '판관비 항목 수정'}</h3>
               <button onClick={() => setForm(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>

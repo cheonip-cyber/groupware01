@@ -90,6 +90,26 @@ body {
   .dot-pulse { animation: none; }
 }
 
+/* ── 모달 등장 모션 (설계안 §6.5): 180ms, 과하지 않게 ─────── */
+@keyframes modal-pop-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes modal-slide-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal-pop { animation: modal-pop-in 180ms ease-out; }
+.modal-slide { animation: modal-slide-in 180ms ease-out; }
+.modal-overlay { animation: overlay-fade-in 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-pop, .modal-slide, .modal-overlay { animation: none; }
+}
+
 /* ── 포커스 접근성 (설계안 §8-4) ─────────────────────────── */
 :focus-visible {
   outline: 3px solid var(--color-brand-100);
