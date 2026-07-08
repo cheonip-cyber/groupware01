@@ -102,7 +102,7 @@ export function MyCardsPage() {
           <span className="ml-auto text-sm font-bold text-slate-800">{filtered.length}건 · <MoneyText value={total} /></span>
         </div>
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+          <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
             <th className="px-5 py-2.5 font-medium">No.</th>
             <th className="px-3 py-2.5 font-medium">일자</th>
             <th className="px-3 py-2.5 font-medium">가맹점</th>
