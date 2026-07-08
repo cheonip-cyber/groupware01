@@ -6,6 +6,7 @@ import { Section, Field } from './_shared';
 import { MoneyText } from '../../common/MoneyText';
 import { EmptyState } from '../../common/EmptyState';
 import { Plus, Trash2, Info, X, Pencil } from 'lucide-react';
+import { SavingLabel } from '../../common/SavingLabel';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
@@ -274,7 +275,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
             <div className="mt-3 flex gap-2">
               <button onClick={handleSubmit} disabled={saving || !payeeName || !amount}
                 className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                {saving ? '저장 중…' : '저장'}
+                <SavingLabel saving={saving} />
               </button>
               <button onClick={resetForm} className="rounded-lg px-4 py-1.5 text-xs text-slate-500 hover:bg-slate-100">취소</button>
             </div>

@@ -98,7 +98,11 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const updated = await projectService.update(id, toSend);
       // 단건 응답에는 그룹 파생 통계(effectiveAmount 등)가 없어 일시적 이중계상이 생기므로,
       // 비용 추가와 동일하게 전체 재조회로 그룹/유효매출 일관성을 맞춘다 (조용히 뒤에서 진행).
-      if (updated) {
+      // 단, VAT 토글처럼 빠르게 연속 반전(별도→포함→별도)할 경우, 앞선 저장의 재조회가
+      // 뒤이은 저장의 최신 낙관적 반영을 낡은 값으로 덮어써 화면이 멈춘 것처럼 보이는 원인이 된다.
+      // 그래서 이 저장이 해당 프로젝트의 "가장 마지막에 큐에 오른 저장"일 때만 재조회를 수행한다 —
+      // 더 최신 저장이 있다면 그 저장이 끝난 뒤 스스로 재조회하므로 여기서는 건너뛴다.
+      if (updated && pendingWritesRef.current.get(id) === chain) {
         const p = await projectService.list();
         setProjects(p);
       }

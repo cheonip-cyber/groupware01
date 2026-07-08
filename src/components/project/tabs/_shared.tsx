@@ -23,9 +23,9 @@ export function ActionButton({ onClick, children, done, tone = 'blue', onUndo }:
   if (done) {
     return (
       <span className="inline-flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700">✓ 완료됨</span>
+        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">✓ 완료됨</span>
         {onUndo && (
-          <button onClick={onUndo} className="text-xs text-slate-400 underline hover:text-red-500">
+          <button onClick={onUndo} className="text-xs text-[--color-text-sub] underline hover:text-red-500">
             취소
           </button>
         )}
@@ -33,9 +33,9 @@ export function ActionButton({ onClick, children, done, tone = 'blue', onUndo }:
     );
   }
   const toneCls = {
-    blue: 'bg-blue-600 hover:bg-blue-700', emerald: 'bg-emerald-600 hover:bg-emerald-700', slate: 'bg-slate-700 hover:bg-slate-800',
+    blue: 'bg-brand-600 hover:bg-brand-700', emerald: 'bg-emerald-600 hover:bg-emerald-700', slate: 'bg-slate-700 hover:bg-slate-800',
   }[tone];
-  return <button onClick={onClick} className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${toneCls}`}>{children}</button>;
+  return <button onClick={onClick} className={`rounded-[--radius-ctl] px-3 py-1.5 text-xs font-semibold text-white ${toneCls}`}>{children}</button>;
 }
 
 export function YesNo({ value }: { value?: boolean }) {

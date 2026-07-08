@@ -6,6 +6,7 @@ import { Users, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import type { Instructor } from '../../types';
 import { maskResidentNumber } from '../../utils/withholding';
 import { useToast } from '../common/toast';
+import { SavingLabel } from '../common/SavingLabel';
 
 type SensitiveForm = {
   name: string;
@@ -128,7 +129,7 @@ export function InstructorsPage() {
           <div className="mt-3 flex gap-2">
             <button onClick={handleAdd} disabled={saving || !form.name}
               className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-              {saving ? '저장 중…' : '저장'}
+              <SavingLabel saving={saving} />
             </button>
             <button onClick={resetForm} className="rounded-lg px-4 py-1.5 text-xs text-slate-500 hover:bg-slate-100">취소</button>
           </div>

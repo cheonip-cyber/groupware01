@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useState, type CSSProperties } from 'react';
 import type { ReactNode } from 'react';
-import { CheckCircle2, XCircle, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 // 전역 토스트: alert() 팝업을 대체하는 비차단 피드백 (성공/실패)
 interface Toast { id: number; kind: 'success' | 'error'; message: string; }
@@ -32,11 +32,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="pointer-events-none fixed bottom-5 right-5 z-[100] flex w-80 flex-col gap-2">
         {toasts.map((t) => (
           <div key={t.id}
-            className={`pointer-events-auto flex items-start gap-2 rounded-xl border px-3.5 py-3 text-sm shadow-lg backdrop-blur ${
-              t.kind === 'success' ? 'border-emerald-200 bg-emerald-50/95 text-emerald-800' : 'border-red-200 bg-red-50/95 text-red-800'}`}>
-            {t.kind === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+            className="pointer-events-auto flex items-start gap-2.5 rounded-[--radius-card] bg-[--color-ink-950] px-3.5 py-3 text-sm text-white shadow-[--shadow-pop]">
+            <span
+              className={`mt-1.5 dot ${t.kind === 'success' ? 'dot-solid' : 'dot-alert'}`}
+              style={{ '--dot-color': t.kind === 'success' ? '#34D399' : '#F87171' } as CSSProperties}
+            />
             <span className="flex-1 break-all">{t.message}</span>
-            <button onClick={() => setToasts((s) => s.filter((x) => x.id !== t.id))} className="opacity-50 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
+            <button onClick={() => setToasts((s) => s.filter((x) => x.id !== t.id))} className="text-white/50 hover:text-white"><X className="h-3.5 w-3.5" /></button>
           </div>
         ))}
       </div>

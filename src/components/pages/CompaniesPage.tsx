@@ -5,6 +5,7 @@ import { Card, CardHeader } from '../common/Card';
 import { EmptyState } from '../common/EmptyState';
 import { Building2, Plus, Trash2, Pencil, Check, X, Search } from 'lucide-react';
 import type { Company } from '../../types';
+import { SavingLabel } from '../common/SavingLabel';
 
 type CompanyForm = {
   companyName: string;
@@ -47,20 +48,23 @@ export function CompaniesPage() {
     setSaving(true);
     try {
       await addCompany({
-      companyName: form.companyName,
-      businessDescription: form.businessDescription || undefined,
-      ceoName: form.ceoName || undefined,
-      managerContact: form.managerContact || undefined,
-      bankName: form.bankName || undefined,
-      accountNumber: form.accountNumber || undefined,
-      businessNumber: form.businessNumber || undefined,
-      taxType: form.taxType,
-      email: form.email || undefined,
-    });
+        companyName: form.companyName,
+        businessDescription: form.businessDescription || undefined,
+        ceoName: form.ceoName || undefined,
+        managerContact: form.managerContact || undefined,
+        bankName: form.bankName || undefined,
+        accountNumber: form.accountNumber || undefined,
+        businessNumber: form.businessNumber || undefined,
+        taxType: form.taxType,
+        email: form.email || undefined,
+      });
       toast.success('업체가 등록되었습니다 — 목록에서 업체명으로 검색해 확인하세요');
-    setSaving(false);
-    resetForm();
-    } catch (e: any) { toast.error(`저장 실패: ${e?.message ?? e}`); }
+      resetForm();
+    } catch (e: any) {
+      toast.error(`저장 실패: ${e?.message ?? e}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -164,7 +168,7 @@ export function CompaniesPage() {
           <div className="mt-3 flex gap-2">
             <button onClick={handleAdd} disabled={saving || !form.companyName}
               className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-              {saving ? '저장 중…' : '저장'}
+              <SavingLabel saving={saving} />
             </button>
             <button onClick={resetForm} className="rounded-lg px-4 py-1.5 text-xs text-slate-500 hover:bg-slate-100">취소</button>
           </div>

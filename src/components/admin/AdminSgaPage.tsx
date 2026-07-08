@@ -10,6 +10,7 @@ import { downloadSgaSheet, downloadCombinedTransferSheet } from '../../utils/pay
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
+import { SavingLabel } from '../common/SavingLabel';
 
 interface ManualExpense {
   id: number;
@@ -88,22 +89,27 @@ export function AdminSgaPage() {
   const save = async () => {
     if (!form || !form.amount || Number.isNaN(Number(form.amount))) return;
     setSaving(true);
-    const payload = {
-      transaction_date: form.transaction_date,
-      category: form.category,
-      amount: Number(form.amount),
-      description: form.description || null,
-      status: form.status,
-    };
-    const q = form.id == null
-      ? cardSupabase.from('manual_expenses').insert(payload)
-      : cardSupabase.from('manual_expenses').update(payload).eq('id', form.id);
-    const { error: err } = await q;
-    setSaving(false);
-    if (err) { toast.error(`저장 실패: ${err.message}`); return; }
-    toast.success(form.id == null ? '판관비 항목이 추가되었습니다' : '판관비 항목이 수정되었습니다');
-    setForm(null);
-    load();
+    try {
+      const payload = {
+        transaction_date: form.transaction_date,
+        category: form.category,
+        amount: Number(form.amount),
+        description: form.description || null,
+        status: form.status,
+      };
+      const q = form.id == null
+        ? cardSupabase.from('manual_expenses').insert(payload)
+        : cardSupabase.from('manual_expenses').update(payload).eq('id', form.id);
+      const { error: err } = await q;
+      if (err) { toast.error(`저장 실패: ${err.message}`); return; }
+      toast.success(form.id == null ? '판관비 항목이 추가되었습니다' : '판관비 항목이 수정되었습니다');
+      setForm(null);
+      await load();
+    } catch (e: any) {
+      toast.error(`저장 실패: ${e?.message ?? e}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const remove = async (r: ManualExpense) => {
@@ -314,7 +320,7 @@ export function AdminSgaPage() {
                 <button onClick={() => setForm(null)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">취소</button>
                 <button onClick={save} disabled={saving || !form.amount}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                  {saving ? '저장 중…' : '저장'}
+                  <SavingLabel saving={saving} />
                 </button>
               </div>
             </div>

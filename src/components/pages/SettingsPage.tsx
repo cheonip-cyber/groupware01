@@ -31,9 +31,12 @@ function NotionMappingSection() {
 
   const handleUpdate = async (id: string, patch: Partial<NotionFieldMapping>) => {
     setSavingId(id);
-    await dataSource.updateNotionFieldMapping(id, patch);
-    await load();
-    setSavingId(null);
+    try {
+      await dataSource.updateNotionFieldMapping(id, patch);
+      await load();
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
