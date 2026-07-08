@@ -1,16 +1,83 @@
 @import "tailwindcss";
 
+/* ── Dot & Ink 디자인 토큰 (UI/UX 설계안 §2) ───────────────── */
+@theme {
+  --color-ink-950: #0A1220;
+  --color-ink-900: #101B2E;
+  --color-ink-700: #2A3A54;
+
+  --color-brand-50: #EFF3FE;
+  --color-brand-100: #DEE7FC;
+  --color-brand-300: #8FACF3;
+  --color-brand-600: #2E5BE6;
+  --color-brand-700: #2449C4;
+
+  --color-surface: #F5F7FA;
+  --color-surface-card: #FFFFFF;
+
+  --color-text-strong: #0F1B2D;
+  --color-text-body: #334155;
+  --color-text-sub: #5B6B82;
+  --color-text-faint: #8494A8;
+
+  --color-st-neutral: #64748B;
+  --color-st-progress: #2E5BE6;
+  --color-st-active: #7C3AED;
+  --color-st-warn: #D97706;
+  --color-st-success: #059669;
+  --color-st-danger: #DC2626;
+
+  --radius-card: 0.875rem;
+  --radius-ctl: 0.5rem;
+  --shadow-card: 0 1px 2px rgb(15 27 45 / 0.05);
+  --shadow-card-hover: 0 6px 16px rgb(15 27 45 / 0.08);
+  --shadow-pop: 0 8px 24px rgb(15 27 45 / 0.12);
+}
+
 :root { color-scheme: light; }
 html, body, #root { height: 100%; }
 body {
   margin: 0;
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo',
     'Malgun Gothic', sans-serif;
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--color-surface);
+  color: var(--color-text-strong);
   -webkit-font-smoothing: antialiased;
 }
 * { box-sizing: border-box; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 2px solid #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 2px solid var(--color-surface); }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── 숫자: 항상 자릿수 정렬 (설계안 §3) ──────────────────── */
+[data-money], .tabular-money, td.num, .kpi-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 점(Dot) 문법: 4가지 상태 형태 (설계안 §4.1) ─────────── */
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 9999px; flex-shrink: 0; }
+.dot-solid { background: var(--dot-color); }
+.dot-ring { background: transparent; border: 1.5px solid var(--dot-color); }
+.dot-alert {
+  background: var(--dot-color);
+  outline: 2px solid color-mix(in srgb, var(--dot-color) 35%, transparent);
+  outline-offset: 2px;
+}
+.dot-pulse {
+  background: var(--dot-color);
+  animation: dot-pulse 1.8s ease-out infinite;
+}
+@keyframes dot-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-color) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot-pulse { animation: none; }
+}
+
+/* ── 포커스 접근성 (설계안 §8-4) ─────────────────────────── */
+:focus-visible {
+  outline: 3px solid var(--color-brand-100);
+  outline-offset: 1px;
+}
