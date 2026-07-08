@@ -9,8 +9,8 @@ import { Layers, Plus, Search, Unlink, CornerDownRight, Pencil, Trash2, Check, X
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../common/toast';
 
-// 계열사 1행의 세금계산서/입금 완료 토글 — 체크와 동시에 날짜를 받는다
-function DistCompleteCell({ done, dateValue, onComplete, onUndo, label }:
+// 계열사 1행의 세금계산서/입금 완료 토글 — 체크와 동시에 날짜를 받는다 (상세화면·목록 펼침뷰 공용)
+export function DistCompleteCell({ done, dateValue, onComplete, onUndo, label }:
   { done: boolean; dateValue?: string; onComplete: (date: string) => void; onUndo: () => void; label: string }) {
   const [picking, setPicking] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));

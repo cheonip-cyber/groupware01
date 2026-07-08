@@ -4,10 +4,11 @@ import type { Project, RevenueDistribution } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
-import { formatDateRange, profitRateLabel, formatDate } from '../../utils/formatters';
+import { formatDateRange, profitRateLabel } from '../../utils/formatters';
 import { EmptyState } from '../common/EmptyState';
 import { dataSource } from '../../services/dataSource';
-import { ChevronRight, Receipt, Wallet } from 'lucide-react';
+import { ChevronRight, CornerDownRight, Receipt, Wallet } from 'lucide-react';
+import { DistCompleteCell } from './GroupSection';
 
 // 자금 3축(매출·지급·결산) 요약 점: 회색=미시작, 파랑 테두리=진행중, 채움=완료 (상세는 툴팁)
 function FundDot({ label, done, active }: { label: string; done: boolean; active: boolean }) {
@@ -25,13 +26,14 @@ export const GROUP_TYPE_LABEL: Record<string, string> = {
   merged: '묶음',
 };
 
-// 자식 프로젝트(merged/recurring) 1행 — 마스터 행 아래 펼쳐질 때 표시 (들여쓰기 없이 배경색으로만 구성 구분)
+// 자식 프로젝트(merged/recurring) 1행 — 마스터 행 아래 펼쳐질 때 표시 (코너 화살표로 소속 표시)
 function ChildProjectRow({ c }: { c: Project }) {
   return (
     <tr className="bg-indigo-50/30">
       <td className="px-3 py-2"></td>
-      <td className="px-4 py-2">
+      <td className="px-4 py-2 pl-8">
         <div className="flex items-center gap-1.5 text-sm">
+          <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
           <Link to={`/projects/${c.id}`} className="font-medium text-slate-600 hover:text-indigo-600">{c.projectName}</Link>
         </div>
       </td>
@@ -47,10 +49,16 @@ function ChildProjectRow({ c }: { c: Project }) {
   );
 }
 
-// 매출분배(계열사) 행들 — revenue_distributions에서 지연 로딩. 세금계산서/입금 완료 여부만 표시(읽기전용, 편집은 상세화면)
+// 매출분배(계열사) 행들 — revenue_distributions에서 지연 로딩. 목록에서 바로 세금계산서/입금 확인·취소 가능(상세화면과 동일 동작 재사용)
 function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: number }) {
   const [items, setItems] = useState<RevenueDistribution[] | null>(null);
-  useEffect(() => { dataSource.getDistributions(masterId).then(setItems); }, [masterId]);
+  const load = () => dataSource.getDistributions(masterId).then(setItems);
+  useEffect(() => { load(); }, [masterId]);
+
+  const update = async (id: string, patch: Parameters<typeof dataSource.updateDistribution>[1]) => {
+    await dataSource.updateDistribution(id, patch);
+    await load();
+  };
 
   if (items === null) return <tr className="bg-indigo-50/30"><td colSpan={colSpan} className="px-8 py-2 text-xs text-slate-400">불러오는 중…</td></tr>;
   if (items.length === 0) return <tr className="bg-indigo-50/30"><td colSpan={colSpan} className="px-8 py-2 text-xs text-slate-400">등록된 계열사가 없습니다</td></tr>;
@@ -60,8 +68,9 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
       {items.map((d) => (
         <tr key={d.id} className="bg-indigo-50/30">
           <td className="px-3 py-2"></td>
-          <td className="px-4 py-2" colSpan={2}>
+          <td className="px-4 py-2 pl-8" colSpan={2}>
             <div className="flex items-center gap-1.5 text-sm">
+              <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
               <span className="font-medium text-slate-600">{d.clientName}</span>
               {d.distributionRatio != null && <span className="text-[10px] text-slate-400">{d.distributionRatio}%</span>}
             </div>
@@ -70,8 +79,16 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
           <td className="px-3 py-2"></td>
           <td className="px-3 py-2">
             <span className="flex items-center gap-2 text-[11px]">
-              <span className={`flex items-center gap-1 ${d.taxInvoiceIssued ? 'text-emerald-600' : 'text-slate-300'}`}><Receipt className="h-3 w-3" />{d.taxInvoiceIssued ? formatDate(d.taxInvoiceDate) : '미발행'}</span>
-              <span className={`flex items-center gap-1 ${d.paymentReceived ? 'text-emerald-600' : 'text-slate-300'}`}><Wallet className="h-3 w-3" />{d.paymentReceived ? formatDate(d.paymentDate) : '미입금'}</span>
+              <span className="flex items-center gap-1 text-slate-500"><Receipt className="h-3 w-3 text-slate-400" />
+                <DistCompleteCell done={d.taxInvoiceIssued} dateValue={d.taxInvoiceDate} label="발행"
+                  onComplete={(date) => update(d.id, { taxInvoiceIssued: true, taxInvoiceDate: date })}
+                  onUndo={() => update(d.id, { taxInvoiceIssued: false, taxInvoiceDate: undefined })} />
+              </span>
+              <span className="flex items-center gap-1 text-slate-500"><Wallet className="h-3 w-3 text-slate-400" />
+                <DistCompleteCell done={d.paymentReceived} dateValue={d.paymentDate} label="입금"
+                  onComplete={(date) => update(d.id, { paymentReceived: true, paymentDate: date })}
+                  onUndo={() => update(d.id, { paymentReceived: false, paymentDate: undefined })} />
+              </span>
             </span>
           </td>
           <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={d.amount} /></td>
@@ -93,11 +110,13 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
       <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{no ?? ''}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5">
-          {isGroupMaster && (
-            <button onClick={onToggleExpand} title="구성 펼치기/접기" className="shrink-0 rounded p-0.5 text-slate-300 hover:bg-slate-100 hover:text-indigo-600">
-              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-            </button>
-          )}
+          <button onClick={isGroupMaster ? onToggleExpand : undefined}
+            title={isGroupMaster ? '구성 펼치기/접기' : undefined}
+            tabIndex={isGroupMaster ? 0 : -1}
+            aria-hidden={!isGroupMaster}
+            className={`shrink-0 rounded p-0.5 ${isGroupMaster ? 'text-slate-300 hover:bg-slate-100 hover:text-indigo-600' : 'invisible pointer-events-none'}`}>
+            <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+          </button>
           <div>
             <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
             {p.notionMissing && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600" title="노션에서 원본이 삭제되었습니다">⚠ 노션삭제</span>}
