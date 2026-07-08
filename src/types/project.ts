@@ -43,6 +43,21 @@ export interface PrepItem {
   dueDate?: string;
 }
 
+// 매출분배(계열사) 항목 — projects 테이블과 분리된 정산 전용 레코드 (사양서: 그룹지정 B안)
+// 마스터 프로젝트 1건에 여러 계열사가 딸리며, 각 계열사는 세금계산서/입금 상태만 관리한다.
+export interface RevenueDistribution {
+  id: string;
+  projectId: string;
+  clientName: string;
+  amount: number;
+  distributionRatio?: number;
+  taxInvoiceIssued: boolean;
+  taxInvoiceDate?: string;
+  paymentReceived: boolean;
+  paymentDate?: string;
+  sortOrder: number;
+}
+
 // 히스토리 로그 (탭 7)
 export interface HistoryLog {
   id: string;
@@ -104,6 +119,7 @@ export interface Project extends NotionSyncFields {
   distributionRatio?: number;   // distribution 자식의 분배 비율(%)
   groupChildCount?: number;     // 마스터: 자식 수 (데이터 계층에서 계산)
   groupTotalAmount?: number;    // 마스터: 그룹 합계 금액 (데이터 계층에서 계산)
+  distributions?: RevenueDistribution[]; // 마스터: 계열사 매출분배 목록 (group_type='distribution')
   effectiveAmount?: number;     // 통계용 유효 매출 — 자식이 금액을 가지면 마스터는 0 (이중계상 방지)
   finalEstimate?: number;       // DB final_estimate 원본(세전) — 그룹 자식 금액 수정용
   sourceType?: string;          // notion | legacy_public | manual_groupware

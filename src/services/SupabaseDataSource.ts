@@ -12,7 +12,7 @@
 // =============================================================
 import { supabase } from './supabaseClient';
 import type { DataSource } from './dataSource';
-import type { Project, Instructor, Client, PaymentRequest, ProjectSyncLog, SyncStatus, PrepItem, Company, NotionFieldMapping } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, ProjectSyncLog, SyncStatus, PrepItem, Company, NotionFieldMapping, RevenueDistribution } from '../types';
 import {
   dbStatusToProjectStatus, projectStatusToDbStatus,
   deriveRevenueStatus, derivePaymentStatus, deriveSettlementStatus,
@@ -183,7 +183,28 @@ class SupabaseDataSource implements DataSource {
         costMap.get(r.id) ?? [],
       ),
     );
-    return SupabaseDataSource.enrichGroups(projects);
+    const enriched = SupabaseDataSource.enrichGroups(projects);
+
+    // 매출분배(distribution) 마스터는 revenue_distributions에서 건수/합계를 별도 집계 (projects 자식이 없으므로)
+    const distMasterIds = enriched.filter((p) => p.groupType === 'distribution' && p.isMaster).map((p) => Number(p.id));
+    if (distMasterIds.length > 0) {
+      const { data: dist } = await supabase.from('revenue_distributions')
+        .select('project_id, amount').in('project_id', distMasterIds);
+      const agg = new Map<number, { count: number; total: number }>();
+      for (const d of dist ?? []) {
+        const cur = agg.get(d.project_id) ?? { count: 0, total: 0 };
+        cur.count += 1; cur.total += Number(d.amount ?? 0);
+        agg.set(d.project_id, cur);
+      }
+      for (const p of enriched) {
+        if (p.groupType === 'distribution' && p.isMaster) {
+          const a = agg.get(Number(p.id));
+          p.groupChildCount = a?.count ?? 0;
+          p.groupTotalAmount = a?.total ?? 0;
+        }
+      }
+    }
+    return enriched;
   }
 
   /**
@@ -668,12 +689,10 @@ class SupabaseDataSource implements DataSource {
 
   /** 그룹 자식 생성 (recurring 회차 / distribution 분배) — manual_groupware, 노션 동기화 비대상 */
   async createGroupChild(masterId: string, input: {
-    groupType: 'recurring' | 'distribution';
+    groupType: 'recurring';
     projectName: string;
-    clientName?: string;         // distribution: 계열사명 (없으면 마스터 고객사)
     amount: number;
     executionDate?: string;      // recurring 회차 시행일
-    distributionRatio?: number;
     masterClientId?: string;
     masterStatus?: string;
     masterVatType?: string;
@@ -691,17 +710,13 @@ class SupabaseDataSource implements DataSource {
       .select('id').eq('parent_id', Number(masterId)).eq('project_name', input.projectName).limit(1);
     if (dup && dup.length > 0) throw new Error(`동일한 구성("${input.projectName}")이 이미 존재합니다. 회차 번호를 확인하세요.`);
 
-    let clientId: number | null = input.masterClientId ? Number(input.masterClientId) : null;
-    if (input.groupType === 'distribution' && input.clientName) {
-      clientId = await this.findOrCreateClient(input.clientName.trim());
-    }
+    // 회차 자식은 그룹웨어 내부에서만 관리 — 노션에는 동기화하지 않는다 (2026-07-08 정책 확정, DB 트리거에서도 차단)
     const { error } = await supabase.from('projects').insert({
       project_name: input.projectName,
-      client_id: clientId,
+      client_id: input.masterClientId ? Number(input.masterClientId) : null,
       parent_id: Number(masterId),
       is_master: false,
       group_type: input.groupType,
-      distribution_ratio: input.distributionRatio ?? null,
       final_estimate: input.amount,
       vat_type: input.masterVatType ?? null,
       status: input.masterStatus ?? '확정/준비',
@@ -717,8 +732,71 @@ class SupabaseDataSource implements DataSource {
     }
   }
 
+  // ── 매출분배(계열사) 관리 — revenue_distributions 전용 테이블, projects와 완전히 분리 ──
+  // 마스터는 group_type='distribution'/is_master=true 로 표시되지만 자식 프로젝트를 만들지 않는다.
+  // 전 계열사가 세금계산서·입금 완료되면 DB 트리거가 마스터에 자동 반영하고, 그 값이 노션과 동기화된다.
+  private static mapDistribution(r: any): RevenueDistribution {
+    return {
+      id: String(r.id), projectId: String(r.project_id), clientName: r.client_name,
+      amount: Number(r.amount ?? 0), distributionRatio: r.distribution_ratio != null ? Number(r.distribution_ratio) : undefined,
+      taxInvoiceIssued: !!r.tax_invoice_issued, taxInvoiceDate: r.tax_invoice_date ?? undefined,
+      paymentReceived: !!r.payment_received, paymentDate: r.payment_date ?? undefined,
+      sortOrder: r.sort_order ?? 0,
+    };
+  }
+
+  async getDistributions(projectId: string): Promise<RevenueDistribution[]> {
+    const { data, error } = await supabase.from('revenue_distributions')
+      .select('*').eq('project_id', Number(projectId)).order('sort_order');
+    if (error) throw error;
+    return (data ?? []).map(SupabaseDataSource.mapDistribution);
+  }
+
+  async addDistribution(masterId: string, input: { clientName: string; amount: number; distributionRatio?: number }): Promise<void> {
+    if (!input.clientName.trim()) throw new Error('계열사명을 입력하세요.');
+    const { data: existing } = await supabase.from('revenue_distributions')
+      .select('id, sort_order').eq('project_id', Number(masterId)).order('sort_order', { ascending: false }).limit(1);
+    const nextOrder = existing && existing.length > 0 ? (existing[0].sort_order ?? 0) + 1 : 1;
+    const { error } = await supabase.from('revenue_distributions').insert({
+      project_id: Number(masterId), client_name: input.clientName.trim(),
+      amount: input.amount, distribution_ratio: input.distributionRatio ?? null,
+      sort_order: nextOrder,
+    });
+    if (error) throw error;
+    // 마스터를 매출분배 유형으로 표시 (최초 1건 추가 시)
+    const { data: masterRow } = await supabase.from('projects').select('group_type').eq('id', Number(masterId)).maybeSingle();
+    if (masterRow && !masterRow.group_type) {
+      await supabase.from('projects').update({ is_master: true, group_type: 'distribution' }).eq('id', Number(masterId));
+    }
+  }
+
+  async updateDistribution(id: string, patch: Partial<Pick<RevenueDistribution, 'clientName' | 'amount' | 'distributionRatio' | 'taxInvoiceIssued' | 'taxInvoiceDate' | 'paymentReceived' | 'paymentDate'>>): Promise<void> {
+    const dbPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.clientName !== undefined) dbPatch.client_name = patch.clientName;
+    if (patch.amount !== undefined) dbPatch.amount = patch.amount;
+    if (patch.distributionRatio !== undefined) dbPatch.distribution_ratio = patch.distributionRatio;
+    if (patch.taxInvoiceIssued !== undefined) dbPatch.tax_invoice_issued = patch.taxInvoiceIssued;
+    if ('taxInvoiceDate' in patch) dbPatch.tax_invoice_date = patch.taxInvoiceDate ?? null;
+    if (patch.paymentReceived !== undefined) dbPatch.payment_received = patch.paymentReceived;
+    if ('paymentDate' in patch) dbPatch.payment_date = patch.paymentDate ?? null;
+    const { error } = await supabase.from('revenue_distributions').update(dbPatch).eq('id', Number(id));
+    if (error) throw error;
+  }
+
+  async deleteDistribution(id: string): Promise<void> {
+    const { data: row } = await supabase.from('revenue_distributions').select('project_id').eq('id', Number(id)).maybeSingle();
+    const { error } = await supabase.from('revenue_distributions').delete().eq('id', Number(id));
+    if (error) throw error;
+    if (row) {
+      const { data: rest } = await supabase.from('revenue_distributions').select('id').eq('project_id', row.project_id).limit(1);
+      if (!rest || rest.length === 0) {
+        await supabase.from('projects').update({ group_type: null }).eq('id', row.project_id);
+      }
+    }
+  }
+
   /** 기존 프로젝트들을 마스터 아래로 묶기 (merged) */
-  async attachProjectsToGroup(masterId: string, childIds: string[], groupType: 'merged' | 'recurring' | 'distribution' = 'merged'): Promise<void> {
+  async attachProjectsToGroup(masterId: string, childIds: string[], groupType: 'merged' | 'recurring' = 'merged'): Promise<void> {
     // 가드 (#4): 자기 자신 금지 / 마스터가 이미 자식이면 금지 / 대상이 이미 자식이거나 자식을 가진 마스터면 금지 (중첩·순환 차단)
     if (childIds.includes(masterId)) throw new Error('자기 자신을 그룹에 묶을 수 없습니다.');
     const { data: masterRow } = await supabase.from('projects').select('id, parent_id').eq('id', Number(masterId)).maybeSingle();

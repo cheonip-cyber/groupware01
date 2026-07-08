@@ -4,7 +4,7 @@
 // 추후: NotionDataSource / SupabaseDataSource 를 같은 인터페이스로
 //       구현하고 activeDataSource 만 바꾸면 전체 앱이 그대로 동작한다.
 // =============================================================
-import type { Project, Instructor, Client, PaymentRequest, SyncStatus, Company, NotionFieldMapping , ProjectSyncLog } from '../types';
+import type { Project, Instructor, Client, PaymentRequest, SyncStatus, Company, NotionFieldMapping, ProjectSyncLog, RevenueDistribution } from '../types';
 import { sampleProjects, sampleInstructors, sampleClients, samplePaymentRequests } from '../data/sampleData';
 
 export interface NewProjectCostInput {
@@ -43,13 +43,18 @@ export interface DataSource {
   getProjectSyncLogs(projectId: string): Promise<ProjectSyncLog[]>;
   // ─ 프로젝트 그룹(묶음) 관리 ─
   createGroupChild(masterId: string, input: {
-    groupType: 'recurring' | 'distribution'; projectName: string; clientName?: string; amount: number;
-    executionDate?: string; distributionRatio?: number;
+    groupType: 'recurring'; projectName: string; amount: number;
+    executionDate?: string;
     masterClientId?: string; masterStatus?: string; masterVatType?: string; masterRevenueMonth?: string;
   }): Promise<void>;
-  attachProjectsToGroup(masterId: string, childIds: string[], groupType?: 'merged' | 'recurring' | 'distribution'): Promise<void>;
+  attachProjectsToGroup(masterId: string, childIds: string[], groupType?: 'merged' | 'recurring'): Promise<void>;
   detachFromGroup(childId: string): Promise<void>;
   deleteGroupChild(childId: string): Promise<void>;
+  // ─ 매출분배(계열사) 관리 — projects와 분리된 정산 전용 테이블 (그룹웨어 내부, 노션 비동기화) ─
+  getDistributions(projectId: string): Promise<RevenueDistribution[]>;
+  addDistribution(masterId: string, input: { clientName: string; amount: number; distributionRatio?: number }): Promise<void>;
+  updateDistribution(id: string, patch: Partial<Pick<RevenueDistribution, 'clientName' | 'amount' | 'distributionRatio' | 'taxInvoiceIssued' | 'taxInvoiceDate' | 'paymentReceived' | 'paymentDate'>>): Promise<void>;
+  deleteDistribution(id: string): Promise<void>;
   // Notion 연동 매핑 관리 (관리자 전용)
   getNotionFieldMappings(): Promise<NotionFieldMapping[]>;
   addNotionFieldMapping(input: Omit<NotionFieldMapping, 'id'>): Promise<void>;
@@ -143,6 +148,10 @@ class SampleDataSource implements DataSource {
   async attachProjectsToGroup(): Promise<void> { await delay(); }
   async detachFromGroup(): Promise<void> { await delay(); }
   async deleteGroupChild(): Promise<void> { await delay(); }
+  async getDistributions(): Promise<RevenueDistribution[]> { await delay(); return []; }
+  async addDistribution(): Promise<void> { await delay(); }
+  async updateDistribution(): Promise<void> { await delay(); }
+  async deleteDistribution(): Promise<void> { await delay(); }
 
   async getSyncStatus(): Promise<SyncStatus> {
     await delay(60);

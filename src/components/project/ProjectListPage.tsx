@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useEscClose } from '../../hooks/useEscClose';
 import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { applyProjectFilters, defaultFilterState, projectYear } from '../../utils/filters';
@@ -8,13 +7,10 @@ import { ProjectTable } from './ProjectTable';
 import { Card } from '../common/Card';
 import { Search } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../common/toast';
 import { Plus, X } from 'lucide-react';
 import type { ProjectStatus } from '../../types';
-import type { Project } from '../../types';
-import { formatCompactKRW } from '../../utils/formatters';
-import { MoneyText } from '../common/MoneyText';
 
 // '제안완료'는 DB 상태 파생 로직상 나올 수 없는 값이라 필터 옵션에서 제외 (죽은 옵션 정리)
 const STATUSES: ProjectStatus[] = ['제안중', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류'];
@@ -33,8 +29,6 @@ export function ProjectListPage() {
   }));
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  const [groupPanel, setGroupPanel] = useState<Project | null>(null);
-  useEscClose(!!groupPanel, () => setGroupPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
@@ -187,41 +181,9 @@ export function ProjectListPage() {
         <ProjectTable projects={pageRows} childrenIndex={childrenIndex}
           startNo={(page - 1) * PAGE_SIZE + 1}
           matchedMasterIds={hasActiveQuery ? autoExpandIds : undefined}
-          onOpenGroup={(m) => setGroupPanel(m)} />
+          autoExpandIds={hasActiveQuery ? autoExpandIds : undefined} />
       </Card>
 
-      {/* 그룹 구성 패널: 들여쓰기 트리 대신 우측 슬라이드로 회차/분배 구성 확인 */}
-      {groupPanel && (
-        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-ink-950/40 backdrop-blur-[2px]" onClick={() => setGroupPanel(null)}>
-          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-pop" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-1 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-800">{groupPanel.projectName}</h3>
-              <button onClick={() => setGroupPanel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">✕</button>
-            </div>
-            <p className="mb-3 text-xs text-slate-400">
-              {groupPanel.groupType === 'recurring' ? '다회차' : groupPanel.groupType === 'distribution' ? '매출분배' : '통합 관리'} ·
-              구성 {(childrenIndex.get(groupPanel.id) ?? []).length}건 · 그룹 매출 <b className="text-slate-600">{formatCompactKRW(groupPanel.groupTotalAmount ?? groupPanel.contractAmount)}</b>
-            </p>
-            <ul className="divide-y divide-slate-50 rounded-xl border border-slate-100">
-              {(childrenIndex.get(groupPanel.id) ?? []).map((c, i) => (
-                <li key={c.id} className="flex items-center gap-2 px-3 py-2.5 text-sm">
-                  <span className="w-5 text-xs text-slate-300">{i + 1}</span>
-                  <Link to={`/projects/${c.id}`} className="flex-1 truncate font-medium text-slate-700 hover:text-blue-600 hover:underline">
-                    {c.projectName}
-                  </Link>
-                  <span className="text-xs text-slate-400">{c.startDate || c.revenueMonth || '-'}</span>
-                  <MoneyText value={c.contractAmount} />
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-[11px] text-slate-400">구성 추가/해제는 마스터 프로젝트 상세의 그룹 관리에서 할 수 있습니다.</p>
-            <Link to={`/projects/${groupPanel.id}`}
-              className="mt-2 block rounded-lg bg-slate-800 py-2 text-center text-sm font-semibold text-white hover:bg-slate-700">
-              마스터 프로젝트 열기 →
-            </Link>
-          </div>
-        </div>
-      )}
       {createOpen && (
         <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-ink-950/40 p-4 backdrop-blur-[2px]" onClick={() => setCreateOpen(false)}>
           <div className="modal-pop w-full max-w-md rounded-card bg-white p-5 shadow-pop" onClick={(e) => e.stopPropagation()}>

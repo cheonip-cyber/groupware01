@@ -48,17 +48,13 @@ export function ReportsPage() {
 
   // 고객사별 매출 (유효매출 + 매출분배 자식은 마스터 고객사로 귀속)
   const clientRevenue = useMemo(() => {
-    const byId = new Map(projects.map((p) => [p.id, p]));
     const map: Record<string, number> = {};
     filtered.forEach((p) => {
       const amount = eff(p);
       if (amount <= 0) return;
-      // 대표거래처 우선(계열사 분산 발행 통계 보정), 분배 자식은 마스터 기준
-      const base = (x: typeof p) => x.masterClientName || x.clientName;
-      const attributed = p.groupType === 'distribution' && p.parentId
-        ? (byId.get(p.parentId) ? base(byId.get(p.parentId)!) : base(p))
-        : base(p);
-      const key = attributed || '(미지정)';
+      // 매출분배(계열사) 정산은 revenue_distributions로 분리되어 별도 자식 프로젝트가 없으므로
+      // 마스터 자신의 고객사로만 집계하면 된다 (2026-07-08 구조 개편 이후 단순화됨)
+      const key = p.clientName || '(미지정)';
       map[key] = (map[key] ?? 0) + amount;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10)

@@ -78,34 +78,45 @@ export function RevenueTab({ project, onUpdate }:
       <Section title="세금계산서 / 수금">
         <Field label="매출 상태"><StatusBadge label={project.revenueStatus} style={revenueStatusStyle[project.revenueStatus]} /></Field>
 
-        <Field label="세금계산서 발행">
-          <div className="flex items-center gap-2">
-            <span className={project.taxInvoiceIssued ? 'text-emerald-600' : 'text-slate-400'}>{project.taxInvoiceIssued ? '발행완료' : '미발행'}</span>
-            <DateCompleteAction
-              done={project.taxInvoiceIssued}
-              dateValue={project.taxInvoiceDate}
-              label="세금계산서 발행완료 처리"
-              onComplete={(date) => onUpdate({ taxInvoiceIssued: true, taxInvoiceDate: date })}
-              onUndo={() => onUpdate({ taxInvoiceIssued: false, taxInvoiceDate: undefined })}
-            />
-          </div>
-        </Field>
-        <Field label="발행일">{formatDate(project.taxInvoiceDate)}</Field>
+        {project.groupType === 'distribution' ? (
+          <Field label="세금계산서 · 수금">
+            <p className="text-xs text-slate-500">
+              계열사별로 관리됩니다. 아래 <b>매출분배(계열사)</b> 섹션에서 확인·처리하세요.
+              전 계열사가 완료되면 이 값이 자동으로 채워지고 노션에도 반영됩니다.
+            </p>
+          </Field>
+        ) : (
+          <>
+            <Field label="세금계산서 발행">
+              <div className="flex items-center gap-2">
+                <span className={project.taxInvoiceIssued ? 'text-emerald-600' : 'text-slate-400'}>{project.taxInvoiceIssued ? '발행완료' : '미발행'}</span>
+                <DateCompleteAction
+                  done={project.taxInvoiceIssued}
+                  dateValue={project.taxInvoiceDate}
+                  label="세금계산서 발행완료 처리"
+                  onComplete={(date) => onUpdate({ taxInvoiceIssued: true, taxInvoiceDate: date })}
+                  onUndo={() => onUpdate({ taxInvoiceIssued: false, taxInvoiceDate: undefined })}
+                />
+              </div>
+            </Field>
+            <Field label="발행일">{formatDate(project.taxInvoiceDate)}</Field>
 
-        <Field label="수금 상태">
-          <div className="flex items-center gap-2">
-            <span className={project.collectionCompleted ? 'text-emerald-600' : 'text-slate-400'}>{project.collectionCompleted ? '수금완료' : '수금대기'}</span>
-            <DateCompleteAction
-              done={project.collectionCompleted}
-              dateValue={project.collectionDoneDate}
-              tone="emerald"
-              label="수금완료 처리"
-              onComplete={(date) => onUpdate({ collectionCompleted: true, collectionDoneDate: date })}
-              onUndo={() => onUpdate({ collectionCompleted: false, collectionDoneDate: undefined })}
-            />
-          </div>
-        </Field>
-        <Field label="수금 완료일">{formatDate(project.collectionDoneDate)}</Field>
+            <Field label="수금 상태">
+              <div className="flex items-center gap-2">
+                <span className={project.collectionCompleted ? 'text-emerald-600' : 'text-slate-400'}>{project.collectionCompleted ? '수금완료' : '수금대기'}</span>
+                <DateCompleteAction
+                  done={project.collectionCompleted}
+                  dateValue={project.collectionDoneDate}
+                  tone="emerald"
+                  label="수금완료 처리"
+                  onComplete={(date) => onUpdate({ collectionCompleted: true, collectionDoneDate: date })}
+                  onUndo={() => onUpdate({ collectionCompleted: false, collectionDoneDate: undefined })}
+                />
+              </div>
+            </Field>
+            <Field label="수금 완료일">{formatDate(project.collectionDoneDate)}</Field>
+          </>
+        )}
         <Field label="입금 메모">
           <InlineTextSave value={project.clientPaymentMemo ?? ''} placeholder="입금 지연 사유·특이사항 (구 그룹웨어 입금 메모)"
             onSave={(v) => onUpdate({ clientPaymentMemo: v })} />
