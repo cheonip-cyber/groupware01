@@ -7,7 +7,7 @@ import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
 import { formatDateRange, profitRateLabel, formatDate } from '../../utils/formatters';
 import { EmptyState } from '../common/EmptyState';
 import { dataSource } from '../../services/dataSource';
-import { ChevronRight, CornerDownRight, Receipt, Wallet } from 'lucide-react';
+import { ChevronRight, Receipt, Wallet } from 'lucide-react';
 
 // 자금 3축(매출·지급·결산) 요약 점: 회색=미시작, 파랑 테두리=진행중, 채움=완료 (상세는 툴팁)
 function FundDot({ label, done, active }: { label: string; done: boolean; active: boolean }) {
@@ -25,14 +25,13 @@ export const GROUP_TYPE_LABEL: Record<string, string> = {
   merged: '묶음',
 };
 
-// 자식 프로젝트(merged/recurring) 1행 — 마스터 행 아래 펼쳐질 때 표시
+// 자식 프로젝트(merged/recurring) 1행 — 마스터 행 아래 펼쳐질 때 표시 (들여쓰기 없이 배경색으로만 구성 구분)
 function ChildProjectRow({ c }: { c: Project }) {
   return (
     <tr className="bg-indigo-50/30">
       <td className="px-3 py-2"></td>
-      <td className="px-4 py-2 pl-8">
+      <td className="px-4 py-2">
         <div className="flex items-center gap-1.5 text-sm">
-          <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
           <Link to={`/projects/${c.id}`} className="font-medium text-slate-600 hover:text-indigo-600">{c.projectName}</Link>
         </div>
       </td>
@@ -61,9 +60,8 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
       {items.map((d) => (
         <tr key={d.id} className="bg-indigo-50/30">
           <td className="px-3 py-2"></td>
-          <td className="px-4 py-2 pl-8" colSpan={2}>
+          <td className="px-4 py-2" colSpan={2}>
             <div className="flex items-center gap-1.5 text-sm">
-              <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
               <span className="font-medium text-slate-600">{d.clientName}</span>
               {d.distributionRatio != null && <span className="text-[10px] text-slate-400">{d.distributionRatio}%</span>}
             </div>
