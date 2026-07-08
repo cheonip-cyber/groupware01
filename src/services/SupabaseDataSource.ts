@@ -484,7 +484,10 @@ class SupabaseDataSource implements DataSource {
         projectTaxInvoiceIssued: !!r.projects?.is_tax_invoice_issued,
         payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
-        amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
+        // 실지급액(actual_payment_amount)은 미지급 건에서 항상 0으로 초기화되어 있어,
+        // 무조건 ??(nullish) 우선순위를 쓰면 예산금액이 있어도 0으로 표시되는 버그가 있었음(169건 영향).
+        // 지급완료 건만 실지급액을 우선하고, 그 외에는 예산금액을 그대로 보여준다.
+        amount: Number(r.status === '지급완료' ? (r.actual_payment_amount ?? r.budget_amount ?? 0) : (r.budget_amount ?? r.actual_payment_amount ?? 0)),
         // 예정일 = 지급 '예약월'의 말일. 구 업무는 월말 일괄 지급 배치 방식이라 예약이 없으면 예정일도 없다
         // (과거: 시행일 익월말일을 자동 부여 → 예정 개념이 없던 과거 건 전체가 '연체'로 표기되는 문제)
         dueDate: r.status === '지급완료' ? (r.paid_month ?? '')
