@@ -155,6 +155,8 @@ export interface Project extends NotionSyncFields {
   // 운영
   trainerIds: string[];
   vendorIds: string[];
+  /** 개요탭 강사 표시용 — '강사비' 카테고리 지급대상의 실제 이름(강사 개인명 또는 업체 대표자명). payee_type이 company로 저장돼도 강사 개인명이 그대로 보이도록 서버에서 미리 계산한다. */
+  trainerNames?: string[];
   prepItems: PrepItem[];
   /** 준비 체크 상태 (그룹웨어 전용 저장, 노션 미연동) */
   prepChecklist?: Record<string, boolean>;

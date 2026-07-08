@@ -8,7 +8,8 @@ import { ExternalLink, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
 export function OverviewTab({ project, instructors, onRecover, onDelete }: { project: Project; instructors: Instructor[]; onRecover: () => Promise<void>; onDelete: () => Promise<void> }) {
-  const trainers = instructors.filter((i) => project.trainerIds.includes(i.id));
+  // 강사비 지급대상이 업체(대표자) 명의여도 강사 개인명이 보이도록 서버에서 계산한 trainerNames를 우선 사용
+  const trainerNames = project.trainerNames ?? instructors.filter((i) => project.trainerIds.includes(i.id)).map((i) => i.name);
   const [recovering, setRecovering] = useState(false);
   return (
     <div className="space-y-4">
@@ -61,7 +62,7 @@ export function OverviewTab({ project, instructors, onRecover, onDelete }: { pro
       <Section title="진행 / 배정">
         <Field label="프로젝트 상태"><StatusBadge label={project.projectStatus} style={projectStatusStyle[project.projectStatus]} /></Field>
         <Field label="우선순위"><StatusBadge label={project.priority} style={priorityStyle[project.priority]} /></Field>
-        <Field label="강사">{trainers.length ? trainers.map((t) => t.name).join(', ') : <span className="text-red-500">미확정</span>}</Field>
+        <Field label="강사">{trainerNames.length ? trainerNames.join(', ') : <span className="text-red-500">미확정</span>}</Field>
         <Field label="Notion 원본">
           {project.notionUrl ? (
             <a href={project.notionUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
