@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
-import { applyProjectFilters, defaultFilterState, projectYear } from '../../utils/filters';
+import { applyProjectFilters, defaultFilterState, projectYear, STATUSES } from '../../utils/filters';
 import type { ProjectFilterState } from '../../utils/filters';
 import { ProjectTable } from './ProjectTable';
 import { Card } from '../common/Card';
@@ -10,10 +10,7 @@ import { PageSkeleton } from '../common/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../common/toast';
 import { Plus, X } from 'lucide-react';
-import type { ProjectStatus } from '../../types';
 
-// '제안완료'는 DB 상태 파생 로직상 나올 수 없는 값이라 필터 옵션에서 제외 (죽은 옵션 정리)
-const STATUSES: ProjectStatus[] = ['제안중', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류'];
 const PAGE_SIZE = 50;
 
 export function ProjectListPage() {
@@ -137,9 +134,9 @@ export function ProjectListPage() {
                 </button>
               );
             })}
-            {f.statuses.length > 0 && (
-              <button type="button" onClick={() => set({ statuses: [] })}
-                className="text-xs text-slate-400 underline hover:text-slate-600">전체</button>
+            {f.statuses.length < STATUSES.length && (
+              <button type="button" onClick={() => set({ statuses: [...STATUSES] })}
+                className="text-xs text-slate-400 underline hover:text-slate-600">전체 보기</button>
             )}
           </div>
           <select value={f.clientId} onChange={(e) => set({ clientId: e.target.value })} className={selCls}>

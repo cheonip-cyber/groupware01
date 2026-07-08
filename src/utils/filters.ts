@@ -1,8 +1,8 @@
-import type { Project } from '../types';
+import type { Project, ProjectStatus } from '../types';
 
 export interface ProjectFilterState {
   search: string;
-  statuses: string[];    // 빈 배열 = 전체 (상태 태그 ON/OFF 다중 선택)
+  statuses: string[];    // 상태 태그 ON/OFF 다중 선택 — 배열에 포함된 상태만 노출(전부 ON이 기본, 취소/보류만 기본 OFF)
   clientId: string;
   manager: string;
   year: string;          // 'YYYY' | '전체' | '미지정' — 매출월(없으면 교육일) 기준
@@ -12,6 +12,10 @@ export interface ProjectFilterState {
   sortDir: 'asc' | 'desc';
 }
 
+// 상태 태그 필터 옵션 — 단일 소스 (버튼 렌더링·기본값 계산 공용)
+// '제안완료'는 DB 상태 파생 로직상 나올 수 없는 값이라 제외 (죽은 옵션 정리)
+export const STATUSES: ProjectStatus[] = ['제안중', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류'];
+
 // 프로젝트 귀속 연도: 매출월(YYYY-MM) 우선, 없으면 교육일자 기준. 둘 다 없으면 null(미지정)
 export const projectYear = (p: Project): string | null => {
   const src = p.revenueMonth || p.startDate;
@@ -19,8 +23,9 @@ export const projectYear = (p: Project): string | null => {
 };
 
 // 기본 필터: 올해 기준 (과거 수백 건이 매번 쏟아지는 문제 방지)
+// 상태 태그: 전부 기본 ON, '취소/보류'만 기본 OFF (2026-07-08 요청 반영)
 export const defaultFilterState: ProjectFilterState = {
-  search: '', statuses: [], clientId: '', manager: '',
+  search: '', statuses: STATUSES.filter((s) => s !== '취소/보류'), clientId: '', manager: '',
   year: String(new Date().getFullYear()), month: '', priority: '',
   sort: 'startDate', sortDir: 'desc',
 };
@@ -32,7 +37,7 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
       const hay = `${p.projectName} ${p.clientName} ${p.courseName} ${p.managerName} ${p.topic}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (f.statuses.length > 0 && !f.statuses.includes(p.projectStatus)) return false;
+    if (!f.statuses.includes(p.projectStatus)) return false;
     if (f.clientId && p.clientId !== f.clientId) return false;
     if (f.manager && p.managerName !== f.manager) return false;
     if (f.priority && p.priority !== f.priority) return false;
