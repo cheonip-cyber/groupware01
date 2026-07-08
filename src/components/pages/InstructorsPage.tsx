@@ -222,8 +222,8 @@ export function InstructorsPage() {
       </div>
       {/* 강사 상세 슬라이드 패널: 복원된 프로필 필드 + 참여 프로젝트/지급 이력 */}
       {panel && (
-        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-[--color-ink-950]/40 backdrop-blur-[2px]" onClick={() => setPanel(null)}>
-          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-[--shadow-pop]" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-ink-950/40 backdrop-blur-[2px]" onClick={() => setPanel(null)}>
+          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-pop" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-800">
                 {panel.name}{panel.honorific && <span className="ml-1 text-sm font-normal text-slate-400">{panel.honorific}</span>}

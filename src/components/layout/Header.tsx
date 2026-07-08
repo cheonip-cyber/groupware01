@@ -60,10 +60,10 @@ export function Header({ title, onMenu }: { title: string; onMenu: () => void })
   }, [projects]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[--color-ink-950]/[0.08] bg-white/85 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-ink-950/[0.08] bg-white/85 backdrop-blur">
       <div className="flex items-center gap-3 px-4 py-3 lg:px-7">
         <button onClick={onMenu} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"><Menu className="h-5 w-5" /></button>
-        <h1 className="text-lg font-bold tracking-tight text-[--color-text-strong] lg:text-xl">{title}</h1>
+        <h1 className="text-lg font-bold tracking-tight text-text-strong lg:text-xl">{title}</h1>
         <div className="ml-auto flex items-center gap-2">
           {/* 전역 기간 컨텍스트: 대시보드·리포트·목록이 공유하는 조회 연도 */}
           <select value={globalYear} onChange={(e) => setGlobalYear(e.target.value)}
@@ -75,9 +75,9 @@ export function Header({ title, onMenu }: { title: string; onMenu: () => void })
           <GlobalSearch />
           <SyncIndicator />
         </div>
-        <span className="hidden text-sm text-[--color-text-sub] sm:block">{today()}</span>
+        <span className="hidden text-sm text-text-sub sm:block">{today()}</span>
         <div className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 hover:bg-slate-100">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[--color-ink-950] text-xs font-bold text-white">{initials}</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-950 text-xs font-bold text-white">{initials}</div>
           <div className="hidden sm:block">
             <span className="text-sm font-medium text-slate-700">{displayName}</span>
             {isAdmin && <span className="ml-1.5 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700">관리자</span>}

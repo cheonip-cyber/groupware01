@@ -45,7 +45,7 @@ export function OverviewTab({ project, instructors, onRecover, onDelete }: { pro
           </span>
         </div>
       )}
-      <div className="rounded-[--radius-card] border border-slate-200 bg-white px-4 py-3 shadow-[--shadow-card]">
+      <div className="rounded-card border border-slate-200 bg-white px-4 py-3 shadow-card">
         <StatusPipeline status={project.projectStatus} />
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

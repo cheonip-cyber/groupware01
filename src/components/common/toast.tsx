@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="pointer-events-none fixed bottom-5 right-5 z-[100] flex w-80 flex-col gap-2">
         {toasts.map((t) => (
           <div key={t.id}
-            className="pointer-events-auto flex items-start gap-2.5 rounded-[--radius-card] bg-[--color-ink-950] px-3.5 py-3 text-sm text-white shadow-[--shadow-pop]">
+            className="pointer-events-auto flex items-start gap-2.5 rounded-card bg-ink-950 px-3.5 py-3 text-sm text-white shadow-pop">
             <span
               className={`mt-1.5 dot ${t.kind === 'success' ? 'dot-solid' : 'dot-alert'}`}
               style={{ '--dot-color': t.kind === 'success' ? '#34D399' : '#F87171' } as CSSProperties}

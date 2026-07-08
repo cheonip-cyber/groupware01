@@ -45,7 +45,7 @@ function NavGroup({ eyebrow, items, onClose }: { eyebrow?: string; items: typeof
         <NavLink key={it.to} to={it.to} onClick={onClose}
           className={({ isActive }) =>
             `group relative flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-colors ${
-              isActive ? 'bg-[--color-ink-900] text-white' : 'text-white/60 hover:bg-[--color-ink-900] hover:text-white'
+              isActive ? 'bg-ink-900 text-white' : 'text-white/60 hover:bg-ink-900 hover:text-white'
             }`
           }>
           {({ isActive }) => (
@@ -67,8 +67,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   const initials = displayName.slice(0, 2).toUpperCase();
   return (
     <>
-      {open && <div className="fixed inset-0 z-40 bg-[--color-ink-950]/50 backdrop-blur-sm lg:hidden" onClick={onClose} />}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-[--color-ink-950] text-white/70 transition-transform duration-300 lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      {open && <div className="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-sm lg:hidden" onClick={onClose} />}
+      <aside className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-ink-950 text-white/70 transition-transform duration-300 lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between px-5 py-5">
           <div>
             <div className="text-lg font-bold tracking-tight text-white">
@@ -76,13 +76,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
             <div className="mt-0.5 text-[11px] uppercase tracking-widest text-white/35">Groupware</div>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-white/50 hover:bg-[--color-ink-900] lg:hidden"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="rounded p-1 text-white/50 hover:bg-ink-900 lg:hidden"><X className="h-5 w-5" /></button>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-1">
           <NavLink to="/" end onClick={onClose}
             className={({ isActive }) =>
               `group relative mb-2 flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-colors ${
-                isActive ? 'bg-[--color-ink-900] text-white' : 'text-white/60 hover:bg-[--color-ink-900] hover:text-white'
+                isActive ? 'bg-ink-900 text-white' : 'text-white/60 hover:bg-ink-900 hover:text-white'
               }`
             }>
             {({ isActive }) => (
@@ -105,7 +105,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 <NavLink key={it.to} to={it.to} onClick={onClose}
                   className={({ isActive }) =>
                     `group relative flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-colors ${
-                      isActive ? 'bg-[--color-ink-900] text-white' : 'text-white/60 hover:bg-[--color-ink-900] hover:text-white'
+                      isActive ? 'bg-ink-900 text-white' : 'text-white/60 hover:bg-ink-900 hover:text-white'
                     }`
                   }>
                   {({ isActive }) => (
