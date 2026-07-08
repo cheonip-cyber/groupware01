@@ -99,7 +99,7 @@ function NotionMappingSection() {
           <p className="py-6 text-center text-xs text-slate-400">불러오는 중…</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-white">
+            <thead>
               <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="py-2 pr-2 font-medium">Supabase 컬럼</th>
                 <th className="py-2 pr-2 font-medium">Notion 속성명</th>
