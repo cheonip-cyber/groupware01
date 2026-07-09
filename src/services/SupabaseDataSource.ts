@@ -36,7 +36,8 @@ interface CostRow {
   is_cost_recognized: boolean; remarks: string | null;
 }
 
-function buildProject(row: any, clientName: string, managerName: string, costs: CostRow[]): Project {
+function buildProject(row: any, clientName: string, managerName: string, costs: CostRow[],
+  instructorNameMap?: Map<number, string>, companyNameMap?: Map<number, { name: string; ceo: string | null }>): Project {
   const expectedCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.budget_amount ?? 0) : 0), 0);
   const actualCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.actual_payment_amount ?? 0) : 0), 0);
   const finalEstimate = Number(row.final_estimate ?? 0);
@@ -128,6 +129,18 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 
     trainerIds: [...new Set(costs.filter((c) => c.payee_type === 'instructor' && c.payee_id).map((c) => String(c.payee_id)))],
     vendorIds: [...new Set(costs.filter((c) => c.payee_type === 'company' && c.payee_id).map((c) => String(c.payee_id)))],
+    // 강사비 카테고리는 지급유형이 company로 저장돼 있어도(업체 명의 세금계산서 등) 개요에는 실제 강사 개인명이 보여야 한다 —
+    // instructor면 강사DB 이름, company면 대표자명(없으면 업체명)을 우선하고, 매핑이 없으면 저장된 텍스트로 폴백한다.
+    trainerNames: [...new Set(
+      costs.filter((c) => budgetBucket(c.category) === 'trainer').map((c) => {
+        if (c.payee_type === 'instructor' && c.payee_id) return instructorNameMap?.get(c.payee_id) ?? c.payee_name ?? '';
+        if (c.payee_type === 'company' && c.payee_id) {
+          const co = companyNameMap?.get(c.payee_id);
+          return co ? (co.ceo || co.name) : (c.payee_name ?? '');
+        }
+        return c.payee_name ?? '';
+      }).filter(Boolean),
+    )],
     prepItems,
     prepChecklist: (row.prep_checklist ?? {}) as Record<string, boolean>,
     clientRequest: undefined,
@@ -164,6 +177,21 @@ async function fetchCostsByProjectIds(ids: number[]): Promise<Map<number, CostRo
   return map;
 }
 
+// 강사비 항목의 실제 표시명 계산용 — 강사DB 이름, 업체DB(대표자명 포함) 전체를 한 번에 조회해 맵으로 반환.
+// project_costs.payee_name은 등록 시점 텍스트 스냅샷이라 갱신되지 않으므로(개요 강사명 표시 정확도를 위해) 항상 최신 원본을 조회한다.
+async function fetchNameMaps(): Promise<{ instructorNameMap: Map<number, string>; companyNameMap: Map<number, { name: string; ceo: string | null }> }> {
+  const [{ data: instructors, error: iErr }, { data: companies, error: cErr }] = await Promise.all([
+    supabase.from('instructors').select('id, name'),
+    supabase.from('companies').select('id, company_name, ceo_name'),
+  ]);
+  if (iErr) throw iErr;
+  if (cErr) throw cErr;
+  return {
+    instructorNameMap: new Map((instructors ?? []).map((i: any) => [i.id, i.name])),
+    companyNameMap: new Map((companies ?? []).map((c: any) => [c.id, { name: c.company_name, ceo: c.ceo_name }])),
+  };
+}
+
 class SupabaseDataSource implements DataSource {
   async getProjects(): Promise<Project[]> {
     const { data: rows, error } = await supabase
@@ -174,6 +202,7 @@ class SupabaseDataSource implements DataSource {
 
     const ids = (rows ?? []).map((r: any) => r.id);
     const costMap = await fetchCostsByProjectIds(ids);
+    const { instructorNameMap, companyNameMap } = await fetchNameMaps();
 
     const projects = (rows ?? []).map((r: any) =>
       buildProject(
@@ -181,6 +210,8 @@ class SupabaseDataSource implements DataSource {
         r.clients?.name ?? '',
         r.users?.name ?? r.users?.email ?? '',
         costMap.get(r.id) ?? [],
+        instructorNameMap,
+        companyNameMap,
       ),
     );
     const enriched = SupabaseDataSource.enrichGroups(projects);
@@ -246,7 +277,8 @@ class SupabaseDataSource implements DataSource {
     if (error) throw error;
     if (!r) return undefined;
     const costMap = await fetchCostsByProjectIds([r.id]);
-    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? []);
+    const { instructorNameMap, companyNameMap } = await fetchNameMaps();
+    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap);
   }
 
   // 수기 프로젝트 신규 생성 (기존에는 노션 pull·그룹 회차 생성만 가능해 화면에서 프로젝트를 만들 수 없었음)
@@ -482,9 +514,13 @@ class SupabaseDataSource implements DataSource {
         // 구 지급확인 '입금/세발' 컬럼: 지급 판단에 필수인 프로젝트 수금·계산서 상태
         projectPaymentReceived: !!r.projects?.client_payment_received,
         projectTaxInvoiceIssued: !!r.projects?.is_tax_invoice_issued,
+        projectStartDate: r.projects?.session_1_date ?? undefined,
         payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
-        amount: Number(r.actual_payment_amount ?? r.budget_amount ?? 0),
+        // 실지급액(actual_payment_amount)은 미지급 건에서 항상 0으로 초기화되어 있어,
+        // 무조건 ??(nullish) 우선순위를 쓰면 예산금액이 있어도 0으로 표시되는 버그가 있었음(169건 영향).
+        // 지급완료 건만 실지급액을 우선하고, 그 외에는 예산금액을 그대로 보여준다.
+        amount: Number(r.status === '지급완료' ? (r.actual_payment_amount ?? r.budget_amount ?? 0) : (r.budget_amount ?? r.actual_payment_amount ?? 0)),
         // 예정일 = 지급 '예약월'의 말일. 구 업무는 월말 일괄 지급 배치 방식이라 예약이 없으면 예정일도 없다
         // (과거: 시행일 익월말일을 자동 부여 → 예정 개념이 없던 과거 건 전체가 '연체'로 표기되는 문제)
         dueDate: r.status === '지급완료' ? (r.paid_month ?? '')

@@ -8,7 +8,8 @@ import { formatDateRange } from '../../utils/formatters';
 import { Table2, ArrowUpRight } from 'lucide-react';
 
 export function ProjectSummaryTable({ projects }: { projects: Project[] }) {
-  const rows = [...projects]
+  const rows = projects
+    .filter((p) => p.projectStatus !== '취소/보류')
     .sort((a, b) => (a.startDate < b.startDate ? 1 : -1))
     .slice(0, 8);
   return (

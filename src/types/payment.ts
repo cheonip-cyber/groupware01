@@ -19,6 +19,8 @@ export interface PaymentRequest {
   projectPaymentReceived?: boolean;
   /** 프로젝트의 세금계산서 발행 여부 (구 지급확인 '세발' 컬럼) */
   projectTaxInvoiceIssued?: boolean;
+  /** 프로젝트 교육일정(1차수 시작일, YYYY-MM-DD) — 지급대상 대시보드 판정 기준 */
+  projectStartDate?: string;
   payeeType: '강사' | '업체' | '기타';
   payeeName: string;
   amount: number;

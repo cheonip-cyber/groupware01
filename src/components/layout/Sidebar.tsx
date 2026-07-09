@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Receipt, Wallet, CreditCard,
-  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark,
+  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -16,10 +16,12 @@ const workItems = [
 ];
 
 // 자산·관계 — 강사/업체/카드 등 참조 데이터
-const assetItems = [
+// to: 내부 라우팅, popup: 외부 URL을 새 팝업 창으로 오픈(예: 개인 카드사용 등록은 별도 카드앱에서 처리)
+const assetItems: { to?: string; popup?: string; label: string; icon: typeof CreditCard }[] = [
   { to: '/instructors', label: '강사관리', icon: Users },
   { to: '/companies', label: '업체관리', icon: Building2 },
   { to: '/my-cards', label: '카드사용내역', icon: CreditCard },
+  { popup: 'https://cardsamsotta.netlify.app/', label: '카드사용 등록', icon: ExternalLink },
 ];
 
 // 분석·설정
@@ -35,14 +37,30 @@ const adminItems = [
   { to: '/admin/sga', label: '판관비 관리', icon: PiggyBank },
 ];
 
-function NavGroup({ eyebrow, items, onClose }: { eyebrow?: string; items: typeof workItems; onClose: () => void }) {
+// 외부 URL을 별도 팝업 창으로 오픈 (개인 카드사용 등록 등 — 그룹웨어 내부 라우팅이 아닌 외부 앱 연동)
+function openPopup(url: string) {
+  window.open(url, '_blank', 'width=480,height=860,resizable=yes,scrollbars=yes,noopener,noreferrer');
+}
+
+function NavGroup({ eyebrow, items, onClose }: {
+  eyebrow?: string;
+  items: { to?: string; popup?: string; label: string; icon: typeof CreditCard }[];
+  onClose: () => void;
+}) {
+  const itemCls = 'group relative flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium text-white/60 transition-colors hover:bg-ink-900 hover:text-white';
   return (
     <div className="mb-1">
       {eyebrow && (
         <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-white/35">{eyebrow}</div>
       )}
-      {items.map((it) => (
-        <NavLink key={it.to} to={it.to} onClick={onClose}
+      {items.map((it) => it.popup ? (
+        <button key={it.label} type="button" onClick={() => { openPopup(it.popup!); onClose(); }}
+          title="새 팝업 창으로 열립니다" className={`w-full ${itemCls}`}>
+          <it.icon className="h-[18px] w-[18px]" />
+          {it.label}
+        </button>
+      ) : (
+        <NavLink key={it.to} to={it.to!} onClick={onClose}
           className={({ isActive }) =>
             `group relative flex items-center gap-3 rounded-lg py-2.5 pl-3 pr-3 text-sm font-medium transition-colors ${
               isActive ? 'bg-ink-900 text-white' : 'text-white/60 hover:bg-ink-900 hover:text-white'
