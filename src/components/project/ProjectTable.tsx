@@ -4,7 +4,8 @@ import type { Project, RevenueDistribution } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
-import { formatDateRange, profitRateLabel, formatMonthOnly } from '../../utils/formatters';
+import { formatDateRange, profitRateLabel } from '../../utils/formatters';
+import { MonthBadge } from '../common/MonthBadge';
 import { EmptyState } from '../common/EmptyState';
 import { dataSource } from '../../services/dataSource';
 import { ChevronRight, CornerDownRight, Receipt, Wallet } from 'lucide-react';
@@ -33,7 +34,7 @@ function ChildProjectRow({ c }: { c: Project }) {
   return (
     <tr className="bg-indigo-50/30">
       <td className="px-3 py-2"></td>
-      <td className="px-3 py-2 text-xs tabular-nums text-slate-400">{formatMonthOnly(c.revenueMonth)}</td>
+      <td className="px-3 py-2"><MonthBadge yearMonth={c.revenueMonth} /></td>
       <td className="px-4 py-2 pl-8">
         <div className="flex items-center gap-1.5 text-sm">
           <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
@@ -111,7 +112,7 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
   return (
     <tr className="group hover:bg-slate-50">
       <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{no ?? ''}</td>
-      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">{formatMonthOnly(p.revenueMonth)}</td>
+      <td className="px-3 py-3"><MonthBadge yearMonth={p.revenueMonth} /></td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5">
           <button onClick={isGroupMaster ? onToggleExpand : undefined}
