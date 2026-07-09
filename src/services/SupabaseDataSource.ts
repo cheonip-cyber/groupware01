@@ -644,9 +644,18 @@ class SupabaseDataSource implements DataSource {
     if (patch.remarks !== undefined) dbPatch.remarks = patch.remarks;
     if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType !== 'etc' ? patch.payeeType : null;
     if ('payeeId' in patch) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
-    if (patch.isCardPayment !== undefined) {
-      dbPatch.is_card_payment = patch.isCardPayment;
-      dbPatch.is_payable = !patch.isCardPayment;
+    if (patch.isCardPayment !== undefined) dbPatch.is_card_payment = patch.isCardPayment;
+    // is_payable = 카드결제가 아니고, 지급대상 유형이 강사/업체인 경우에만 true.
+    // '기타(직접입력)'는 계좌·사업자 정보가 없는 메모성 항목이라 지급관리(지급대상/지급요청) 대상에서 제외한다.
+    if (patch.isCardPayment !== undefined || patch.payeeType !== undefined) {
+      let type = patch.payeeType;
+      let card = patch.isCardPayment;
+      if (type === undefined || card === undefined) {
+        const { data: cur } = await supabase.from('project_costs').select('payee_type, is_card_payment').eq('id', Number(costId)).maybeSingle();
+        if (type === undefined) type = cur?.payee_type === 'instructor' ? 'instructor' : cur?.payee_type === 'company' ? 'company' : 'etc';
+        if (card === undefined) card = !!cur?.is_card_payment;
+      }
+      dbPatch.is_payable = !card && (type === 'instructor' || type === 'company');
     }
     if (patch.category !== undefined) dbPatch.category = patch.category;
     const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(costId));
@@ -670,7 +679,8 @@ class SupabaseDataSource implements DataSource {
       payee_name: input.payeeName,
       budget_amount: input.budgetAmount,
       is_card_payment: input.isCardPayment ?? false,
-      is_payable: !(input.isCardPayment ?? false),
+      // '기타(직접입력)'는 강사/업체 DB에 연결되지 않는 메모성 항목이라 지급관리 대상(is_payable)에서 제외한다.
+      is_payable: !(input.isCardPayment ?? false) && (input.payeeType === 'instructor' || input.payeeType === 'company'),
       is_cost_recognized: true,
       status: '미지급',
       remarks: input.remarks ?? null,
