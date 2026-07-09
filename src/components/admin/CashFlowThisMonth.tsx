@@ -4,10 +4,13 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { Wallet, TrendingUp, TrendingDown, HelpCircle } from 'lucide-react';
+import type { Project } from '../../types';
 
-// 이번 달 자금 캘린더 (2026-07-09 설계) — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
+// 이번 달 자금 캘린더 (2026-07-09 설계, 2026-07-09 입금예정 로직 개정) — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
 // 업무 규칙(사용자 확정):
-//  - 고객사 입금: 교육종료일 + 1개월 (수금예정일이 따로 있으면 그걸 우선)
+//  - 고객사 입금 예정: ①수금예정일이 명시돼 있으면 그대로 ②세금계산서 발행일 기준,
+//    과거 완료건 2건 이상 있는 고객사는 그 고객사의 평균 리드타임(발행일→입금일 실측)을 적용,
+//    이력이 부족한 고객사는 기본값(발행일+익월) ③세금계산서 아직 미발행이면 교육종료일+1개월로 잠정 추정(신뢰도 낮음 표시)
 //  - 강사/업체 지급: 교육일 + 1개월 (지급 예약월이 따로 있으면 그걸 우선)
 //  - 카드: 하나카드 5일(전전월20일~전월19일 사용분)/25일(전월10일~당월9일 사용분) 결제,
 //          카테고리 '교육(플젝중복건만)'은 프로젝트 예산에 이미 잡히므로 제외
@@ -21,8 +24,36 @@ const addMonths = (dateStr: string, n: number): string | null => {
   if (!y) return null;
   return ymdFromDate(new Date(y, m - 1 + n, d));
 };
+const addDays = (dateStr: string, n: number): string | null => {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.slice(0, 10).split('-').map(Number);
+  if (!y) return null;
+  return ymdFromDate(new Date(y, m - 1, d + n));
+};
+const daysBetween = (a: string, b: string): number => {
+  const [ay, am, ad] = a.slice(0, 10).split('-').map(Number);
+  const [by, bm, bd] = b.slice(0, 10).split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+};
 const inTargetMonth = (dateStr: string | null, targetY: number, targetM: number) =>
   !!dateStr && dateStr.slice(0, 4) === String(targetY) && Number(dateStr.slice(5, 7)) === targetM + 1;
+
+// 고객사별 "세금계산서 발행일 → 실제 입금일" 평균 리드타임(일) 계산 — 완료 이력 2건 이상인 고객사만 신뢰
+function computeClientLagDays(projects: Project[]): Map<string, number> {
+  const byClient = new Map<string, number[]>();
+  for (const p of projects) {
+    if (!p.clientId || !p.taxInvoiceDate || !p.collectionDoneDate) continue;
+    const days = daysBetween(p.taxInvoiceDate, p.collectionDoneDate);
+    if (days < 0 || days > 200) continue; // 이상치(데이터 오류) 배제
+    if (!byClient.has(p.clientId)) byClient.set(p.clientId, []);
+    byClient.get(p.clientId)!.push(days);
+  }
+  const avg = new Map<string, number>();
+  for (const [clientId, list] of byClient) {
+    if (list.length >= 2) avg.set(clientId, Math.round(list.reduce((a, b) => a + b, 0) / list.length));
+  }
+  return avg;
+}
 
 interface CardTx { transaction_date: string; amount: number; category_id: number; }
 
@@ -49,13 +80,27 @@ export function CashFlowThisMonth() {
   const monthLabel = `${M + 1}월`;
 
   const result = useMemo(() => {
-    // ── 매출 입금 예정: 교육종료일(없으면 시작일)+1개월, 수금예정일이 있으면 그걸 우선 ──
+    const clientLag = computeClientLagDays(projects);
+
+    // ── 매출 입금 예정 ──
+    // ①수금예정일 명시값 우선 ②세금계산서 발행 후: 고객사별 실측 리드타임(2건 이상 이력) 또는 기본값(발행일+익월)
+    // ③세금계산서 미발행: 교육종료일+1개월로 잠정 추정(신뢰도 낮음)
     const incoming = projects.filter((p) => p.projectStatus !== '취소/보류' && !p.collectionCompleted).map((p) => {
-      const estimated = addMonths(p.endDate || p.startDate || '', 1);
-      const due = p.collectionDueDate || estimated;
-      return { p, due };
+      let due: string | null = null;
+      let provisional = false;
+      if (p.collectionDueDate) {
+        due = p.collectionDueDate;
+      } else if (p.taxInvoiceDate) {
+        const lag = p.clientId ? clientLag.get(p.clientId) : undefined;
+        due = lag != null ? addDays(p.taxInvoiceDate, lag) : addMonths(p.taxInvoiceDate, 1);
+      } else {
+        due = addMonths(p.endDate || p.startDate || '', 1);
+        provisional = true;
+      }
+      return { p, due, provisional };
     }).filter((x) => inTargetMonth(x.due, Y, M));
     const incomingTotal = incoming.reduce((s, x) => s + (x.p.effectiveAmount ?? x.p.contractAmount ?? 0), 0);
+    const incomingProvisionalCount = incoming.filter((x) => x.provisional).length;
 
     // ── 강사/업체 지급 예정: 교육일+1개월, 지급예약월이 있으면 그걸 우선 ──
     const outgoingPay = paymentRequests.filter((r) => r.status !== '지급완료').map((r) => {
@@ -80,7 +125,7 @@ export function CashFlowThisMonth() {
     const d25end = ymdFromDate(new Date(Y, M, 9));
     const hana25 = sumCardRange(d25start, d25end);
 
-    return { incoming, incomingTotal, outgoingPay, outgoingPayTotal, hana05, hana25 };
+    return { incoming, incomingTotal, incomingProvisionalCount, outgoingPay, outgoingPayTotal, hana05, hana25 };
   }, [projects, paymentRequests, cardTx, eduCategoryId, Y, M]);
 
   if (loading || extLoading) return null;
@@ -96,7 +141,12 @@ export function CashFlowThisMonth() {
         <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3">
           <p className="flex items-center gap-1 text-xs font-medium text-blue-700"><TrendingUp className="h-3.5 w-3.5" />입금 예정</p>
           <p className="mt-1 text-xl font-bold text-blue-700"><MoneyText value={result.incomingTotal} compact /></p>
-          <p className="mt-0.5 text-[11px] text-slate-400">고객사 수금 {result.incoming.length}건 (교육종료+1개월 기준)</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">
+            고객사 수금 {result.incoming.length}건 (세금계산서 발행일 기준, 고객사별 리드타임 적용)
+            {result.incomingProvisionalCount > 0 && (
+              <span className="ml-1 text-amber-600">· 발행전 잠정추정 {result.incomingProvisionalCount}건</span>
+            )}
+          </p>
         </div>
         <div className="rounded-lg border border-red-100 bg-red-50/50 p-3">
           <p className="flex items-center gap-1 text-xs font-medium text-red-700"><TrendingDown className="h-3.5 w-3.5" />출금 예정</p>
