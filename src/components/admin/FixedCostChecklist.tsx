@@ -158,13 +158,11 @@ export function FixedCostChecklist() {
           const editing = editingId === item.id;
           return (
             <li key={item.id} className="flex items-center gap-2.5 px-2.5 py-2.5 text-sm">
-              {/* 경고 셀: 체크박스 왼쪽, D-1/오늘/경고 3단계만 표시 (등록 전일 때만) */}
-              <span className="flex w-9 shrink-0 justify-center">
-                {stage && (
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${STAGE_STYLE[stage].cls}`}>
-                    {STAGE_STYLE[stage].label}
-                  </span>
-                )}
+              {/* 경고 셀: 모든 행에 동일한 폭/모양으로 렌더링 — 경고 없는 행은 투명 placeholder로 정렬만 유지 */}
+              <span className="w-10 shrink-0 text-center">
+                <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${stage ? STAGE_STYLE[stage].cls : 'invisible'}`}>
+                  {stage ? STAGE_STYLE[stage].label : '—'}
+                </span>
               </span>
               <input
                 type="checkbox"
