@@ -468,7 +468,17 @@ class SupabaseDataSource implements DataSource {
       contactName: '',
       contactPhone: undefined,
       contactEmail: undefined,
+      avgPaymentLagDays: r.avg_payment_lag_days ?? undefined,
+      paymentLagSampleCount: r.payment_lag_sample_count ?? undefined,
+      paymentLagUpdatedAt: r.payment_lag_updated_at ?? undefined,
     }));
+  }
+
+  /** 고객사별 입금 리드타임 재분석 실행 (설정 화면 버튼에서 호출) */
+  async recomputeClientPaymentLag(): Promise<number> {
+    const { data, error } = await supabase.rpc('recompute_client_payment_lag');
+    if (error) throw error;
+    return (data?.[0]?.updated_count as number) ?? 0;
   }
 
   // DB(project_costs.status: 미지급/지급요청/지급완료) ↔ 프론트(PaymentStatus: 지급대상/지급요청/지급완료/보류) 매핑

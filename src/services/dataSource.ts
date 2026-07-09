@@ -31,6 +31,7 @@ export interface DataSource {
   updateCompany(id: string, patch: Partial<Company>): Promise<void>;
   deleteCompany(id: string): Promise<void>;
   getClients(): Promise<Client[]>;
+  recomputeClientPaymentLag(): Promise<number>;
   getPaymentRequests(): Promise<PaymentRequest[]>;
   updatePaymentRequest(id: string, patch: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
   updateProjectCost(costId: string, patch: { payeeName?: string; budgetAmount?: number; remarks?: string; payeeType?: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment?: boolean; category?: string }): Promise<void>;
@@ -89,6 +90,7 @@ class SampleDataSource implements DataSource {
 
   async getInstructors() { await delay(); return clone(this.instructors); }
   async getClients() { await delay(); return clone(this.clients); }
+  async recomputeClientPaymentLag() { await delay(); return 0; }
   async getPaymentRequests() { await delay(); return clone(this.payments); }
 
   async updatePaymentRequest(id: string, patch: Partial<PaymentRequest>) {

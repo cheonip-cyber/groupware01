@@ -4,7 +4,6 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { Wallet, TrendingUp, TrendingDown, HelpCircle } from 'lucide-react';
-import type { Project } from '../../types';
 
 // 이번 달 자금 캘린더 (2026-07-09 설계, 2026-07-09 입금예정 로직 개정) — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
 // 업무 규칙(사용자 확정):
@@ -30,35 +29,13 @@ const addDays = (dateStr: string, n: number): string | null => {
   if (!y) return null;
   return ymdFromDate(new Date(y, m - 1, d + n));
 };
-const daysBetween = (a: string, b: string): number => {
-  const [ay, am, ad] = a.slice(0, 10).split('-').map(Number);
-  const [by, bm, bd] = b.slice(0, 10).split('-').map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
-};
 const inTargetMonth = (dateStr: string | null, targetY: number, targetM: number) =>
   !!dateStr && dateStr.slice(0, 4) === String(targetY) && Number(dateStr.slice(5, 7)) === targetM + 1;
-
-// 고객사별 "세금계산서 발행일 → 실제 입금일" 평균 리드타임(일) 계산 — 완료 이력 2건 이상인 고객사만 신뢰
-function computeClientLagDays(projects: Project[]): Map<string, number> {
-  const byClient = new Map<string, number[]>();
-  for (const p of projects) {
-    if (!p.clientId || !p.taxInvoiceDate || !p.collectionDoneDate) continue;
-    const days = daysBetween(p.taxInvoiceDate, p.collectionDoneDate);
-    if (days < 0 || days > 200) continue; // 이상치(데이터 오류) 배제
-    if (!byClient.has(p.clientId)) byClient.set(p.clientId, []);
-    byClient.get(p.clientId)!.push(days);
-  }
-  const avg = new Map<string, number>();
-  for (const [clientId, list] of byClient) {
-    if (list.length >= 2) avg.set(clientId, Math.round(list.reduce((a, b) => a + b, 0) / list.length));
-  }
-  return avg;
-}
 
 interface CardTx { transaction_date: string; amount: number; category_id: number; }
 
 export function CashFlowThisMonth() {
-  const { projects, paymentRequests, loading } = useAppData();
+  const { projects, paymentRequests, clients, loading } = useAppData();
   const [cardTx, setCardTx] = useState<CardTx[]>([]);
   const [eduCategoryId, setEduCategoryId] = useState<number | null>(null);
   const [extLoading, setExtLoading] = useState(true);
@@ -80,7 +57,7 @@ export function CashFlowThisMonth() {
   const monthLabel = `${M + 1}월`;
 
   const result = useMemo(() => {
-    const clientLag = computeClientLagDays(projects);
+    const clientLag = new Map(clients.filter((c) => c.avgPaymentLagDays != null).map((c) => [c.id, c.avgPaymentLagDays!]));
 
     // ── 매출 입금 예정 ──
     // ①수금예정일 명시값 우선 ②세금계산서 발행 후: 고객사별 실측 리드타임(2건 이상 이력) 또는 기본값(발행일+익월)
@@ -126,7 +103,7 @@ export function CashFlowThisMonth() {
     const hana25 = sumCardRange(d25start, d25end);
 
     return { incoming, incomingTotal, incomingProvisionalCount, outgoingPay, outgoingPayTotal, hana05, hana25 };
-  }, [projects, paymentRequests, cardTx, eduCategoryId, Y, M]);
+  }, [projects, paymentRequests, clients, cardTx, eduCategoryId, Y, M]);
 
   if (loading || extLoading) return null;
 

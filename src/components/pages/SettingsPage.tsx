@@ -2,8 +2,86 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader } from '../common/Card';
 import { dataSource } from '../../services/dataSource';
 import { useAuth } from '../../auth/AuthContext';
-import type { NotionFieldMapping, NotionFieldDataType, NotionSyncDirection } from '../../types';
-import { Settings, RefreshCw, Plus, Trash2, ShieldAlert } from 'lucide-react';
+import type { NotionFieldMapping, NotionFieldDataType, NotionSyncDirection, Client } from '../../types';
+import { Settings, RefreshCw, Plus, Trash2, ShieldAlert, TimerReset } from 'lucide-react';
+import { useToast } from '../common/toast';
+
+function ClientPaymentLagSection() {
+  const toast = useToast();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setClients(await dataSource.getClients());
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const runAnalysis = async () => {
+    setAnalyzing(true);
+    try {
+      const n = await dataSource.recomputeClientPaymentLag();
+      toast.success(`${n}개 고객사 리드타임 분석 완료`);
+      await load();
+    } catch (e: any) {
+      toast.error(`분석 실패: ${e?.message ?? e}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const withProfile = clients.filter((c) => c.avgPaymentLagDays != null).sort((a, b) => (a.avgPaymentLagDays! - b.avgPaymentLagDays!));
+  const without = clients.filter((c) => c.avgPaymentLagDays == null).length;
+
+  return (
+    <Card>
+      <CardHeader
+        title="고객사별 입금 리드타임"
+        icon={<TimerReset className="h-4 w-4 text-slate-400" />}
+        action={
+          <button onClick={runAnalysis} disabled={analyzing}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 ${analyzing ? 'animate-spin' : ''}`} />
+            {analyzing ? '분석 중…' : '지금 재분석'}
+          </button>
+        }
+      />
+      <div className="p-4">
+        <p className="mb-3 text-xs text-slate-500">
+          완료된 프로젝트의 "세금계산서 발행일 → 실제 입금일" 간격을 고객사별로 계산해, 자금 캘린더의 입금예정일 예측에 사용합니다.
+          과거 완료 이력이 2건 이상인 고객사만 반영되며(이상치·미완료건 자동 제외), 새로 등록되는 고객사도 향후 재분석 시 자동 포함됩니다.
+          {without > 0 && ` 이력 부족(2건 미만)으로 분석 제외된 고객사 ${without}곳은 기본값(발행일+익월)이 적용됩니다.`}
+        </p>
+        {loading ? (
+          <p className="py-6 text-center text-xs text-slate-400">불러오는 중…</p>
+        ) : withProfile.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-400">분석된 고객사가 없습니다. "지금 재분석"을 눌러보세요.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                <th className="py-2 pr-2 font-medium">고객사</th>
+                <th className="py-2 pr-2 text-right font-medium">평균 리드타임</th>
+                <th className="py-2 pr-2 text-right font-medium">이력 건수</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {withProfile.map((c) => (
+                <tr key={c.id}>
+                  <td className="py-2 pr-2 font-medium text-slate-700">{c.name}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums text-slate-600">{c.avgPaymentLagDays}일</td>
+                  <td className="py-2 pr-2 text-right tabular-nums text-slate-400">{c.paymentLagSampleCount}건</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 const DATA_TYPES: NotionFieldDataType[] = ['title', 'status', 'select', 'checkbox', 'date', 'number', 'rich_text'];
 const DIRECTIONS: { value: NotionSyncDirection; label: string }[] = [
@@ -196,7 +274,10 @@ export function SettingsPage() {
       </Card>
 
       {isAdmin ? (
-        <NotionMappingSection />
+        <>
+          <ClientPaymentLagSection />
+          <NotionMappingSection />
+        </>
       ) : (
         <Card className="p-5">
           <p className="flex items-center gap-2 text-xs text-slate-400">
