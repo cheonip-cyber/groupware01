@@ -3,7 +3,7 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { useToast } from '../common/toast';
-import { CheckCircle2, Circle, AlertTriangle, ClipboardList } from 'lucide-react';
+import { AlertTriangle, ClipboardList } from 'lucide-react';
 
 // 고정비 누락 방지 체크리스트 (2026-07-09 설계) — "사람이 기억"이 아니라 "시스템이 먼저 확인"하는 구조.
 // recurring_checklist_items(표준 항목) × 이번 달 manual_expenses 존재 여부를 대조해 미등록 항목을 바로 보여주고,
@@ -14,12 +14,14 @@ interface ChecklistItem {
 }
 interface ExpenseRow { id: number; transaction_date: string; category: string; description: string; amount: number; }
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
 function monthRange(offset = 0) {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset, 1);
-  const start = d.toISOString().slice(0, 10);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().slice(0, 10);
-  return { start, end, label: `${d.getMonth() + 1}월` };
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const next = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1);
+  return { start: ymd(first), end: ymd(next), label: `${first.getMonth() + 1}월` };
 }
 
 export function FixedCostChecklist() {
@@ -29,7 +31,7 @@ export function FixedCostChecklist() {
   const [lastMonth, setLastMonth] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '' });
+  const [form, setForm] = useState({ date: ymd(new Date()), amount: '' });
   const [busy, setBusy] = useState(false);
 
   const cur = monthRange(0);
@@ -64,7 +66,7 @@ export function FixedCostChecklist() {
 
   const startEdit = (row: typeof rows[number]) => {
     setEditingId(row.item.id);
-    setForm({ date: new Date().toISOString().slice(0, 10), amount: row.lastAmount ? String(row.lastAmount) : '' });
+    setForm({ date: ymd(new Date()), amount: row.lastAmount ? String(row.lastAmount) : '' });
   };
 
   const submit = async (item: ChecklistItem) => {
@@ -81,6 +83,18 @@ export function FixedCostChecklist() {
       setEditingId(null);
       await load();
     } catch (e: any) { toast.error(`등록 실패: ${e?.message ?? e}`); }
+    finally { setBusy(false); }
+  };
+
+  const uncheck = async (item: ChecklistItem, found: ExpenseRow) => {
+    if (!confirm(`'${item.label}(${cur.label})' 등록을 취소할까요? (${found.description} 삭제)`)) return;
+    setBusy(true);
+    try {
+      const { error } = await cardSupabase.from('manual_expenses').delete().eq('id', found.id);
+      if (error) throw error;
+      toast.success(`${item.label} 등록이 취소되었습니다`);
+      await load();
+    } catch (e: any) { toast.error(`취소 실패: ${e?.message ?? e}`); }
     finally { setBusy(false); }
   };
 
@@ -102,9 +116,14 @@ export function FixedCostChecklist() {
       <ul className="divide-y divide-slate-50 px-2">
         {rows.map(({ item, found, lastAmount, overdue }) => (
           <li key={item.id} className="flex items-center gap-2.5 px-2.5 py-2.5 text-sm">
-            {found ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              : overdue ? <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-              : <Circle className="h-4 w-4 shrink-0 text-slate-300" />}
+            <input
+              type="checkbox"
+              checked={!!found}
+              disabled={busy}
+              onChange={() => { if (found) uncheck(item, found); else startEdit({ item, found, lastAmount, overdue }); }}
+              className="h-4 w-4 shrink-0 cursor-pointer accent-emerald-600"
+            />
+            {!found && overdue && <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />}
             <span className={`w-32 shrink-0 font-medium ${found ? 'text-slate-500' : 'text-slate-800'}`}>{item.label}</span>
             {item.payment_day != null && <span className="w-14 shrink-0 text-[11px] text-slate-400">매월 {item.payment_day}일</span>}
 
