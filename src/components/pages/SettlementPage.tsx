@@ -5,28 +5,34 @@ import { MoneyText } from '../common/MoneyText';
 import { settlementStatusStyle } from '../../utils/statusConfig';
 import { ClipboardCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SortableTh, useSortableRows } from '../common/SortableTh';
+import type { Project } from '../../types';
+
+type SettlementSortKey = 'projectName' | 'expectedProfit';
+const settlementSortValue = (p: Project, key: SettlementSortKey) => key === 'expectedProfit' ? p.expectedProfit : p.projectName;
 
 export function SettlementPage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   const active = projects.filter((p) => p.projectStatus !== '취소/보류');
+  const { sorted, sortKey, dir, onSort } = useSortableRows<Project, SettlementSortKey>(active, settlementSortValue);
   return (
     <Card>
       <CardHeader title="정산/결산 현황" icon={<ClipboardCheck className="h-4 w-4 text-slate-400" />} />
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-            <th className="px-5 py-2.5 font-medium">프로젝트</th>
+            <SortableTh label="프로젝트" sortKey="projectName" active={sortKey === 'projectName'} dir={dir} onSort={onSort} className="px-5" />
             <th className="px-3 py-2.5 font-medium">결산상태</th>
             <th className="px-3 py-2.5 font-medium">보고서</th>
             <th className="px-3 py-2.5 font-medium">거래명세서</th>
             <th className="px-3 py-2.5 font-medium">세금계산서</th>
             <th className="px-3 py-2.5 font-medium">수금</th>
             <th className="px-3 py-2.5 font-medium">지급완료</th>
-            <th className="px-3 py-2.5 text-right font-medium">최종이익</th>
+            <SortableTh label="최종이익" sortKey="expectedProfit" active={sortKey === 'expectedProfit'} dir={dir} onSort={onSort} align="right" />
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
-            {active.map((p) => {
+            {sorted.map((p) => {
               const ok = 'text-emerald-600', no = 'text-red-400';
               return (
                 <tr key={p.id} className="group hover:bg-slate-50">

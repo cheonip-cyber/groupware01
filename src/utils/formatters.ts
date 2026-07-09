@@ -13,6 +13,13 @@ export const formatCompactKRW = (value?: number): string => {
   return value.toLocaleString('ko-KR');
 };
 
+// 매출월(YYYY-MM)을 'N월'만 표기 (프로젝트 목록 등에서 연도 중복 표기 방지 — 2026-07-09)
+export const formatMonthOnly = (yearMonth?: string): string => {
+  if (!yearMonth) return '-';
+  const m = yearMonth.match(/^\d{4}-(\d{2})/);
+  return m ? `${Number(m[1])}월` : yearMonth;
+};
+
 export const formatDate = (dateStr?: string): string => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);

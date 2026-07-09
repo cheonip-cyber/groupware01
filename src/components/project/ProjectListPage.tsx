@@ -148,15 +148,19 @@ export function ProjectListPage() {
           <select value={f.manager} onChange={(e) => set({ manager: e.target.value })} className={selCls}>
             <option value="">담당자 전체</option>{managers.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input type="month" value={f.month} onChange={(e) => set({ month: e.target.value })} className={selCls} />
+          <select value={f.month} onChange={(e) => set({ month: e.target.value })} className={selCls}>
+            <option value="">월 전체</option>
+            {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((mm) => (
+              <option key={mm} value={mm}>{Number(mm)}월</option>
+            ))}
+          </select>
           <select value={f.priority} onChange={(e) => set({ priority: e.target.value })} className={selCls}>
             <option value="">우선순위 전체</option><option value="높음">높음</option><option value="중간">중간</option><option value="낮음">낮음</option>
           </select>
-          <select value={f.sort} onChange={(e) => set({ sort: e.target.value as ProjectFilterState['sort'] })} className={selCls}>
-            <option value="startDate">교육일자순</option><option value="contractAmount">계약금액순</option><option value="updatedAt">최근수정순</option>
-          </select>
-          <button onClick={() => set({ sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' })} className={`${selCls} hover:bg-slate-50`}>
-            {f.sortDir === 'asc' ? '오름차순' : '내림차순'}
+          <button onClick={() => set(f.sort === 'updatedAt' ? { sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' } : { sort: 'updatedAt', sortDir: 'desc' })}
+            title="표에 없는 항목: 최근 수정된 순으로 정렬"
+            className={`${selCls} hover:bg-slate-50 ${f.sort === 'updatedAt' ? 'border-blue-400 text-blue-600' : ''}`}>
+            최근수정순 {f.sort === 'updatedAt' ? (f.sortDir === 'asc' ? '▲' : '▼') : ''}
           </button>
         </div>
       </Card>
@@ -181,7 +185,9 @@ export function ProjectListPage() {
         <ProjectTable projects={pageRows} childrenIndex={childrenIndex}
           startNo={(page - 1) * PAGE_SIZE + 1}
           matchedMasterIds={hasActiveQuery ? autoExpandIds : undefined}
-          autoExpandIds={hasActiveQuery ? autoExpandIds : undefined} />
+          autoExpandIds={hasActiveQuery ? autoExpandIds : undefined}
+          sort={f.sort} sortDir={f.sortDir}
+          onSort={(key) => set(f.sort === key ? { sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' } : { sort: key, sortDir: 'asc' })} />
       </Card>
 
       {createOpen && (

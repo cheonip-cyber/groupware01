@@ -4,10 +4,12 @@ import type { Project, RevenueDistribution } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
-import { formatDateRange, profitRateLabel, formatDate } from '../../utils/formatters';
+import { formatDateRange, profitRateLabel, formatDate, formatMonthOnly } from '../../utils/formatters';
 import { EmptyState } from '../common/EmptyState';
 import { dataSource } from '../../services/dataSource';
 import { ChevronRight, CornerDownRight, Receipt, Wallet } from 'lucide-react';
+import { SortableTh } from '../common/SortableTh';
+import type { ProjectFilterState } from '../../utils/filters';
 
 // 자금 3축(매출·지급·결산) 요약 점: 회색=미시작, 파랑 테두리=진행중, 채움=완료 (상세는 툴팁)
 function FundDot({ label, done, active }: { label: string; done: boolean; active: boolean }) {
@@ -30,6 +32,7 @@ function ChildProjectRow({ c }: { c: Project }) {
   return (
     <tr className="bg-indigo-50/30">
       <td className="px-3 py-2"></td>
+      <td className="px-3 py-2 text-xs tabular-nums text-slate-400">{formatMonthOnly(c.revenueMonth)}</td>
       <td className="px-4 py-2 pl-8">
         <div className="flex items-center gap-1.5 text-sm">
           <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
@@ -37,7 +40,6 @@ function ChildProjectRow({ c }: { c: Project }) {
         </div>
       </td>
       <td className="px-3 py-2 text-xs text-slate-400">{formatDateRange(c.startDate, c.endDate)}</td>
-      <td className="px-3 py-2 text-xs tabular-nums text-slate-400">{c.revenueMonth ?? '-'}</td>
       <td className="px-3 py-2"></td>
       <td className="px-3 py-2"><StatusBadge label={c.projectStatus} style={projectStatusStyle[c.projectStatus]} size="sm" /></td>
       <td className="px-3 py-2"></td>
@@ -61,6 +63,7 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
       {items.map((d) => (
         <tr key={d.id} className="bg-indigo-50/30">
           <td className="px-3 py-2"></td>
+          <td className="px-3 py-2"></td>
           <td className="px-4 py-2 pl-8" colSpan={2}>
             <div className="flex items-center gap-1.5 text-sm">
               <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
@@ -69,7 +72,6 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
             </div>
           </td>
           <td className="px-3 py-2"></td>
-          <td className="px-3 py-2"></td>
           <td className="px-3 py-2">
             <span className="flex items-center gap-2 text-[11px]">
               <span className={`flex items-center gap-1 ${d.taxInvoiceIssued ? 'text-emerald-600' : 'text-slate-300'}`}><Receipt className="h-3 w-3" />{d.taxInvoiceIssued ? formatDate(d.taxInvoiceDate) : '미발행'}</span>
@@ -77,6 +79,7 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
             </span>
           </td>
           <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={d.amount} /></td>
+          <td className="px-3 py-2"></td>
           <td className="px-3 py-2"></td>
           <td className="px-3 py-2"></td>
         </tr>
@@ -93,6 +96,7 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
   return (
     <tr className="group hover:bg-slate-50">
       <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{no ?? ''}</td>
+      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">{formatMonthOnly(p.revenueMonth)}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5">
           {isGroupMaster && (
@@ -116,7 +120,6 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
         </div>
       </td>
       <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}</td>
-      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">{p.revenueMonth ?? '-'}</td>
       <td className="px-3 py-3"><StatusBadge label={p.priority} style={priorityStyle[p.priority]} size="sm" /></td>
       <td className="px-3 py-3"><StatusBadge label={p.projectStatus} style={projectStatusStyle[p.projectStatus]} size="sm" /></td>
       <td className="px-3 py-3">
@@ -144,7 +147,7 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
  * projects: 최상위 행(마스터/독립). 마스터 행을 클릭하면 바로 아래로 구성(회차/분배)이 펼쳐진다.
  * (2026-07-08: 그룹지정 전 유형 공통 UX로 확정 — 우측 슬라이드 패널 방식 폐기)
  */
-export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startNo = 1, autoExpandIds }: {
+export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startNo = 1, autoExpandIds, sort, sortDir, onSort }: {
   projects: Project[];
   childrenIndex?: Map<string, Project[]>;
   /** 페이지네이션 오프셋 반영 시작 번호 */
@@ -153,6 +156,10 @@ export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startN
   matchedMasterIds?: Set<string>;
   /** 검색/필터가 자식에 매칭된 마스터 id — 자동으로 펼쳐서 보여준다 */
   autoExpandIds?: Set<string>;
+  /** 제목줄 클릭 정렬 (부모 필터 상태와 연동, 페이지네이션 이전에 정렬됨) */
+  sort: ProjectFilterState['sort'];
+  sortDir: 'asc' | 'desc';
+  onSort: (key: ProjectFilterState['sort']) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -172,15 +179,16 @@ export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startN
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b border-slate-200 text-left text-xs text-slate-400">
-            <th className="w-10 px-3 py-2.5 font-medium">No.</th><th className="px-4 py-3 font-medium">프로젝트 / 고객사</th>
-            <th className="px-3 py-3 font-medium">교육일정</th>
-            <th className="px-3 py-3 font-medium">매출월</th>
+            <th className="w-10 px-3 py-2.5 font-medium">No.</th>
+            <SortableTh label="매출월" sortKey="revenueMonth" active={sort === 'revenueMonth'} dir={sortDir} onSort={onSort} />
+            <th className="px-4 py-3 font-medium">프로젝트 / 고객사</th>
+            <SortableTh label="교육일정" sortKey="startDate" active={sort === 'startDate'} dir={sortDir} onSort={onSort} />
             <th className="px-3 py-3 font-medium">우선순위</th>
             <th className="px-3 py-3 font-medium">프로젝트</th>
             <th className="px-3 py-3 font-medium">자금 진행</th>
-            <th className="px-3 py-3 text-right font-medium">계약금액</th>
-            <th className="px-3 py-3 text-right font-medium">이익률</th>
-            <th className="px-3 py-3 font-medium">담당</th>
+            <SortableTh label="계약금액" sortKey="contractAmount" active={sort === 'contractAmount'} dir={sortDir} onSort={onSort} align="right" />
+            <SortableTh label="이익률" sortKey="profitRate" active={sort === 'profitRate'} dir={sortDir} onSort={onSort} align="right" />
+            <SortableTh label="담당" sortKey="managerName" active={sort === 'managerName'} dir={sortDir} onSort={onSort} />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">

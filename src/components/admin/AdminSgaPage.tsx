@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { useAppData } from '../../store/appData';
 import { useToast } from '../common/toast';
+import { YearMonthPicker } from '../common/YearMonthPicker';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { EmptyState } from '../common/EmptyState';
@@ -215,7 +216,7 @@ export function AdminSgaPage() {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="내용 검색"
                   className="w-36 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
               </span>
-              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+              <YearMonthPicker value={month} onChange={setMonth}
                 className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
               {month && <button onClick={() => setMonth('')} className="text-[11px] text-slate-400 underline">해제</button>}
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}

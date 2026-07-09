@@ -3,6 +3,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { useToast } from '../common/toast';
 import { MoneyText } from '../common/MoneyText';
+import { YearMonthPicker } from '../common/YearMonthPicker';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Search } from 'lucide-react';
 
@@ -93,7 +94,8 @@ export function MyCardsPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none" />
+          <YearMonthPicker value={month} onChange={setMonth}
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none" />
           <div className="relative min-w-[160px] flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="가맹점·용도·분류 검색" autoComplete="off"

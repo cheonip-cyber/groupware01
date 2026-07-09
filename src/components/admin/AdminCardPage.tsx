@@ -3,6 +3,7 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { useToast } from '../common/toast';
+import { YearMonthPicker } from '../common/YearMonthPicker';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search } from 'lucide-react';
@@ -184,7 +185,7 @@ export function AdminCardPage() {
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="가맹점·용도 검색"
                   className="w-40 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
               </span>
-              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+              <YearMonthPicker value={month} onChange={setMonth}
                 className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
               {month && <button onClick={() => setMonth('')} className="text-[11px] text-slate-400 underline">해제</button>}
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}

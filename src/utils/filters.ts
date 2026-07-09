@@ -6,9 +6,9 @@ export interface ProjectFilterState {
   clientId: string;
   manager: string;
   year: string;          // 'YYYY' | '전체' | '미지정' — 매출월(없으면 교육일) 기준
-  month: string;         // 'YYYY-MM' | ''
+  month: string;         // '01'~'12' | '' — 매출월(없으면 교육일) 기준 월만 독립 필터 (연도와 별개)
   priority: string;
-  sort: 'startDate' | 'contractAmount' | 'updatedAt';
+  sort: 'startDate' | 'contractAmount' | 'updatedAt' | 'revenueMonth' | 'profitRate' | 'managerName';
   sortDir: 'asc' | 'desc';
 }
 
@@ -40,7 +40,11 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
       const y = projectYear(p);
       if (f.year === '미지정' ? y !== null : y !== f.year) return false;
     }
-    if (f.month && !(p.startDate || '').startsWith(f.month)) return false;
+    if (f.month) {
+      const src = p.revenueMonth || p.startDate;
+      const mm = src && /^\d{4}-(\d{2})/.test(src) ? src.slice(5, 7) : null;
+      if (mm !== f.month) return false;
+    }
     return true;
   });
 
@@ -49,6 +53,9 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
     let bv: number | string = '';
     if (f.sort === 'contractAmount') { av = a.contractAmount; bv = b.contractAmount; }
     else if (f.sort === 'updatedAt') { av = a.updatedAt; bv = b.updatedAt; }
+    else if (f.sort === 'revenueMonth') { av = a.revenueMonth ?? ''; bv = b.revenueMonth ?? ''; }
+    else if (f.sort === 'profitRate') { av = a.profitRate ?? -Infinity; bv = b.profitRate ?? -Infinity; }
+    else if (f.sort === 'managerName') { av = a.managerName ?? ''; bv = b.managerName ?? ''; }
     else { av = a.startDate; bv = b.startDate; }
     if (av < bv) return f.sortDir === 'asc' ? -1 : 1;
     if (av > bv) return f.sortDir === 'asc' ? 1 : -1;

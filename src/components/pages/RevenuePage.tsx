@@ -6,11 +6,26 @@ import { revenueStatusStyle } from '../../utils/statusConfig';
 import { formatDate } from '../../utils/formatters';
 import { Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { SortableTh, useSortableRows } from '../common/SortableTh';
+import type { Project } from '../../types';
+
+type RevenueSortKey = 'projectName' | 'clientName' | 'contractAmount' | 'supplyAmount' | 'collectionDueDate' | 'collectionDoneDate';
+const revenueSortValue = (p: Project, key: RevenueSortKey) => {
+  switch (key) {
+    case 'contractAmount': return p.contractAmount;
+    case 'supplyAmount': return p.supplyAmount;
+    case 'collectionDueDate': return p.collectionDueDate;
+    case 'collectionDoneDate': return p.collectionDoneDate;
+    case 'clientName': return p.clientName;
+    default: return p.projectName;
+  }
+};
 
 export function RevenuePage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   const active = projects.filter((p) => p.projectStatus !== '취소/보류');
+  const { sorted, sortKey, dir, onSort } = useSortableRows<Project, RevenueSortKey>(active, revenueSortValue);
   // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 방지)
   const totalRev = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);
   const collected = active.filter((p) => p.collectionCompleted).reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);
@@ -34,17 +49,18 @@ export function RevenuePage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-              <th className="w-10 px-3 py-2.5 font-medium">No.</th><th className="px-5 py-2.5 font-medium">프로젝트</th>
-              <th className="px-3 py-2.5 font-medium">고객사</th>
-              <th className="px-3 py-2.5 text-right font-medium">계약금액</th>
-              <th className="px-3 py-2.5 text-right font-medium">공급가액</th>
+              <th className="w-10 px-3 py-2.5 font-medium">No.</th>
+              <SortableTh label="프로젝트" sortKey="projectName" active={sortKey === 'projectName'} dir={dir} onSort={onSort} className="px-5" />
+              <SortableTh label="고객사" sortKey="clientName" active={sortKey === 'clientName'} dir={dir} onSort={onSort} />
+              <SortableTh label="계약금액" sortKey="contractAmount" active={sortKey === 'contractAmount'} dir={dir} onSort={onSort} align="right" />
+              <SortableTh label="공급가액" sortKey="supplyAmount" active={sortKey === 'supplyAmount'} dir={dir} onSort={onSort} align="right" />
               <th className="px-3 py-2.5 font-medium">매출상태</th>
               <th className="px-3 py-2.5 font-medium">세금계산서</th>
-              <th className="px-3 py-2.5 font-medium">수금예정일</th>
-              <th className="px-3 py-2.5 font-medium">수금완료일</th>
+              <SortableTh label="수금예정일" sortKey="collectionDueDate" active={sortKey === 'collectionDueDate'} dir={dir} onSort={onSort} />
+              <SortableTh label="수금완료일" sortKey="collectionDoneDate" active={sortKey === 'collectionDoneDate'} dir={dir} onSort={onSort} />
             </tr></thead>
             <tbody className="divide-y divide-slate-50">
-              {active.map((p, __idx) => (
+              {sorted.map((p, __idx) => (
                 <tr key={p.id} className="group hover:bg-slate-50">
                   <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{__idx + 1}</td><td className="px-5 py-3">
                     <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
