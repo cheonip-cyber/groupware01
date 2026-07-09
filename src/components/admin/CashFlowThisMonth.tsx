@@ -5,15 +5,17 @@ import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { Wallet, TrendingUp, TrendingDown, HelpCircle } from 'lucide-react';
 
-// 이번 달 자금 캘린더 (2026-07-09 설계, 2026-07-09 입금예정 로직 개정) — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
+// 이번 달 자금 캘린더 (2026-07-09 설계, 2026-07-09 입금예정 로직 개정, 2026-07-09 카드 분류 규칙 반영)
+// — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
 // 업무 규칙(사용자 확정):
 //  - 고객사 입금 예정: ①수금예정일이 명시돼 있으면 그대로 ②세금계산서 발행일 기준,
 //    과거 완료건 2건 이상 있는 고객사는 그 고객사의 평균 리드타임(발행일→입금일 실측)을 적용,
 //    이력이 부족한 고객사는 기본값(발행일+익월) ③세금계산서 아직 미발행이면 교육종료일+1개월로 잠정 추정(신뢰도 낮음 표시)
 //  - 강사/업체 지급: 교육일 + 1개월 (지급 예약월이 따로 있으면 그걸 우선)
-//  - 카드: 하나카드 5일(전전월20일~전월19일 사용분)/25일(전월10일~당월9일 사용분) 결제,
-//          카테고리 '교육(플젝중복건만)'은 프로젝트 예산에 이미 잡히므로 제외
-//  - 국민카드는 개별 사용내역이 시스템에 없어 정확한 계산 불가 → "확인 필요"로만 표기
+//  - 카드 분류: user='Team' AND 사용유형='유류/주차/교통비' 두 조건 모두 충족 → 국민카드, 하나라도 아니면 하나카드
+//  - 하나카드: 5일(전전월20일~전월19일 사용분)/25일(전월10일~당월9일 사용분) 결제
+//  - 국민카드: 25일(전월12일~당월11일 사용분) 결제
+//  - 카테고리 '교육(플젝중복건만)'은 프로젝트 예산에 이미 잡히므로 양쪽 카드 모두 제외 (사용일 기준 산정, 등록일 아님)
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymdFromDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -32,21 +34,27 @@ const addDays = (dateStr: string, n: number): string | null => {
 const inTargetMonth = (dateStr: string | null, targetY: number, targetM: number) =>
   !!dateStr && dateStr.slice(0, 4) === String(targetY) && Number(dateStr.slice(5, 7)) === targetM + 1;
 
-interface CardTx { transaction_date: string; amount: number; category_id: number; }
+interface CardTx { transaction_date: string; amount: number; category_id: number; user_id: number | null; }
 
 export function CashFlowThisMonth() {
   const { projects, paymentRequests, clients, loading } = useAppData();
   const [cardTx, setCardTx] = useState<CardTx[]>([]);
   const [eduCategoryId, setEduCategoryId] = useState<number | null>(null);
+  const [teamUserId, setTeamUserId] = useState<number | null>(null);
+  const [trafficCategoryId, setTrafficCategoryId] = useState<number | null>(null);
   const [extLoading, setExtLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [catRes, txRes] = await Promise.all([
+      const [catRes, trafficRes, userRes, txRes] = await Promise.all([
         cardSupabase.from('expense_categories').select('id, name').eq('name', '교육(플젝중복건만)').maybeSingle(),
-        cardSupabase.from('card_transactions').select('transaction_date, amount, category_id'),
+        cardSupabase.from('expense_categories').select('id, name').eq('name', '유류/주차/교통비').maybeSingle(),
+        cardSupabase.from('app_users').select('id, name').eq('name', 'Team').maybeSingle(),
+        cardSupabase.from('card_transactions').select('transaction_date, amount, category_id, user_id'),
       ]);
       setEduCategoryId(catRes.data?.id ?? null);
+      setTrafficCategoryId(trafficRes.data?.id ?? null);
+      setTeamUserId(userRes.data?.id ?? null);
       setCardTx((txRes.data ?? []) as CardTx[]);
       setExtLoading(false);
     })();
@@ -87,27 +95,37 @@ export function CashFlowThisMonth() {
     }).filter((x) => inTargetMonth(x.due, Y, M));
     const outgoingPayTotal = outgoingPay.reduce((s, x) => s + (x.r.amount || 0), 0);
 
-    // ── 카드(하나) 결제 2건: 사용일 기준 구간 합산, 교육중복건 제외 ──
-    const sumCardRange = (start: string, end: string) =>
-      cardTx.filter((t) => t.transaction_date >= start && t.transaction_date <= end && t.category_id !== eduCategoryId)
+    // ── 카드 결제 예정: user='Team' AND 유형='유류/주차/교통비' 둘 다 맞으면 국민카드, 아니면 하나카드 ──
+    const isKb = (t: CardTx) => teamUserId != null && trafficCategoryId != null && t.user_id === teamUserId && t.category_id === trafficCategoryId;
+    const isEdu = (t: CardTx) => t.category_id === eduCategoryId;
+    const sumRange = (list: CardTx[], start: string, end: string) =>
+      list.filter((t) => t.transaction_date >= start && t.transaction_date <= end)
         .reduce((s, t) => s + Number(t.amount), 0);
 
-    // 5일 결제(당월5일): 전전월20일 ~ 전월19일
+    const hanaTx = cardTx.filter((t) => !isKb(t) && !isEdu(t));
+    const kbTx = cardTx.filter((t) => isKb(t) && !isEdu(t));
+
+    // 하나카드 5일 결제(당월5일): 전전월20일 ~ 전월19일
     const d0520start = ymdFromDate(new Date(Y, M - 2, 20));
     const d0520end = ymdFromDate(new Date(Y, M - 1, 19));
-    const hana05 = sumCardRange(d0520start, d0520end);
+    const hana05 = sumRange(hanaTx, d0520start, d0520end);
 
-    // 25일 결제(당월25일): 전월10일 ~ 당월9일
+    // 하나카드 25일 결제(당월25일): 전월10일 ~ 당월9일
     const d25start = ymdFromDate(new Date(Y, M - 1, 10));
     const d25end = ymdFromDate(new Date(Y, M, 9));
-    const hana25 = sumCardRange(d25start, d25end);
+    const hana25 = sumRange(hanaTx, d25start, d25end);
 
-    return { incoming, incomingTotal, incomingProvisionalCount, outgoingPay, outgoingPayTotal, hana05, hana25 };
-  }, [projects, paymentRequests, clients, cardTx, eduCategoryId, Y, M]);
+    // 국민카드 25일 결제(당월25일): 전월12일 ~ 당월11일
+    const kbStart = ymdFromDate(new Date(Y, M - 1, 12));
+    const kbEnd = ymdFromDate(new Date(Y, M, 11));
+    const kb25 = sumRange(kbTx, kbStart, kbEnd);
+
+    return { incoming, incomingTotal, incomingProvisionalCount, outgoingPay, outgoingPayTotal, hana05, hana25, kb25 };
+  }, [projects, paymentRequests, clients, cardTx, eduCategoryId, teamUserId, trafficCategoryId, Y, M]);
 
   if (loading || extLoading) return null;
 
-  const outgoingCardTotal = result.hana05 + result.hana25; // 국민카드는 데이터 없어 합계에서 제외(별도 표기)
+  const outgoingCardTotal = result.hana05 + result.hana25 + result.kb25;
   const outgoingTotal = result.outgoingPayTotal + outgoingCardTotal;
   const net = result.incomingTotal - outgoingTotal;
 
@@ -129,10 +147,12 @@ export function CashFlowThisMonth() {
           <p className="flex items-center gap-1 text-xs font-medium text-red-700"><TrendingDown className="h-3.5 w-3.5" />출금 예정</p>
           <p className="mt-1 text-xl font-bold text-red-700"><MoneyText value={outgoingTotal} compact /></p>
           <p className="mt-0.5 text-[11px] text-slate-400">
-            강사·업체 {result.outgoingPay.length}건 · 하나카드 2회
-            <span className="ml-1 inline-flex items-center gap-0.5 text-amber-600" title="개별 사용내역이 시스템에 없어 국민카드 25일 결제분은 이 합계에 포함되지 않았습니다. 별도로 확인해 주세요.">
-              <HelpCircle className="h-3 w-3" />국민카드 미포함
-            </span>
+            강사·업체 {result.outgoingPay.length}건 · 하나카드 2회 · 국민카드 1회
+            {(teamUserId == null || trafficCategoryId == null) && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-amber-600" title="카드 분류 기준(사용자/카테고리)을 찾지 못해 국민카드 구분이 정확하지 않을 수 있습니다.">
+                <HelpCircle className="h-3 w-3" />분류 확인 필요
+              </span>
+            )}
           </p>
         </div>
         <div className={`rounded-lg border p-3 ${net >= 0 ? 'border-emerald-100 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
@@ -142,8 +162,9 @@ export function CashFlowThisMonth() {
         </div>
       </div>
       <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-t border-slate-50 px-4 py-3 text-xs text-slate-500 sm:grid-cols-2">
-        <div>하나카드 5일 결제 (5/20~전월19일 사용분): <MoneyText value={result.hana05} className="font-medium text-slate-700" /></div>
+        <div>하나카드 5일 결제 (전전월20일~전월19일 사용분): <MoneyText value={result.hana05} className="font-medium text-slate-700" /></div>
         <div>하나카드 25일 결제 (전월10일~당월9일 사용분): <MoneyText value={result.hana25} className="font-medium text-slate-700" /></div>
+        <div>국민카드 25일 결제 (전월12일~당월11일 사용분): <MoneyText value={result.kb25} className="font-medium text-slate-700" /></div>
       </div>
     </Card>
   );
