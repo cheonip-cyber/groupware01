@@ -17,12 +17,13 @@ import { CashFlowThisMonth } from './CashFlowThisMonth';
 const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
 const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
-interface CardTx { amount: number; transaction_date: string; project_linked?: boolean; }
+interface CardTx { amount: number; transaction_date: string; project_linked?: boolean; category_id?: number; }
 
 export function AdminOverviewPage() {
   const { projects, paymentRequests, loading, globalYear } = useAppData();
   const [sga, setSga] = useState<SgaRow[]>([]);
   const [cardTxns, setCardTxns] = useState<CardTx[]>([]);
+  const [eduCategoryId, setEduCategoryId] = useState<number | null>(null);
   const [extLoading, setExtLoading] = useState(true);
   const [extError, setExtError] = useState<string | null>(null);
   const nowMonth = new Date().toISOString().slice(0, 7);
@@ -31,14 +32,16 @@ export function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [sgaRes, cardRes] = await Promise.all([
+        const [sgaRes, cardRes, catRes] = await Promise.all([
           cardSupabase.from('manual_expenses').select('transaction_date, category, amount, description, status'),
-          cardSupabase.from('card_transactions').select('amount, transaction_date, project_linked'),
+          cardSupabase.from('card_transactions').select('amount, transaction_date, project_linked, category_id'),
+          cardSupabase.from('expense_categories').select('id, name').eq('name', '교육(플젝중복건만)').maybeSingle(),
         ]);
         if (sgaRes.error) throw sgaRes.error;
         if (cardRes.error) throw cardRes.error;
         setSga((sgaRes.data ?? []) as SgaRow[]);
         setCardTxns((cardRes.data ?? []) as CardTx[]);
+        setEduCategoryId(catRes.data?.id ?? null);
       } catch (e: any) { setExtError(e?.message ?? String(e)); }
       finally { setExtLoading(false); }
     })();
@@ -49,16 +52,21 @@ export function AdminOverviewPage() {
   const stats = useMemo(() => {
     const yearOf = (p: Project) => (p.revenueMonth || p.startDate || '').slice(0, 4);
     const inScope = projects.filter((p) => p.projectStatus !== '취소/보류' && (globalYear === '전체' || yearOf(p) === globalYear));
-    const revenue = inScope.filter((p) => CONFIRMED.has(p.projectStatus)).reduce((s, p) => s + eff(p), 0);
-    const projectCost = inScope.reduce((s, p) => s + (p.expectedCost || 0), 0);
+    const confirmedScope = inScope.filter((p) => CONFIRMED.has(p.projectStatus));
+    const revenue = confirmedScope.reduce((s, p) => s + eff(p), 0);
+    // 비용도 매출과 동일하게 '확정' 상태 프로젝트만 집계한다.
+    // 기존에는 제안(PT) 단계 프로젝트의 예산까지 포함돼, 매출은 안 잡히는데 비용만 잡히는 불일치가 있었음 (2026-07-09 수정)
+    const projectCost = confirmedScope.reduce((s, p) => s + (p.expectedCost || 0), 0);
     const sgaTotal = sga.filter((r) => inYear(r.transaction_date)).reduce((s, r) => s + Number(r.amount), 0);
-    // 카드 일반 비용: 프로젝트 귀속 건은 프로젝트 예산에 이미 반영 → 이중 계산 방지 위해 제외
-    const cardGeneral = cardTxns.filter((t) => !t.project_linked && inYear(t.transaction_date)).reduce((s, t) => s + Number(t.amount), 0);
+    // 카드 일반 비용: 프로젝트 귀속 건은 프로젝트 예산에 이미 반영 → 이중 계산 방지 위해 제외.
+    // project_linked 플래그가 실제로는 전혀 세팅되지 않아(전수 false) 필터가 무력했던 버그를 발견 —
+    // 실사용 기준인 카테고리 '교육(플젝중복건만)'으로 직접 판별하도록 수정 (2026-07-09)
+    const cardGeneral = cardTxns.filter((t) => t.category_id !== eduCategoryId && inYear(t.transaction_date)).reduce((s, t) => s + Number(t.amount), 0);
     const totalCost = projectCost + sgaTotal + cardGeneral;
     const netProfit = revenue - totalCost;
     const netRate = revenue > 0 ? ((netProfit / revenue) * 100).toFixed(1) : '0';
     return { revenue, projectCost, sgaTotal, cardGeneral, totalCost, netProfit, netRate };
-  }, [projects, sga, cardTxns, globalYear]);
+  }, [projects, sga, cardTxns, eduCategoryId, globalYear]);
 
   // KPI 드릴다운 (설계원전: 숫자 클릭 → 구성 거래 목록)
   const [drill, setDrill] = useState<'revenue' | 'cost' | null>(null);
@@ -66,18 +74,19 @@ export function AdminOverviewPage() {
     if (!drill) return [];
     const yearOf = (p: Project) => (p.revenueMonth || p.startDate || '').slice(0, 4);
     const inScope = projects.filter((p) => p.projectStatus !== '취소/보류' && (globalYear === '전체' || yearOf(p) === globalYear));
+    const confirmedScope = inScope.filter((p) => CONFIRMED.has(p.projectStatus));
     if (drill === 'revenue') {
-      return inScope.filter((p) => CONFIRMED.has(p.projectStatus) && eff(p) > 0)
+      return confirmedScope.filter((p) => eff(p) > 0)
         .map((p) => ({ label: p.projectName, sub: `${p.clientName ?? ''} · ${p.projectStatus}`, amount: eff(p) }))
         .sort((a, b) => b.amount - a.amount);
     }
     const rows: { label: string; sub: string; amount: number }[] = [];
-    for (const p of inScope) if ((p.expectedCost || 0) > 0) rows.push({ label: p.projectName, sub: '프로젝트 예산', amount: p.expectedCost || 0 });
+    for (const p of confirmedScope) if ((p.expectedCost || 0) > 0) rows.push({ label: p.projectName, sub: '프로젝트 예산', amount: p.expectedCost || 0 });
     for (const r of sga) if (inYear(r.transaction_date)) rows.push({ label: r.description || r.category, sub: `판관비 · ${r.category}`, amount: Number(r.amount) });
-    for (const t of cardTxns) if (!t.project_linked && inYear(t.transaction_date)) rows.push({ label: '카드 사용', sub: `카드 일반 · ${(t.transaction_date ?? '').slice(0, 10)}`, amount: Number(t.amount) });
+    for (const t of cardTxns) if (t.category_id !== eduCategoryId && inYear(t.transaction_date)) rows.push({ label: '카드 사용', sub: `카드 일반 · ${(t.transaction_date ?? '').slice(0, 10)}`, amount: Number(t.amount) });
     return rows.sort((a, b) => b.amount - a.amount);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drill, projects, sga, cardTxns, globalYear]);
+  }, [drill, projects, sga, cardTxns, eduCategoryId, globalYear]);
 
   if (loading || extLoading) return <PageSkeleton />;
 
