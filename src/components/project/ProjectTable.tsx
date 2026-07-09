@@ -47,7 +47,6 @@ function ChildProjectRow({ c }: { c: Project }) {
       <td className="px-3 py-2"></td>
       <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={c.finalEstimate ?? c.contractAmount} /></td>
       <td className="px-3 py-2"></td>
-      <td className="px-3 py-2"></td>
     </tr>
   );
 }
@@ -95,7 +94,6 @@ function DistributionRows({ masterId, colSpan }: { masterId: string; colSpan: nu
             </span>
           </td>
           <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={d.amount} /></td>
-          <td className="px-3 py-2"></td>
           <td className="px-3 py-2"></td>
           <td className="px-3 py-2"></td>
         </tr>
@@ -156,7 +154,6 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
         ) : <MoneyText value={p.contractAmount} />}
       </td>
       <td className="px-3 py-3 text-right tabular-nums text-slate-600">{profitRateLabel(p)}</td>
-      <td className="px-3 py-3 text-xs text-slate-500">{p.managerName}</td>
     </tr>
   );
 }
@@ -206,7 +203,6 @@ export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startN
             <th className="px-3 py-3 font-medium">자금 진행</th>
             <SortableTh label="계약금액" sortKey="contractAmount" active={sort === 'contractAmount'} dir={sortDir} onSort={onSort} align="right" />
             <SortableTh label="이익률" sortKey="profitRate" active={sort === 'profitRate'} dir={sortDir} onSort={onSort} align="right" />
-            <SortableTh label="담당" sortKey="managerName" active={sort === 'managerName'} dir={sortDir} onSort={onSort} />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -217,7 +213,7 @@ export function ProjectTable({ projects, childrenIndex, matchedMasterIds, startN
                 <Row p={p} no={startNo + __idx}
                   matched={matchedMasterIds?.has(p.id)}
                   expanded={isOpen} onToggleExpand={() => toggle(p.id)} />
-                {isOpen && p.groupType === 'distribution' && <DistributionRows key={`${p.id}-dist`} masterId={p.id} colSpan={10} />}
+                {isOpen && p.groupType === 'distribution' && <DistributionRows key={`${p.id}-dist`} masterId={p.id} colSpan={9} />}
                 {isOpen && p.groupType !== 'distribution' && (childrenIndex?.get(p.id) ?? []).map((c) => <ChildProjectRow key={c.id} c={c} />)}
               </Fragment>
             );
