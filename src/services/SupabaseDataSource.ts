@@ -13,6 +13,7 @@
 import { supabase } from './supabaseClient';
 import type { DataSource } from './dataSource';
 import type { Project, Instructor, Client, PaymentRequest, ProjectSyncLog, SyncStatus, PrepItem, Company, NotionFieldMapping, RevenueDistribution } from '../types';
+import { calcWithholdingFor } from '../utils/withholding';
 import {
   dbStatusToProjectStatus, projectStatusToDbStatus,
   deriveRevenueStatus, derivePaymentStatus, deriveSettlementStatus,
@@ -574,7 +575,26 @@ class SupabaseDataSource implements DataSource {
     if (patch.status !== undefined) {
       dbPatch.status = SupabaseDataSource.frontendStatusToDbCostStatus(patch.status);
       // 지급월: 사용자가 선택한 값 우선(소급 처리 지원), 미지정 시 현재 월
-      if (patch.status === '지급완료') dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
+      if (patch.status === '지급완료') {
+        dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
+        // 실지급액(actual_payment_amount) 자동 계산 — 강사는 원천징수(3.3%/8.8%/수동) 후 순액,
+        // 업체·기타는 예산금액 그대로. 이 필드를 저장하는 곳이 이전엔 없어서
+        // 신규로 지급완료 처리되는 건이 계속 0으로 남는 문제가 있었음(과거 데이터는 별도 이관값 보유).
+        const { data: cur } = await supabase.from('project_costs')
+          .select('payee_type, budget_amount, tax_mode, manual_income_tax, manual_resident_tax')
+          .eq('id', Number(id)).maybeSingle();
+        if (cur) {
+          const payeeTypeKo = cur.payee_type === 'instructor' ? '강사' : cur.payee_type === 'company' ? '업체' : '기타';
+          const w = calcWithholdingFor({
+            payeeType: payeeTypeKo,
+            amount: Number(patch.amount ?? cur.budget_amount ?? 0),
+            taxMode: patch.taxMode ?? cur.tax_mode ?? undefined,
+            manualIncomeTax: patch.manualIncomeTax ?? cur.manual_income_tax ?? undefined,
+            manualResidentTax: patch.manualResidentTax ?? cur.manual_resident_tax ?? undefined,
+          });
+          dbPatch.actual_payment_amount = w.netAmount;
+        }
+      }
       // 지급취소(완료 → 요청 되돌리기) 시 지급월 해제
       if (patch.status === '지급요청') dbPatch.paid_month = null;
     }
