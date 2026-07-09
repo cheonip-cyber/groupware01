@@ -9,6 +9,7 @@ import { downloadTransferSheet, downloadBusinessIncomeSheet, downloadCombinedTra
 import type { SgaRow } from '../../utils/paymentExport';
 import { Landmark, Download, TrendingUp, TrendingDown } from 'lucide-react';
 import type { Project } from '../../types';
+import { FixedCostChecklist } from './FixedCostChecklist';
 
 // 관리자 전용 경영 현황: 회사 총매출 · 총사용비용(프로젝트+판관비+카드 일반) · 최종 경영이익
 // 프로젝트 이익률(대시보드, 직원 공용)과 별도로, 판관비·카드까지 포함한 회사 단위 손익을 본다
@@ -104,6 +105,8 @@ export function AdminOverviewPage() {
           <p className="text-[10px] text-slate-400">경영이익 ÷ 총매출</p>
         </div>
       </div>
+
+      <FixedCostChecklist />
 
       {drill && (
         <Card>
