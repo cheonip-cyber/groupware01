@@ -7,9 +7,11 @@ import { YearMonthPicker } from '../common/YearMonthPicker';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Search } from 'lucide-react';
 
-// [수정검토실행 ⑲] 카드사용내역 (개인): 로그인 사용자 본인의 카드 사용분만 표시.
+// [수정검토실행 ⑲→ID매칭 전환] 카드사용내역 (개인): 로그인 사용자 본인의 카드 사용분만 표시.
 // 관리자 '카드사용 관리'와 동일하게 편집 가능 (본인이 사용한 내역이므로 편집 권한 부여).
-// CARD DB app_users.name ↔ 로그인 이메일 아이디 매칭. 'Team'은 개인 화면에서 제외(관리자 전용).
+// CARD DB app_users.groupware_user_id ↔ 그룹웨어 users.id(UUID)로 매칭 (기존 이메일-이름 문자열 매칭은
+// 카드앱 사용자명이 이메일 아이디와 다르면 매칭 실패하는 문제가 있어 ID 매칭으로 전환).
+// 'Team'은 개인 화면에서 제외(관리자 전용).
 interface Tx { id: number | string; transaction_date: string; merchant_name: string; amount: number; purpose?: string; category_id?: number; category_name?: string }
 
 export function MyCardsPage() {
@@ -39,18 +41,17 @@ export function MyCardsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const local = (profile?.email ?? '').split('@')[0].toLowerCase();
-        if (!local) { setError('로그인 정보를 확인할 수 없습니다.'); return; }
-        const { data: users, error: uErr } = await cardSupabase.from('app_users').select('id, name');
+        if (!profile?.id) { setError('로그인 정보를 확인할 수 없습니다.'); return; }
+        const { data: users, error: uErr } = await cardSupabase.from('app_users').select('id, name, groupware_user_id');
         if (uErr) throw uErr;
-        const me = (users ?? []).find((u: any) => String(u.name).toLowerCase() === local && String(u.name).toLowerCase() !== 'team');
+        const me = (users ?? []).find((u: any) => u.groupware_user_id === profile.id && String(u.name).toLowerCase() !== 'team');
         if (!me) { setMatchedId(null); return; }
         setMatchedId(me.id); setMatchedName(me.name);
         await load(me.id);
       } catch (e: any) { setError(e?.message ?? String(e)); }
       finally { setLoading(false); }
     })();
-  }, [profile?.email]);
+  }, [profile?.id]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
