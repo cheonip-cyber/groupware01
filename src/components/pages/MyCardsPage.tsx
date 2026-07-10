@@ -28,9 +28,10 @@ export function MyCardsPage() {
   const load = async (userId: number) => {
     const [txRes, catRes] = await Promise.all([
       cardSupabase.from('card_transactions').select('*').eq('user_id', userId).eq('status', 'active').order('transaction_date', { ascending: false }).limit(500),
-      cardSupabase.from('card_categories').select('id, name'),
+      cardSupabase.from('expense_categories').select('id, name'),
     ]);
     if (txRes.error) throw txRes.error;
+    if (catRes.error) throw catRes.error;
     const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
     setTxns((txRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류' })));
   };
