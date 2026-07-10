@@ -43,7 +43,10 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
     if (f.priority && p.priority !== f.priority) return false;
     if (f.year && f.year !== '전체') {
       const y = projectYear(p);
-      if (f.year === '미지정' ? y !== null : y !== f.year) return false;
+      if (f.year === '미지정') { if (y !== null) return false; }
+      // 특정 연도를 선택해도 아직 매출월/교육일정이 없는(미지정) 신규 건은 계속 보여준다 —
+      // 안 그러면 방금 노션에 등록한 신규 리드가 "동기화 안 됨"처럼 안 보이는 문제가 있었음
+      else if (y !== null && y !== f.year) return false;
     }
     if (f.month) {
       const src = p.revenueMonth || p.startDate;
