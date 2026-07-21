@@ -401,8 +401,9 @@ class SupabaseDataSource implements DataSource {
   }
 
   async deleteInstructor(id: string): Promise<void> {
-    const { error } = await supabase.from('instructors').delete().eq('id', Number(id));
+    const { data, error } = await supabase.from('instructors').delete().eq('id', Number(id)).select('id');
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('삭제되지 않았습니다 — 관리자 권한이 필요합니다.');
   }
 
   async getCompanies(): Promise<Company[]> {
@@ -455,8 +456,9 @@ class SupabaseDataSource implements DataSource {
   }
 
   async deleteCompany(id: string): Promise<void> {
-    const { error } = await supabase.from('companies').delete().eq('id', Number(id));
+    const { data, error } = await supabase.from('companies').delete().eq('id', Number(id)).select('id');
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('삭제되지 않았습니다 — 관리자 권한이 필요합니다.');
   }
 
   async getClients(): Promise<Client[]> {
@@ -625,19 +627,24 @@ class SupabaseDataSource implements DataSource {
   }
 
   async deleteProjectCost(id: string): Promise<void> {
-    const { error } = await supabase.from('project_costs').delete().eq('id', Number(id));
+    const { data, error } = await supabase.from('project_costs').delete().eq('id', Number(id)).select('id');
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('삭제되지 않았습니다 — 관리자 권한이 필요합니다.');
   }
 
   // 예산항목 수정 (기존: 추가/삭제만 가능 — 오타·금액 정정 시 삭제 후 재입력해야 했던 불편 해소)
   // 노션 원본이 삭제된 프로젝트의 최종 삭제 (관리자 확인 후) — 예산 항목은 함께 삭제(CASCADE),
   // 그룹 자식·지급이력이 참조 중이면 DB 제약이 막으므로 오류 메시지로 안내된다
   async deleteProject(id: string): Promise<void> {
-    const { error } = await supabase.from('projects').delete().eq('id', Number(id));
+    // .select('id')로 실제 삭제된 행을 받아온다 — 관리자 전용 삭제 정책(RLS)에 걸리면
+    // Supabase는 에러 없이 "0건 삭제"로 조용히 넘어가서, 화면은 성공한 것처럼 보이지만
+    // 실제로는 아무것도 지워지지 않고 다음에 다시 열면 그대로 남아있는 문제가 있었다.
+    const { data, error } = await supabase.from('projects').delete().eq('id', Number(id)).select('id');
     if (error) {
       if (error.code === '23503') throw new Error('이 프로젝트를 참조하는 데이터(그룹 구성, 지급 이력 등)가 있어 삭제할 수 없습니다. 구성 해제 후 다시 시도하세요.');
       throw error;
     }
+    if (!data || data.length === 0) throw new Error('삭제되지 않았습니다 — 관리자 권한이 필요합니다. 관리자 계정으로 다시 시도해주세요.');
   }
 
   async recoverNotionLink(id: string): Promise<void> {
@@ -750,8 +757,9 @@ class SupabaseDataSource implements DataSource {
   }
 
   async deleteNotionFieldMapping(id: string): Promise<void> {
-    const { error } = await supabase.from('notion_field_mappings').delete().eq('id', Number(id));
+    const { data, error } = await supabase.from('notion_field_mappings').delete().eq('id', Number(id)).select('id');
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('삭제되지 않았습니다 — 권한을 확인해주세요.');
   }
 
   /** 고객사 find-or-create (매출분배 자식용) */
@@ -861,8 +869,9 @@ class SupabaseDataSource implements DataSource {
 
   async deleteDistribution(id: string): Promise<void> {
     const { data: row } = await supabase.from('revenue_distributions').select('project_id').eq('id', Number(id)).maybeSingle();
-    const { error } = await supabase.from('revenue_distributions').delete().eq('id', Number(id));
+    const { data: deleted, error } = await supabase.from('revenue_distributions').delete().eq('id', Number(id)).select('id');
     if (error) throw error;
+    if (!deleted || deleted.length === 0) throw new Error('삭제되지 않았습니다 — 권한을 확인해주세요.');
     if (row) {
       const { data: rest } = await supabase.from('revenue_distributions').select('id').eq('project_id', row.project_id).limit(1);
       if (!rest || rest.length === 0) {
@@ -923,8 +932,9 @@ class SupabaseDataSource implements DataSource {
     if (costs && costs.length > 0) throw new Error('예산/비용 항목이 있는 프로젝트는 삭제할 수 없습니다. 비용 삭제 후 시도하거나 그룹 해제를 사용하세요.');
     const { data: kids } = await supabase.from('projects').select('id').eq('parent_id', idNum).limit(1);
     if (kids && kids.length > 0) throw new Error('자체 구성을 가진 프로젝트는 삭제할 수 없습니다.');
-    const { error } = await supabase.from('projects').delete().eq('id', idNum);
+    const { data: deleted, error } = await supabase.from('projects').delete().eq('id', idNum).select('id');
     if (error) throw error;
+    if (!deleted || deleted.length === 0) throw new Error('삭제되지 않았습니다 — 관리자 권한이 필요합니다.');
   }
 
   async getProjectSyncLogs(projectId: string): Promise<ProjectSyncLog[]> {
