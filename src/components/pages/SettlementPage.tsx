@@ -3,6 +3,7 @@ import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { settlementStatusStyle } from '../../utils/statusConfig';
+import { activeProjects } from '../../utils/filters';
 import { ClipboardCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SortableTh, useSortableRows } from '../common/SortableTh';
@@ -14,7 +15,7 @@ const settlementSortValue = (p: Project, key: SettlementSortKey) => key === 'exp
 export function SettlementPage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
-  const active = projects.filter((p) => p.projectStatus !== '취소/보류');
+  const active = activeProjects(projects);
   const { sorted, sortKey, dir, onSort } = useSortableRows<Project, SettlementSortKey>(active, settlementSortValue);
   return (
     <Card>

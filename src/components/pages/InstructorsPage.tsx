@@ -7,6 +7,7 @@ import type { Instructor } from '../../types';
 import { maskResidentNumber } from '../../utils/withholding';
 import { useToast } from '../common/toast';
 import { SavingLabel } from '../common/SavingLabel';
+import { activePayments } from '../../utils/filters';
 
 type SensitiveForm = {
   name: string;
@@ -20,7 +21,7 @@ type SensitiveForm = {
 const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', address: '', bankName: '', accountNumber: '' };
 
 export function InstructorsPage() {
-  const { instructors, paymentRequests, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
+  const { instructors, paymentRequests, projects, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
   const toast = useToast();
   const [panel, setPanel] = useState<Instructor | null>(null);       // 상세 슬라이드 패널
   useEscClose(!!panel, () => setPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
@@ -248,7 +249,7 @@ export function InstructorsPage() {
             </dl>
             <h4 className="mb-2 mt-5 text-sm font-semibold text-slate-700">지급 이력</h4>
             {(() => {
-              const rows = paymentRequests.filter((r) => r.payeeType === '강사' && r.payeeId === panel.id);
+              const rows = activePayments(paymentRequests, projects).filter((r) => r.payeeType === '강사' && r.payeeId === panel.id);
               if (rows.length === 0) return <p className="text-xs text-slate-400">연결된 지급 이력이 없습니다.</p>;
               return (
                 <ul className="divide-y divide-slate-50 rounded-lg border border-slate-100">

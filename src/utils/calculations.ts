@@ -1,5 +1,5 @@
-import type { Project, ProjectStatus } from '../types';
-import type { PaymentRequest } from '../types';
+import type { Project, ProjectStatus, PaymentRequest } from '../types';
+import type { ActiveProject, ActivePaymentRequest } from './filters';
 
 // 부가세 10% 기준 (사양서 9장)
 export const calculateSupplyAmount = (totalAmount: number): number =>
@@ -24,21 +24,22 @@ export const countProjectsByStatus = (projects: Project[]): Record<ProjectStatus
   return acc;
 };
 
-// 주의 필요 프로젝트 (사양서 6.1 D) — riskFlags 기반
-export const getRiskProjects = (projects: Project[]): Project[] =>
-  projects.filter((p) => p.riskFlags && p.riskFlags.length > 0 && p.projectStatus !== '취소/보류');
+// 주의 필요 프로젝트 (사양서 6.1 D) — riskFlags 기반. ActiveProject만 받으므로 호출부에서
+// activeProjects()를 거치지 않으면 타입 에러 — 취소/보류 제외를 빠뜨릴 수 없다.
+export const getRiskProjects = (projects: ActiveProject[]): ActiveProject[] =>
+  projects.filter((p) => p.riskFlags && p.riskFlags.length > 0);
 
 // 이번 달 교육 예정
-export const getThisMonthProjects = (projects: Project[]): Project[] => {
+export const getThisMonthProjects = (projects: ActiveProject[]): ActiveProject[] => {
   const now = new Date();
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   return projects.filter((p) => (p.startDate || '').startsWith(ym));
 };
 
-export const getRequestedPayments = (paymentRequests: PaymentRequest[]): PaymentRequest[] =>
+export const getRequestedPayments = (paymentRequests: ActivePaymentRequest[]): ActivePaymentRequest[] =>
   paymentRequests.filter((r) => r.status === '지급요청');
 
-export const getUnrequestedPayments = (paymentRequests: PaymentRequest[]): PaymentRequest[] =>
+export const getUnrequestedPayments = (paymentRequests: ActivePaymentRequest[]): ActivePaymentRequest[] =>
   paymentRequests.filter((r) => r.status === '지급대상');
 
 // 대시보드 KPI 집계
@@ -59,12 +60,13 @@ export interface DashboardKpis {
   profitRate: number;         // 이익률 = 이익/총매출 ×100
 }
 
+// projects/paymentRequests는 반드시 activeProjects()/activePayments()를 거친 결과여야 한다
+// (파라미터 타입이 ActiveProject[]/ActivePaymentRequest[]라 그냥 원본 배열을 넘기면 빌드 에러가 난다).
 export const buildDashboardKpis = (
-  projects: Project[],
-  paymentRequests: PaymentRequest[],
+  active: ActiveProject[],
+  activePayments: ActivePaymentRequest[],
 ): DashboardKpis => {
-  const active = projects.filter((p) => p.projectStatus !== '취소/보류');
-  const counts = countProjectsByStatus(projects);
+  const counts = countProjectsByStatus(active);
   // 매출 규칙(구 그룹웨어 방식): 확정군(확정/준비·운영중·보고/정산·완료)=확정 매출, 제안중=예상 매출, 취소/보류=미반영
   // 금액은 유효매출(effectiveAmount) 기준 — 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 제거)
   const CONFIRMED_SET = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
@@ -79,13 +81,13 @@ export const buildDashboardKpis = (
   const rateProfit = rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0);
   const profitRate = rateRevenue > 0 ? Number(((rateProfit / rateRevenue) * 100).toFixed(1)) : 0;
   return {
-    total: projects.length,
-    thisMonth: getThisMonthProjects(projects).length,
+    total: active.length,
+    thisMonth: getThisMonthProjects(active).length,
     confirmedReady: counts['확정/준비'],
     inProgress: counts['운영중'],
     reportSettlement: counts['보고/정산'],
-    paymentPending: getRequestedPayments(paymentRequests).length,
-    paymentTarget: getUnrequestedPayments(paymentRequests).length,
+    paymentPending: getRequestedPayments(activePayments).length,
+    paymentTarget: getUnrequestedPayments(activePayments).length,
     taxInvoicePending: active.filter((p) => !p.taxInvoiceIssued && p.revenueStatus !== '견적작성').length,
     unpaidCollection: active.filter((p) => !p.collectionCompleted && p.taxInvoiceIssued).length,
     settlementPending: active.filter(

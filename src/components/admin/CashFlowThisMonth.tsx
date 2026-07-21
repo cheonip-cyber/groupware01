@@ -4,6 +4,7 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { Wallet, TrendingUp, TrendingDown, HelpCircle } from 'lucide-react';
+import { activeProjects, activePayments } from '../../utils/filters';
 
 // 이번 달 자금 캘린더 (2026-07-09 설계, 2026-07-09 입금예정 로직 개정, 2026-07-09 카드 분류 규칙 반영)
 // — "확정 매출/비용 합계"가 아니라 "이번 달에 실제로 오가는 돈"을 본다.
@@ -65,12 +66,14 @@ export function CashFlowThisMonth() {
   const monthLabel = `${M + 1}월`;
 
   const result = useMemo(() => {
+    const active = activeProjects(projects);
+    const activePay = activePayments(paymentRequests, projects);
     const clientLag = new Map(clients.filter((c) => c.avgPaymentLagDays != null).map((c) => [c.id, c.avgPaymentLagDays!]));
 
     // ── 매출 입금 예정 ──
     // ①수금예정일 명시값 우선 ②세금계산서 발행 후: 고객사별 실측 리드타임(2건 이상 이력) 또는 기본값(발행일+익월)
     // ③세금계산서 미발행: 교육종료일+1개월로 잠정 추정(신뢰도 낮음)
-    const incoming = projects.filter((p) => p.projectStatus !== '취소/보류' && !p.collectionCompleted).map((p) => {
+    const incoming = active.filter((p) => !p.collectionCompleted).map((p) => {
       let due: string | null = null;
       let provisional = false;
       if (p.collectionDueDate) {
@@ -88,7 +91,7 @@ export function CashFlowThisMonth() {
     const incomingProvisionalCount = incoming.filter((x) => x.provisional).length;
 
     // ── 강사/업체 지급 예정: 교육일+1개월, 지급예약월이 있으면 그걸 우선 ──
-    const outgoingPay = paymentRequests.filter((r) => r.status !== '지급완료').map((r) => {
+    const outgoingPay = activePay.filter((r) => r.status !== '지급완료').map((r) => {
       const estimated = addMonths(r.projectStartDate || '', 1);
       const due = r.dueDate || estimated;
       return { r, due };

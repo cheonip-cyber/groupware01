@@ -9,6 +9,7 @@ import { downloadTransferSheet, downloadBusinessIncomeSheet, downloadCombinedTra
 import type { SgaRow } from '../../utils/paymentExport';
 import { Landmark, Download, TrendingUp, TrendingDown } from 'lucide-react';
 import type { Project } from '../../types';
+import { activeProjects } from '../../utils/filters';
 import { FixedCostChecklist } from './FixedCostChecklist';
 import { CashFlowThisMonth } from './CashFlowThisMonth';
 
@@ -51,7 +52,7 @@ export function AdminOverviewPage() {
 
   const stats = useMemo(() => {
     const yearOf = (p: Project) => (p.revenueMonth || p.startDate || '').slice(0, 4);
-    const inScope = projects.filter((p) => p.projectStatus !== '취소/보류' && (globalYear === '전체' || yearOf(p) === globalYear));
+    const inScope = activeProjects(projects).filter((p) => globalYear === '전체' || yearOf(p) === globalYear);
     const confirmedScope = inScope.filter((p) => CONFIRMED.has(p.projectStatus));
     const revenue = confirmedScope.reduce((s, p) => s + eff(p), 0);
     // 비용도 매출과 동일하게 '확정' 상태 프로젝트만 집계한다.
@@ -73,7 +74,7 @@ export function AdminOverviewPage() {
   const drillRows = useMemo(() => {
     if (!drill) return [];
     const yearOf = (p: Project) => (p.revenueMonth || p.startDate || '').slice(0, 4);
-    const inScope = projects.filter((p) => p.projectStatus !== '취소/보류' && (globalYear === '전체' || yearOf(p) === globalYear));
+    const inScope = activeProjects(projects).filter((p) => globalYear === '전체' || yearOf(p) === globalYear);
     const confirmedScope = inScope.filter((p) => CONFIRMED.has(p.projectStatus));
     if (drill === 'revenue') {
       return confirmedScope.filter((p) => eff(p) > 0)

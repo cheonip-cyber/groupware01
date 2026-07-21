@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { Project } from '../../types';
+import type { ActiveProject } from '../../utils/filters';
 import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
@@ -7,9 +7,10 @@ import { projectStatusStyle, revenueStatusStyle, paymentStatusStyle, settlementS
 import { formatDateRange } from '../../utils/formatters';
 import { Table2, ArrowUpRight } from 'lucide-react';
 
-export function ProjectSummaryTable({ projects }: { projects: Project[] }) {
-  const rows = projects
-    .filter((p) => p.projectStatus !== '취소/보류')
+// projects는 반드시 activeProjects()를 거친 ActiveProject[]여야 한다 (취소/보류 자동 제외 강제 —
+// 대시보드 요약표에 병합됨 레거시가 다시 노출되던 재발 버그의 근본 방지책)
+export function ProjectSummaryTable({ projects }: { projects: ActiveProject[] }) {
+  const rows = [...projects]
     .sort((a, b) => (a.startDate < b.startDate ? 1 : -1))
     .slice(0, 8);
   return (

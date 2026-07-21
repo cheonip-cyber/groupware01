@@ -1,4 +1,29 @@
-import type { Project, ProjectStatus } from '../types';
+import type { Project, ProjectStatus, PaymentRequest } from '../types';
+
+// ── 취소/보류 제외 강제 브랜드 타입 ──
+// 문제: 대시보드/매출/예산/정산 등 집계 코드마다 각자 `.filter(p => p.projectStatus !== '취소/보류')`를
+// 손으로 넣는 방식이라, 새 위젯을 추가할 때 빠뜨리면 병합됨(취소/보류) 프로젝트가 그대로 집계에 섞여
+// 반복적으로 재발했다(대시보드 요약표, 이번달 자금 캘린더 등에서 실제 발생).
+// 해결: activeProjects/activePayments를 거친 결과에만 존재하는 브랜드를 부여하고,
+// 집계 함수들은 원본 Project[]/PaymentRequest[]가 아니라 이 브랜드 타입만 인자로 받도록 만든다.
+// → 필터를 빼먹고 원본 배열을 바로 넘기면 타입 에러로 빌드가 실패한다(런타임까지 안 가고 즉시 발견).
+declare const activeBrand: unique symbol;
+export type ActiveProject = Project & { readonly [activeBrand]: true };
+export type ActivePaymentRequest = PaymentRequest & { readonly [activeBrand]: true };
+
+// 프로젝트 목록에서 취소/보류(병합됨 레거시 포함)를 제외한다.
+// ⚠️ 프로젝트 목록 화면(ProjectListPage) 등 사용자가 취소/보류를 직접 보고 싶어할 수 있는 화면에는 쓰지 않는다 —
+// 거기는 상태 태그 필터로 사용자가 직접 켜고 끈다. 이 함수는 대시보드·매출·예산·정산 등
+// "취소된 건은 항상 제외되어야 하는" 집계/리포트 용도 전용이다.
+export const activeProjects = (projects: Project[]): ActiveProject[] =>
+  projects.filter((p) => p.projectStatus !== '취소/보류') as ActiveProject[];
+
+// 지급 목록에서 취소/보류 프로젝트에 속한 항목을 제외한다 (PaymentRequest 자체엔 프로젝트 상태가 없어
+// projects와 대조해서 걸러야 함 — 바로 이 대조를 빠뜨린 게 이번 자금 캘린더 버그의 원인이었다).
+export const activePayments = (payments: PaymentRequest[], projects: Project[]): ActivePaymentRequest[] => {
+  const cancelledIds = new Set(projects.filter((p) => p.projectStatus === '취소/보류').map((p) => p.id));
+  return payments.filter((r) => !cancelledIds.has(r.projectId)) as ActivePaymentRequest[];
+};
 
 export interface ProjectFilterState {
   search: string;

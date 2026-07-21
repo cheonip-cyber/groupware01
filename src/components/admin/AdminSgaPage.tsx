@@ -12,6 +12,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import { SavingLabel } from '../common/SavingLabel';
+import { activePayments } from '../../utils/filters';
 
 interface ManualExpense {
   id: number;
@@ -41,7 +42,7 @@ const emptyForm = (): FormState => ({
 });
 
 export function AdminSgaPage() {
-  const { paymentRequests } = useAppData();
+  const { paymentRequests, projects } = useAppData();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +149,7 @@ export function AdminSgaPage() {
           </button>
           <button
             onClick={() => downloadCombinedTransferSheet(
-              paymentRequests.filter((p) => p.status === '지급요청'), pendingRows, dlLabel)}
+              activePayments(paymentRequests, projects).filter((p) => p.status === '지급요청'), pendingRows, dlLabel)}
             title="지급요청(강사/업체) + 미지급 판관비 통합 — 은행 이체 계획용"
             className="flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700">
             <Download className="h-3.5 w-3.5" /> 통합 이체 내역

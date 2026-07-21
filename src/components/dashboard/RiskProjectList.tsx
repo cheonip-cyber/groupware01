@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
-import type { Project } from '../../types';
+import type { ActiveProject } from '../../utils/filters';
 import { getRiskProjects } from '../../utils/calculations';
 import { Card, CardHeader } from '../common/Card';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
 
-export function RiskProjectList({ projects }: { projects: Project[] }) {
+export function RiskProjectList({ projects }: { projects: ActiveProject[] }) {
   const risks = getRiskProjects(projects);
   return (
     <Card className="h-full">

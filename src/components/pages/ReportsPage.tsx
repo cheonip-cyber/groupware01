@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { countProjectsByStatus } from '../../utils/calculations';
 import { projectStatusChartColor } from '../../utils/statusConfig';
 import { formatCompactKRW } from '../../utils/formatters';
-import { projectYear } from '../../utils/filters';
+import { projectYear, activeProjects } from '../../utils/filters';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import type { Project } from '../../types';
@@ -27,7 +27,7 @@ export function ReportsPage() {
   }, [projects]);
 
   const filtered = useMemo(() => {
-    const base = projects.filter((p) => p.projectStatus !== '취소/보류');
+    const base = activeProjects(projects);
     if (year === '전체') return base;
     return base.filter((p) => projectYear(p) === year);
   }, [projects, year]);

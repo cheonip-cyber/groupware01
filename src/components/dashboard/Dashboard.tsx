@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { buildDashboardKpis } from '../../utils/calculations';
-import { projectYear } from '../../utils/filters';
+import { projectYear, activeProjects, activePayments } from '../../utils/filters';
 import { formatCompactKRW } from '../../utils/formatters';
 import { KpiCard } from './KpiCard';
 import { StatusChart } from './StatusChart';
@@ -12,7 +12,7 @@ import { ProjectSummaryTable } from './ProjectSummaryTable';
 import { FolderKanban, CalendarClock, CheckCircle2, Play, FileBarChart, CreditCard, AlertCircle, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PageSkeleton } from '../common/Skeleton';
-import type { Project } from '../../types';
+import type { ActiveProject } from '../../utils/filters';
 
 export function Dashboard() {
   const { projects, paymentRequests, loading, globalYear, setGlobalYear } = useAppData();
@@ -39,7 +39,12 @@ export function Dashboard() {
     return paymentRequests.filter((r) => ids.has(r.projectId));
   }, [paymentRequests, filteredProjects, year]);
 
-  const kpi = useMemo(() => buildDashboardKpis(filteredProjects, filteredPayments), [filteredProjects, filteredPayments]);
+  // 대시보드 전체가 여기서 딱 한 번 걸러진 active* 만 사용한다 — 위젯마다 따로 취소/보류를
+  // 걸러야 했던 게 반복 재발의 원인이었음. 아래로는 filteredProjects/paymentRequests 원본을 직접 쓰지 않는다.
+  const active = useMemo(() => activeProjects(filteredProjects), [filteredProjects]);
+  const activePay = useMemo(() => activePayments(filteredPayments, filteredProjects), [filteredPayments, filteredProjects]);
+
+  const kpi = useMemo(() => buildDashboardKpis(active, activePay), [active, activePay]);
 
   if (loading) return <PageSkeleton />;
 
@@ -49,15 +54,15 @@ export function Dashboard() {
   };
   const yearLabel = year === '전체' ? '전체 연도' : year === '미지정' ? '연도 미지정' : `${year}년`;
 
-  // 오늘 할 일 액션밴드: 연체 지급 / 미수금 / 이번 주 교육
+  // 오늘 할 일 액션밴드: 연체 지급 / 미수금 / 이번 주 교육 — 전부 active* 기준(취소/보류 자동 제외)
   const todayStr = new Date().toISOString().slice(0, 10);
   const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-  const overduePay = paymentRequests.filter((r) => r.status !== '지급완료' && r.dueDate && r.dueDate < todayStr).length;
-  const weekEdu = filteredProjects.filter((p) => p.startDate && p.startDate >= todayStr && p.startDate <= weekEnd && p.projectStatus !== '취소/보류').length;
+  const overduePay = activePay.filter((r) => r.status !== '지급완료' && r.dueDate && r.dueDate < todayStr).length;
+  const weekEdu = active.filter((p) => p.startDate && p.startDate >= todayStr && p.startDate <= weekEnd).length;
   // 오늘의 업무 큐: 테이블 요약이 아니라 "지금 처리해야 할 일" 중심 (월말 지급 배치 업무 흐름 반영)
   const nowMon = todayStr.slice(0, 7);
-  const dueThisMonth = paymentRequests.filter((r) => r.status !== '지급완료' && r.scheduledMonth === nowMon);
-  const noTaxInvoice = filteredProjects.filter((p) => ['확정/준비', '운영중', '보고/정산'].includes(p.projectStatus) && !p.taxInvoiceIssued).length;
+  const dueThisMonth = activePay.filter((r) => r.status !== '지급완료' && r.scheduledMonth === nowMon);
+  const noTaxInvoice = active.filter((p) => ['확정/준비', '운영중', '보고/정산'].includes(p.projectStatus) && !p.taxInvoiceIssued).length;
   const actions = [
     overduePay > 0 && { label: `연체 지급 ${overduePay}건`, to: '/payments', tone: 'red' },
     dueThisMonth.length > 0 && { label: `이번 달 말일 지급 ${dueThisMonth.length}건 · ${formatCompactKRW(dueThisMonth.reduce((s, r) => s + r.amount, 0))}`, to: '/payments', tone: 'violet' },
@@ -142,27 +147,28 @@ export function Dashboard() {
       </div>
 
       {/* 월별 매출 미니차트 (리포트 상세는 /reports) */}
-      <MiniRevenueChart projects={filteredProjects} onMore={() => navigate('/reports')} />
+      <MiniRevenueChart projects={active} onMore={() => navigate('/reports')} />
 
       {/* 차트 + 위험 + 할일 */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <StatusChart projects={filteredProjects} />
-        <RiskProjectList projects={filteredProjects} />
-        <TodoList projects={filteredProjects} />
+        <RiskProjectList projects={active} />
+        <TodoList projects={active} />
       </div>
 
       {/* 요약 테이블 */}
-      <ProjectSummaryTable projects={filteredProjects} />
+      <ProjectSummaryTable projects={active} />
     </div>
   );
 }
 
 // 월별 확정/예상 매출 미니차트 — 유효매출 기준 (그룹 이중계상 제거)
-function MiniRevenueChart({ projects, onMore }: { projects: Project[]; onMore: () => void }) {
+// projects는 반드시 activeProjects()를 거친 ActiveProject[]여야 한다 (취소/보류 자동 제외 강제)
+function MiniRevenueChart({ projects, onMore }: { projects: ActiveProject[]; onMore: () => void }) {
   const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
   const map = new Map<string, { month: string; confirmed: number; expected: number }>();
   for (const p of projects) {
-    if (!p.revenueMonth || p.projectStatus === '취소/보류') continue;
+    if (!p.revenueMonth) continue;
     if (!map.has(p.revenueMonth)) map.set(p.revenueMonth, { month: p.revenueMonth.slice(5), confirmed: 0, expected: 0 });
     const row = map.get(p.revenueMonth)!;
     const amt = p.effectiveAmount ?? p.contractAmount ?? 0;

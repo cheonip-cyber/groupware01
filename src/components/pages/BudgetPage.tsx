@@ -1,4 +1,5 @@
 import { profitRateLabel } from '../../utils/formatters';
+import { activeProjects } from '../../utils/filters';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
@@ -22,7 +23,7 @@ const budgetSortValue = (p: Project, key: BudgetSortKey) => {
 export function BudgetPage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
-  const active = projects.filter((p) => p.projectStatus !== '취소/보류');
+  const active = activeProjects(projects);
   const { sorted, sortKey, dir, onSort } = useSortableRows<Project, BudgetSortKey>(active, budgetSortValue);
   return (
     <Card>

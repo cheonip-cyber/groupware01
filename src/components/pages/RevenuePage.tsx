@@ -3,6 +3,7 @@ import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { revenueStatusStyle } from '../../utils/statusConfig';
+import { activeProjects } from '../../utils/filters';
 import { formatDate } from '../../utils/formatters';
 import { Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -24,7 +25,7 @@ const revenueSortValue = (p: Project, key: RevenueSortKey) => {
 export function RevenuePage() {
   const { projects, loading } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
-  const active = projects.filter((p) => p.projectStatus !== '취소/보류');
+  const active = activeProjects(projects);
   const { sorted, sortKey, dir, onSort } = useSortableRows<Project, RevenueSortKey>(active, revenueSortValue);
   // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 방지)
   const totalRev = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);

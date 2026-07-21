@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
-import type { Project } from '../../types';
+import type { ActiveProject } from '../../utils/filters';
 import { Card, CardHeader } from '../common/Card';
 import { ListTodo, ChevronRight } from 'lucide-react';
 import { EmptyState } from '../common/EmptyState';
 
 // 이번 주 해야 할 일: 액션이 필요한 프로젝트의 nextAction 노출
-export function TodoList({ projects }: { projects: Project[] }) {
+// projects는 반드시 activeProjects()를 거친 ActiveProject[]여야 한다 (취소/보류 자동 제외 강제)
+export function TodoList({ projects }: { projects: ActiveProject[] }) {
   const todos = projects
-    .filter((p) => p.projectStatus !== '완료' && p.projectStatus !== '취소/보류' && p.nextAction && p.nextAction !== '완료')
+    .filter((p) => p.projectStatus !== '완료' && p.nextAction && p.nextAction !== '완료')
     .slice(0, 8);
   return (
     <Card className="h-full">

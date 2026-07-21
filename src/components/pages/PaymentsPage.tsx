@@ -14,13 +14,14 @@ import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
 import { PaymentDetailModal } from '../project/PaymentDetailModal';
+import { activePayments } from '../../utils/filters';
 import type { PaymentRequest } from '../../types';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
 const netOf = (r: PaymentRequest) => calcWithholdingFor(r).netAmount;
 
 export function PaymentsPage() {
-  const { paymentRequests, loading, updatePaymentRequest } = useAppData();
+  const { paymentRequests, projects, loading, updatePaymentRequest } = useAppData();
   const nowMonth = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
@@ -43,7 +44,11 @@ export function PaymentsPage() {
   useEscClose(!!detail, () => setDetail(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [busy, setBusy] = useState(false);
 
-  const transferable = useMemo(() => paymentRequests.filter((r) => !r.isCardPayment && r.isPayable !== false), [paymentRequests]);
+  // 취소/보류(병합됨) 프로젝트에 남은 지급항목은 지급관리 전 탭에서 제외 — 근원(transferable)에서 한 번만 필터링
+  const transferable = useMemo(
+    () => activePayments(paymentRequests, projects).filter((r) => !r.isCardPayment && r.isPayable !== false),
+    [paymentRequests, projects],
+  );
   // 지급관리에는 '지급요청'된 항목만 표시 — 요청 전 건은 각 프로젝트의 지급 탭에서 검토·요청한다 (혼재로 복잡해 보이던 문제 해소)
   const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급요청'), [transferable]);
   const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
