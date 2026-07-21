@@ -6,7 +6,6 @@ import { MoneyText } from '../common/MoneyText';
 import { formatDate } from '../../utils/formatters';
 import { GROUP_TYPE_LABEL } from './ProjectTable';
 import { Layers, Plus, Search, Unlink, CornerDownRight, Pencil, Trash2, Check, X, Receipt, Wallet } from 'lucide-react';
-import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../common/toast';
 
 // 계열사 1행의 세금계산서/입금 완료 토글 — 체크와 동시에 날짜를 받는다 (상세화면·목록 펼침뷰 공용)
@@ -37,7 +36,7 @@ export function DistCompleteCell({ done, dateValue, onComplete, onUndo, label }:
 
 // 매출분배(계열사) 관리 — revenue_distributions 전용 테이블. 강사비/예산은 다루지 않고
 // 세금계산서 발행·고객사 입금 두 가지만 계열사별로 관리한다. 전원 완료 시 DB 트리거가 마스터·노션에 자동 반영.
-function DistributionSection({ project, isAdmin }: { project: Project; isAdmin: boolean }) {
+function DistributionSection({ project }: { project: Project }) {
   const toast = useToast();
   const [items, setItems] = useState<RevenueDistribution[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,11 +104,9 @@ function DistributionSection({ project, isAdmin }: { project: Project; isAdmin: 
                     onUndo={() => run(() => dataSource.updateDistribution(d.id, { paymentReceived: false, paymentDate: undefined }))} />
                 </td>
                 <td className="py-2 text-right">
-                  {isAdmin && (
-                    <button disabled={busy} title="삭제"
-                      onClick={() => { if (confirm(`'${d.clientName}' 항목을 삭제할까요?`)) run(() => dataSource.deleteDistribution(d.id)); }}
-                      className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
-                  )}
+                  <button disabled={busy} title="삭제"
+                    onClick={() => { if (confirm(`'${d.clientName}' 항목을 삭제할까요?`)) run(() => dataSource.deleteDistribution(d.id)); }}
+                    className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                 </td>
               </tr>
             ))}
@@ -157,7 +154,6 @@ export function GroupSection({ project, allProjects, onChanged }: {
     [allProjects, project.parentId],
   );
 
-  const { isAdmin } = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -179,7 +175,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
 
   // 매출분배 마스터: 별도 컴포넌트로 위임 (projects 자식이 아닌 revenue_distributions 관리)
   if (project.groupType === 'distribution' && !project.parentId) {
-    return <DistributionSection project={project} isAdmin={isAdmin} />;
+    return <DistributionSection project={project} />;
   }
 
   // ── 자식 프로젝트인 경우: 소속 그룹 표시 ──
@@ -253,7 +249,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
         <ul className="mb-4 divide-y divide-indigo-100 rounded-lg border border-indigo-200 bg-indigo-50/40">
           {children.map((c) => {
             const editable = !c.notionPageId; // 노션 연동 자식은 노션이 원천이므로 수정 잠금
-            const deletable = isAdmin && c.sourceType === 'manual_groupware' && !c.notionPageId;
+            const deletable = c.sourceType === 'manual_groupware' && !c.notionPageId;
             const editing = editId === c.id;
             return (
             <li key={c.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">

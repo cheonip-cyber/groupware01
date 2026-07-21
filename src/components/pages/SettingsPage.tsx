@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader } from '../common/Card';
 import { dataSource } from '../../services/dataSource';
-import { useAuth } from '../../auth/AuthContext';
 import type { NotionFieldMapping, NotionFieldDataType, NotionSyncDirection, Client } from '../../types';
-import { Settings, RefreshCw, Plus, Trash2, ShieldAlert, TimerReset } from 'lucide-react';
+import { Settings, RefreshCw, Plus, Trash2, TimerReset } from 'lucide-react';
 import { useToast } from '../common/toast';
 
 function ClientPaymentLagSection() {
@@ -225,7 +224,6 @@ function NotionMappingSection() {
 }
 
 export function SettingsPage() {
-  const { isAdmin } = useAuth();
   const [syncStatus, setSyncStatus] = useState<{ status: string; lastSyncedAt?: string; syncedCount?: number; message?: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -273,18 +271,8 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      {isAdmin ? (
-        <>
-          <ClientPaymentLagSection />
-          <NotionMappingSection />
-        </>
-      ) : (
-        <Card className="p-5">
-          <p className="flex items-center gap-2 text-xs text-slate-400">
-            <ShieldAlert className="h-4 w-4" /> Notion 필드 매핑 관리는 관리자만 볼 수 있습니다.
-          </p>
-        </Card>
-      )}
+      <ClientPaymentLagSection />
+      <NotionMappingSection />
     </div>
   );
 }
