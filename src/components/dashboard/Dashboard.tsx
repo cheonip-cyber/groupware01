@@ -132,7 +132,9 @@ export function Dashboard() {
       <SectionLabel text="리스크 · 업무" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <KpiCard label="지급요청 대기" value={kpi.paymentPending} unit="건" tone="amber" icon={<CreditCard className="h-4 w-4" />}
-          onClick={() => navigate('/payments')} />
+          hint="이체 대기 (지급요청 완료 건)" onClick={() => navigate('/payments?tab=pending')} />
+        <KpiCard label="지급대상 검토" value={kpi.paymentTarget} unit="건" tone="amber" icon={<CreditCard className="h-4 w-4" />}
+          hint="아직 요청 전 — 검토 필요" onClick={() => navigate('/payments?tab=target')} />
         <KpiCard label="세금계산서 미발행" value={kpi.taxInvoicePending} unit="건" tone="red" icon={<AlertCircle className="h-4 w-4" />}
           hint="견적 단계 제외" onClick={() => navigate('/revenue')} />
         <KpiCard label="미수금" value={kpi.unpaidCollection} unit="건" tone="red" icon={<AlertCircle className="h-4 w-4" />}
@@ -191,5 +193,5 @@ function MiniRevenueChart({ projects, onMore }: { projects: Project[]; onMore: (
 }
 
 function SectionLabel({ text }: { text: string }) {
-  return <p className="-mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">{text}</p>;
+  return <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{text}</p>;
 }

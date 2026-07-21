@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEscClose } from '../../hooks/useEscClose';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { Card } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
@@ -25,7 +25,11 @@ export function PaymentsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
 
-  const [tab, setTab] = useState<'pending' | 'done' | 'target'>('pending');
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab');
+  const [tab, setTab] = useState<'pending' | 'done' | 'target'>(
+    initialTab === 'done' || initialTab === 'target' ? initialTab : 'pending',
+  );
   const [search, setSearch] = useState('');
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');

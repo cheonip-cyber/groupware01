@@ -35,8 +35,11 @@ export const getThisMonthProjects = (projects: Project[]): Project[] => {
   return projects.filter((p) => (p.startDate || '').startsWith(ym));
 };
 
-export const getPendingPaymentRequests = (paymentRequests: PaymentRequest[]): PaymentRequest[] =>
-  paymentRequests.filter((r) => r.status === '지급대상' || r.status === '지급요청');
+export const getRequestedPayments = (paymentRequests: PaymentRequest[]): PaymentRequest[] =>
+  paymentRequests.filter((r) => r.status === '지급요청');
+
+export const getUnrequestedPayments = (paymentRequests: PaymentRequest[]): PaymentRequest[] =>
+  paymentRequests.filter((r) => r.status === '지급대상');
 
 // 대시보드 KPI 집계
 export interface DashboardKpis {
@@ -45,7 +48,8 @@ export interface DashboardKpis {
   confirmedReady: number;
   inProgress: number;
   reportSettlement: number;
-  paymentPending: number;
+  paymentPending: number;      // 지급요청 완료 후 이체 대기 중인 건 (지급요청 상태)
+  paymentTarget: number;       // 아직 요청 전(지급대상) 건 — 요청 여부 검토 필요
   taxInvoicePending: number;
   unpaidCollection: number;
   settlementPending: number;
@@ -80,7 +84,8 @@ export const buildDashboardKpis = (
     confirmedReady: counts['확정/준비'],
     inProgress: counts['운영중'],
     reportSettlement: counts['보고/정산'],
-    paymentPending: getPendingPaymentRequests(paymentRequests).length,
+    paymentPending: getRequestedPayments(paymentRequests).length,
+    paymentTarget: getUnrequestedPayments(paymentRequests).length,
     taxInvoicePending: active.filter((p) => !p.taxInvoiceIssued && p.revenueStatus !== '견적작성').length,
     unpaidCollection: active.filter((p) => !p.collectionCompleted && p.taxInvoiceIssued).length,
     settlementPending: active.filter(

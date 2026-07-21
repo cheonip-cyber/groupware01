@@ -16,6 +16,7 @@ interface CardTxn {
   purpose: string | null;
   status: string;
   category_name?: string;
+  user_name?: string;
   project_linked?: boolean;
 }
 interface ManualExpense {
@@ -47,6 +48,7 @@ export function AdminCardPage() {
   const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
   const [recurring, setRecurring] = useState<RecurringSetting[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
   const [search, setSearch] = useState('');
   const [month, setMonth] = useState(''); // YYYY-MM ('' = 전체)
 
@@ -54,18 +56,21 @@ export function AdminCardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [txnRes, catRes, meRes, rsRes] = await Promise.all([
+      const [txnRes, catRes, userRes, meRes, rsRes] = await Promise.all([
         cardSupabase.from('card_transactions').select('*').eq('status', 'active').order('transaction_date', { ascending: false }).limit(200),
         cardSupabase.from('expense_categories').select('*'),
+        cardSupabase.from('app_users').select('id, name'),
         cardSupabase.from('manual_expenses').select('*').order('transaction_date', { ascending: false }).limit(100),
         cardSupabase.from('recurring_settings').select('*').order('payment_day', { ascending: true }),
       ]);
       if (txnRes.error) throw txnRes.error;
+      if (userRes.error) throw userRes.error;
       if (meRes.error) throw meRes.error;
       if (rsRes.error) throw rsRes.error;
 
       const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
-      setCardTxns((txnRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류' })));
+      const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
+      setCardTxns((txnRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류', user_name: userMap.get(t.user_id) ?? '미지정' })));
       setManualExpenses(meRes.data ?? []);
       setRecurring(rsRes.data ?? []);
     } catch (e: any) {
@@ -77,15 +82,17 @@ export function AdminCardPage() {
   useEffect(() => { load(); }, []);
 
   const categories = useMemo(() => [...new Set(cardTxns.map((t) => t.category_name ?? '미분류'))], [cardTxns]);
+  const users = useMemo(() => [...new Set(cardTxns.map((t) => t.user_name ?? '미지정'))], [cardTxns]);
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
     return cardTxns.filter((t) => {
       if (categoryFilter && t.category_name !== categoryFilter) return false;
+      if (userFilter && t.user_name !== userFilter) return false;
       if (month && !(t.transaction_date ?? '').startsWith(month)) return false;
-      if (q && !`${t.merchant_name ?? ''} ${t.purpose ?? ''}`.toLowerCase().includes(q)) return false;
+      if (q && !`${t.merchant_name ?? ''} ${t.purpose ?? ''} ${t.user_name ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [cardTxns, categoryFilter, search, month]);
+  }, [cardTxns, categoryFilter, userFilter, search, month]);
   const duplicateRiskTxns = useMemo(
     () => cardTxns.filter((t) => (t.category_name ?? '').includes(DUPLICATE_RISK_KEYWORD)),
     [cardTxns],
@@ -182,12 +189,17 @@ export function AdminCardPage() {
             <span className="flex flex-wrap items-center gap-1.5">
               <span className="relative">
                 <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="가맹점·용도 검색"
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="가맹점·용도·사용자 검색"
                   className="w-40 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
               </span>
               <YearMonthPicker value={month} onChange={setMonth}
                 className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none" />
               {month && <button onClick={() => setMonth('')} className="text-[11px] text-slate-400 underline">해제</button>}
+              <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}
+                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+                <option value="">전체 사용자</option>
+                {users.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
               <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
                 className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
                 <option value="">전체 카테고리</option>
@@ -203,6 +215,7 @@ export function AdminCardPage() {
                 <th className="px-5 py-2.5 font-medium">No.</th>
                 <th className="px-3 py-2.5 font-medium">일자</th>
                 <th className="px-3 py-2.5 font-medium">가맹점</th>
+                <th className="px-3 py-2.5 font-medium">사용자</th>
                 <th className="px-3 py-2.5 font-medium">카테고리</th>
                 <th className="px-3 py-2.5 font-medium">용도</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액</th>
@@ -214,6 +227,7 @@ export function AdminCardPage() {
                     <td className="px-5 py-2 text-xs text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2"><input type="date" value={editTx.transaction_date} onChange={(e) => setEditTx((s) => ({ ...s, transaction_date: e.target.value }))} className="rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
                     <td className="px-3 py-2"><input value={editTx.merchant_name} onChange={(e) => setEditTx((s) => ({ ...s, merchant_name: e.target.value }))} className="w-full rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{t.user_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-400">{t.category_name}</td>
                     <td className="px-3 py-2"><input value={editTx.purpose} onChange={(e) => setEditTx((s) => ({ ...s, purpose: e.target.value }))} placeholder="용도" className="w-full rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
                     <td className="px-3 py-2 text-right"><input type="number" value={editTx.amount} onChange={(e) => setEditTx((s) => ({ ...s, amount: Number(e.target.value) }))} className="w-28 rounded border border-blue-200 px-1.5 py-1 text-right text-xs outline-none" /></td>
@@ -229,6 +243,7 @@ export function AdminCardPage() {
                     <td className="px-5 py-2 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{formatDate(t.transaction_date)}</td>
                     <td className="cursor-pointer px-3 py-2 font-medium text-slate-800 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEditTx(t)}>{t.merchant_name}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{t.user_name}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{t.category_name}</td>
                     <td className="cursor-pointer px-3 py-2 text-xs text-slate-400 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEditTx(t)}>{t.purpose ?? '-'}</td>
                     <td className="px-3 py-2 text-right"><MoneyText value={t.amount} /></td>
