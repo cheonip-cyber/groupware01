@@ -110,9 +110,11 @@ export function ProjectDetail() {
             </select>
           )}
             {project.riskFlags.length > 0 && (
-              <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
+              <button type="button" onClick={() => setActiveTab('예산/비용')}
+                title="강사비·업체비 등 예산/비용 탭에 등록된 지출 항목이 없습니다 (매출 금액과는 별개입니다)"
+                className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600 hover:bg-red-100">
                 ⚠ {project.riskFlags.join(' · ')}
-              </span>
+              </button>
             )}
             {saving && (
               <span className="flex items-center gap-1 text-xs text-slate-400">

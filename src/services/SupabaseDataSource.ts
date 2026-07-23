@@ -67,7 +67,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 
   const riskFlags: string[] = [];
   if (!row.is_tax_invoice_issued && row.status === '보고/정산') riskFlags.push('세금계산서 미발행');
-  if (row.status === '확정/준비' && costs.length === 0) riskFlags.push('예산 미등록');
+  if (row.status === '확정/준비' && costs.length === 0) riskFlags.push('지출 예산 미등록(예산/비용 탭)');
 
   return {
     id: String(row.id),
