@@ -318,6 +318,13 @@ class SupabaseDataSource implements DataSource {
     if (patch.prepChecklist !== undefined) dbPatch.prep_checklist = patch.prepChecklist;
     if ('masterClientName' in patch) dbPatch.master_client_name = patch.masterClientName || null;
     if (patch.priority !== undefined) dbPatch.priority = patch.priority;
+    // 개요 탭 인라인 편집 지원 (2026-07-17) — 고객사/담당자/업무담당자는 노션 미연동 프로젝트에서만
+    // 프론트에서 편집을 허용하지만, DB 매핑 자체는 편집 가능 여부와 무관하게 항상 반영한다.
+    if ('clientId' in patch) dbPatch.client_id = patch.clientId ? Number(patch.clientId) : null;
+    if ('clientContactName' in patch) dbPatch.client_contact_name = patch.clientContactName || null;
+    if ('notionManager' in patch) dbPatch.notion_manager = patch.notionManager || null;
+    if ('proposalDueDate' in patch) dbPatch.proposal_due_date = patch.proposalDueDate || null;
+    if ('endDate' in patch) dbPatch.session_2_date = patch.endDate || null;
     // 상태 변경 (수기 프로젝트 수명주기 관리 — DB 원본 상태 8종 그대로 저장)
     if (patch.dbStatus !== undefined) dbPatch.status = patch.dbStatus;
     // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준
