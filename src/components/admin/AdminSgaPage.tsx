@@ -9,10 +9,11 @@ import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
 import { downloadSgaSheet, downloadCombinedTransferSheet } from '../../utils/paymentExport';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X } from 'lucide-react';
+import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X, UploadCloud } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
+import { BankStatementImport } from './BankStatementImport';
 
 interface ManualExpense {
   id: number;
@@ -174,6 +175,13 @@ export function AdminSgaPage() {
           <p className="mt-1 text-xl font-bold text-amber-700">{pendingRows.length}건</p>
         </div>
       </div>
+
+      <Card>
+        <CardHeader title="은행 이체내역으로 자동 등록" icon={<UploadCloud className="h-4 w-4 text-slate-400" />} />
+        <div className="p-4">
+          <BankStatementImport onImported={load} />
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

@@ -329,6 +329,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.dbStatus !== undefined) dbPatch.status = patch.dbStatus;
     // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준
     if (patch.finalEstimate !== undefined) dbPatch.final_estimate = patch.finalEstimate;
+    if (patch.initialEstimate !== undefined) dbPatch.initial_estimate = patch.initialEstimate;
     // 회차명 수정 (그룹웨어 생성 자식 전용 — 노션 연동 프로젝트 이름은 노션이 원천이라 여기서 수정 금지)
     if (patch.projectName !== undefined) dbPatch.project_name = patch.projectName;
     if ('startDate' in patch) dbPatch.session_1_date = patch.startDate || null;

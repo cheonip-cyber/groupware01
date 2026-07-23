@@ -54,7 +54,9 @@ export function RevenueTab({ project, onUpdate }:
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Section title="계약 / 금액">
-        <Field label="제안금액"><MoneyText value={project.initialEstimate} /></Field>
+        <Field label="제안금액">
+          <InlineMoneySave value={project.initialEstimate} onSave={(v) => onUpdate({ initialEstimate: v })} />
+        </Field>
         <Field label="VAT 구분">
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${project.vatType === '별도' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
@@ -72,6 +74,12 @@ export function RevenueTab({ project, onUpdate }:
         </Field>
         <Field label="공급가액 (VAT 제외)"><MoneyText value={project.supplyAmount} /></Field>
         <Field label="VAT"><MoneyText value={project.vat} /></Field>
+        <Field label="최종견적 (VAT 별도 입력분)">
+          <span className="flex items-center gap-2">
+            <InlineMoneySave value={project.finalEstimate ?? 0} onSave={(v) => onUpdate({ finalEstimate: v })} bold />
+            <span className="text-[10px] text-slate-300">Notion "최종견적"과 동일 — VAT구분에 따라 아래 금액이 자동 계산됩니다</span>
+          </span>
+        </Field>
         <Field label="최종 계약금액 (VAT 포함 실수령액)"><MoneyText value={project.contractAmount} className="font-semibold" /></Field>
         <Field label="매출 월">{project.revenueMonth || '-'}</Field>
       </Section>
@@ -123,6 +131,20 @@ export function RevenueTab({ project, onUpdate }:
         </Field>
       </Section>
     </div>
+  );
+}
+
+// 인라인 금액 저장 (숫자 입력, 값이 바뀌었을 때만 저장 버튼 노출)
+function InlineMoneySave({ value, onSave, bold }: { value: number; onSave: (v: number) => void; bold?: boolean }) {
+  const [v, setV] = useState(String(value ?? 0));
+  const dirty = Number(v || 0) !== value;
+  return (
+    <span className="flex items-center gap-1.5">
+      <input type="number" value={v} onChange={(e) => setV(e.target.value)}
+        className={`w-40 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:border-blue-400 ${bold ? 'font-semibold' : ''}`} />
+      <span className="text-xs text-slate-400">원</span>
+      {dirty && <button onClick={() => onSave(Number(v || 0))} className="rounded bg-blue-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-blue-700">저장</button>}
+    </span>
   );
 }
 
