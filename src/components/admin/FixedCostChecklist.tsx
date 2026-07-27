@@ -4,6 +4,7 @@ import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { useToast } from '../common/toast';
 import { ClipboardList } from 'lucide-react';
+import { formatDescription, type FixedCostRule, type MonthBasis } from '../../utils/fixedCost';
 
 // 고정비 누락 방지 체크리스트 (2026-07-09 설계, 2026-07-09 다중항목/경고단계 개편)
 // — "사람이 기억"이 아니라 "시스템이 먼저 확인"하는 구조.
@@ -18,6 +19,20 @@ interface ChecklistItem {
   // 판관비 자동등록과 같은 정의표를 공유하므로 은행 표기가 달라도 상태가 어긋나지 않는다.
   match_groups: string[][] | null;
   default_amount: number | null;
+  // 항목별 표기 규칙(2026-07-27) — 자동등록과 동일한 규칙을 공유
+  month_basis: MonthBasis | null;
+  month_suffix: string | null;
+  one_per_month: boolean | null;
+}
+
+// 그룹 명칭(다중 그룹 항목은 그룹별 명칭)으로 표기 규칙을 만든다
+function ruleFor(item: ChecklistItem, label: string): FixedCostRule {
+  return {
+    label,
+    month_basis: (item.month_basis ?? 'payment') as MonthBasis,
+    month_suffix: item.month_suffix ?? '월',
+    one_per_month: item.one_per_month ?? true,
+  };
 }
 
 // match_groups(신규) 우선, 없으면 구 desc_pattern(콤마=AND)을 단일 별칭 그룹으로 승계
@@ -142,11 +157,11 @@ export function FixedCostChecklist() {
     if (toInsert.length === 0) { setEditingId(null); return; }
     setBusy(true);
     try {
-      const suffix = row.subLabels.length > 1 ? '월분' : '월';
       const rowsToInsert = toInsert.map((x) => ({
         transaction_date: form.date, category: row.item.category,
         amount: x.amount,
-        description: row.subLabels.length > 1 ? `${x.label}(${cur.label.replace('월', '')}${suffix})` : `${row.item.label}(${cur.label})`,
+        // 자동등록과 동일한 표기 규칙 사용 (예: 사무실관리비는 전월 요금 → '사무실관리비(6월분)')
+        description: formatDescription(ruleFor(row.item, row.subLabels.length > 1 ? x.label : row.item.label), form.date),
         status: 'paid',
         recurring_id: row.item.id, // 고정비 항목 명시적 링크
       

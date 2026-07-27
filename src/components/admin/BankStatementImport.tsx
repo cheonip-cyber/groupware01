@@ -4,6 +4,7 @@ import { cardSupabase } from '../../services/cardSupabaseClient';
 import { useToast } from '../common/toast';
 import { MoneyText } from '../common/MoneyText';
 import { UploadCloud, X, Check, Loader2, ChevronDown } from 'lucide-react';
+import { formatDescription, itemMonthKey, type FixedCostRule, type MonthBasis } from '../../utils/fixedCost';
 
 // 고정비 통합 정의표(recurring_checklist_items) 기반 템플릿 (2026-07-27)
 // — 고정비 체크리스트와 같은 정의를 공유해, 자동등록 결과가 체크리스트 상태에 그대로 반영되게 한다.
@@ -12,6 +13,7 @@ interface RecurringTemplate {
   category: string;
   label: string;        // 정식명칭 (등록 시 description 정규화에 사용)
   aliases: string[];    // 은행 적요 표기 흡수용 별칭 (정식명칭 포함)
+  rule: FixedCostRule;  // 표기·중복 판정 규칙
 }
 
 interface Candidate {
@@ -28,7 +30,7 @@ interface Candidate {
   recurringId: number | null; // 고정비 항목 링크(사용자가 드롭다운으로 확정·수정 가능)
 }
 
-interface FixedCostItem { id: number; label: string; category: string }
+interface FixedCostItem { id: number; label: string; category: string; rule: FixedCostRule }
 
 const CATEGORIES = ['급여/상여', '세금/공과', '대출/수수료', '렌탈/위탁', '임대료/관리비', '기기구입/기타'];
 
@@ -82,7 +84,7 @@ function Row({ c, selected, onToggle, onUpdate, items }: {
     onUpdate(c.key, {
       recurringId: it.id,
       category: it.category,
-      description: `${it.label}(${c.transaction_date.slice(5, 7)}월)`,
+      description: formatDescription(it.rule, c.transaction_date),
     });
   };
   return (
@@ -144,10 +146,16 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
       // 고정비 통합 정의표에서 템플릿을 읽는다 (구 recurring_settings 대체)
       const { data: templates } = await cardSupabase
         .from('recurring_checklist_items')
-        .select('id, label, category, desc_pattern, match_groups')
+        .select('id, label, category, desc_pattern, match_groups, month_basis, month_suffix, one_per_month')
         .eq('is_active', true)
         .order('sort_order');
-      setFixedItems((templates ?? []).map((t: any) => ({ id: t.id, label: t.label, category: t.category })));
+      const ruleOf = (t: any): FixedCostRule => ({
+        label: t.label,
+        month_basis: (t.month_basis ?? 'payment') as MonthBasis,
+        month_suffix: t.month_suffix ?? '월',
+        one_per_month: t.one_per_month ?? true,
+      });
+      setFixedItems((templates ?? []).map((t: any) => ({ id: t.id, label: t.label, category: t.category, rule: ruleOf(t) })));
       const tpls: RecurringTemplate[] = (templates ?? []).flatMap((t: any) => {
         const groups: string[][] = Array.isArray(t.match_groups) && t.match_groups.length > 0
           ? t.match_groups
@@ -158,12 +166,24 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
           category: t.category,
           label: aliases[0],
           aliases: aliases.filter(Boolean),
+          // 그룹이 여러 개인 항목은 그룹 명칭(별칭 대표)을 표기에 사용
+          rule: { ...ruleOf(t), label: aliases[0] },
         }));
       });
 
       const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
-      const { data: existing } = await cardSupabase.from('manual_expenses').select('transaction_date, amount').gte('transaction_date', since);
+      const { data: existing } = await cardSupabase.from('manual_expenses')
+        .select('transaction_date, amount, recurring_id').gte('transaction_date', since);
       const existingKeys = new Set((existing ?? []).map((e: any) => `${e.transaction_date}_${Math.round(Number(e.amount))}`));
+      // 월 1건만 정상인 고정비 항목은 '같은 항목 + 같은 대상 월'이 이미 있으면 금액·날짜가 달라도 중복으로 본다.
+      // (급여·사업소득세처럼 월 다건이 정상인 항목은 one_per_month=false라 대상에서 제외)
+      const ruleById = new Map<number, FixedCostRule>();
+      (templates ?? []).forEach((t: any) => ruleById.set(t.id, ruleOf(t)));
+      const existingItemMonths = new Set(
+        (existing ?? [])
+          .filter((e: any) => e.recurring_id != null && ruleById.get(e.recurring_id)?.one_per_month)
+          .map((e: any) => itemMonthKey(e.recurring_id, e.transaction_date, ruleById.get(e.recurring_id)!.month_basis)),
+      );
 
       type Raw = { date: string; desc: string; recipient: string; amount: number; row: number };
       const raws: Raw[] = [];
@@ -210,6 +230,12 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
         }
         if (!category) category = CATEGORIES[0];
 
+        const matchedItemId = confidence === 'template' && best ? best.itemId : null;
+        // 중복 판정: ① 최근 90일 내 동일 날짜·금액 ② 월 1건 항목의 같은 대상 월 기등록
+        const dupByAmount = existingKeys.has(`${r.date}_${Math.round(r.amount)}`);
+        const dupByItemMonth = !!(matchedItemId && best?.rule.one_per_month
+          && existingItemMonths.has(itemMonthKey(matchedItemId, r.date, best.rule.month_basis)));
+
         return {
           key: `${r.date}_${r.desc}_${r.amount}_${r.row}`,
           transaction_date: r.date,
@@ -217,12 +243,13 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
           recipient: r.recipient,
           amount: r.amount,
           category,
-          // 매칭된 건은 정식명칭으로 정규화해 표시(원본 은행 적요는 raw_description에 보존)
-          description: confidence === 'template' && best ? `${best.label}(${r.date.slice(5, 7)}월)` : r.desc,
+          // 매칭된 건은 항목별 표기 규칙으로 정규화(원본 은행 적요는 raw_description에 보존)
+          // 예: 사무실관리비는 전월 요금을 당월 납부 → 7/23 지급분은 '사무실관리비(6월분)'
+          description: confidence === 'template' && best ? formatDescription(best.rule, r.date) : r.desc,
           confidence,
-          duplicate: existingKeys.has(`${r.date}_${Math.round(r.amount)}`),
+          duplicate: dupByAmount || dupByItemMonth,
           likelyProject,
-          recurringId: confidence === 'template' && best ? best.itemId : null,
+          recurringId: matchedItemId,
         };
       });
 
@@ -260,6 +287,13 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
     if (!candidates) return;
     const rows = candidates.filter((c) => selected.has(c.key));
     if (rows.length === 0) return;
+    // 중복 의심 건이 선택돼 있으면 저장 전에 한 번 막는다(이미 등록된 고정비 재등록 방지)
+    const dups = rows.filter((c) => c.duplicate);
+    if (dups.length > 0) {
+      const preview = dups.slice(0, 5).map((c) => `· ${c.transaction_date} ${c.description || c.rawDesc}`).join('\n');
+      const more = dups.length > 5 ? `\n… 외 ${dups.length - 5}건` : '';
+      if (!confirm(`이미 등록된 것으로 보이는 ${dups.length}건이 선택되어 있습니다.\n\n${preview}${more}\n\n그래도 추가할까요?`)) return;
+    }
     setSaving(true);
     try {
       const payload = rows.map((c) => ({
@@ -284,12 +318,14 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
   const mainList = candidates?.filter((c) => !c.likelyProject) ?? [];
   const projectList = candidates?.filter((c) => c.likelyProject) ?? [];
 
-  const allMainChecked = mainList.length > 0 && mainList.every((c) => selected.has(c.key));
+  // 전체선택은 중복 의심 건을 제외한다 — 전체선택 한 번으로 중복이 그대로 저장되던 문제 방지
+  const selectableMain = mainList.filter((c) => !c.duplicate);
+  const allMainChecked = selectableMain.length > 0 && selectableMain.every((c) => selected.has(c.key));
   const toggleAllMain = () => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (allMainChecked) mainList.forEach((c) => next.delete(c.key));
-      else mainList.forEach((c) => next.add(c.key));
+      else selectableMain.forEach((c) => next.add(c.key));
       return next;
     });
   };
