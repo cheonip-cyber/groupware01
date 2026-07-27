@@ -47,6 +47,31 @@ export const projectYear = (p: Project): string | null => {
   return src && /^\d{4}/.test(src) ? src.slice(0, 4) : null;
 };
 
+// 목록 기본 정렬: 당해년도 우선 (2026-07-27)
+// 정산·매출·예산 목록은 조회 연도 필터가 없어 과거 수백 건이 뒤섞여 보였다.
+// 다만 '필터로 숨기기'는 쓰지 않는다 — 과거 연도의 미정산·미수금 건이 화면에서 사라지면
+// 추적이 끊기기 때문. 대신 순서로 당해년도를 위로 올린다.
+//   ① 당해년도  ② 연도 미지정(신규 건 — 묻히면 안 됨)  ③ 그 외 연도(내림차순)
+//   같은 그룹 안에서는 매출월(없으면 교육일) 최신순
+export const sortByCurrentYearFirst = <T extends Project>(projects: T[]): T[] => {
+  const thisYear = String(new Date().getFullYear());
+  const rank = (p: Project) => {
+    const y = projectYear(p);
+    if (y === thisYear) return 0;
+    if (y === null) return 1;
+    return 2;
+  };
+  return [...projects].sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    const ya = projectYear(a) ?? '', yb = projectYear(b) ?? '';
+    if (ya !== yb) return yb.localeCompare(ya); // 최근 연도 먼저
+    const da = a.revenueMonth || a.startDate || '';
+    const db = b.revenueMonth || b.startDate || '';
+    return db.localeCompare(da); // 같은 연도 안에서는 최신 먼저
+  });
+};
+
 // 기본 필터: 올해 기준 (과거 수백 건이 매번 쏟아지는 문제 방지)
 // 상태 태그: 전부 기본 ON, '취소/보류'만 기본 OFF (2026-07-08 요청 반영)
 export const defaultFilterState: ProjectFilterState = {
