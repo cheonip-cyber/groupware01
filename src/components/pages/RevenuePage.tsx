@@ -3,7 +3,8 @@ import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { revenueStatusStyle } from '../../utils/statusConfig';
-import { activeProjects, sortByCurrentYearFirst } from '../../utils/filters';
+import { activeProjects, sortByCurrentYearFirst, filterByYearKeepOpen, isCollectionOpen } from '../../utils/filters';
+import { CarryOverBadge, ScopeNote } from '../common/CarryOver';
 import { formatDate } from '../../utils/formatters';
 import { Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -23,10 +24,10 @@ const revenueSortValue = (p: Project, key: RevenueSortKey) => {
 };
 
 export function RevenuePage() {
-  const { projects, loading } = useAppData();
+  const { projects, loading, globalYear } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
-  // 기본 순서: 당해년도 우선(헤더 정렬을 클릭하면 그 기준으로 바뀜)
-  const active = sortByCurrentYearFirst(activeProjects(projects));
+  // 조회 연도로 거르되 미완료 건은 연도 무관 유지 → 기준 연도 우선 정렬(헤더 정렬 클릭 시 그 기준으로 바뀜)
+  const active = sortByCurrentYearFirst(filterByYearKeepOpen(activeProjects(projects), globalYear, isCollectionOpen), globalYear);
   const { sorted, sortKey, dir, onSort } = useSortableRows<Project, RevenueSortKey>(active, revenueSortValue);
   // 유효매출 기준: 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 방지)
   const totalRev = active.reduce((s, p) => s + (p.effectiveAmount ?? p.contractAmount), 0);
@@ -48,6 +49,7 @@ export function RevenuePage() {
       </div>
       <Card>
         <CardHeader title="매출/계약 현황" icon={<Receipt className="h-4 w-4 text-slate-400" />} />
+        <ScopeNote year={globalYear} openLabel="미수금" />
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
@@ -65,7 +67,7 @@ export function RevenuePage() {
               {sorted.map((p, __idx) => (
                 <tr key={p.id} className="group hover:bg-slate-50">
                   <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{__idx + 1}</td><td className="px-5 py-3">
-                    <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
+                    <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link><CarryOverBadge project={p} year={globalYear} />
                   </td>
                   <td className="px-3 py-3 text-slate-500">
                     {p.clientName}

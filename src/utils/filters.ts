@@ -47,17 +47,15 @@ export const projectYear = (p: Project): string | null => {
   return src && /^\d{4}/.test(src) ? src.slice(0, 4) : null;
 };
 
-// 목록 기본 정렬: 당해년도 우선 (2026-07-27)
+// 목록 기본 정렬: 기준 연도 우선 (2026-07-27)
 // 정산·매출·예산 목록은 조회 연도 필터가 없어 과거 수백 건이 뒤섞여 보였다.
-// 다만 '필터로 숨기기'는 쓰지 않는다 — 과거 연도의 미정산·미수금 건이 화면에서 사라지면
-// 추적이 끊기기 때문. 대신 순서로 당해년도를 위로 올린다.
-//   ① 당해년도  ② 연도 미지정(신규 건 — 묻히면 안 됨)  ③ 그 외 연도(내림차순)
+//   ① 기준 연도  ② 연도 미지정(신규 건 — 묻히면 안 됨)  ③ 그 외 연도(내림차순)
 //   같은 그룹 안에서는 매출월(없으면 교육일) 최신순
-export const sortByCurrentYearFirst = <T extends Project>(projects: T[]): T[] => {
-  const thisYear = String(new Date().getFullYear());
+export const sortByCurrentYearFirst = <T extends Project>(projects: T[], baseYear?: string): T[] => {
+  const target = baseYear && baseYear !== '전체' ? baseYear : String(new Date().getFullYear());
   const rank = (p: Project) => {
     const y = projectYear(p);
-    if (y === thisYear) return 0;
+    if (y === target) return 0;
     if (y === null) return 1;
     return 2;
   };
@@ -70,6 +68,34 @@ export const sortByCurrentYearFirst = <T extends Project>(projects: T[]): T[] =>
     const db = b.revenueMonth || b.startDate || '';
     return db.localeCompare(da); // 같은 연도 안에서는 최신 먼저
   });
+};
+
+// 화면별 '미완료(아직 끝나지 않아 계속 챙겨야 하는)' 기준 — 각 화면이 실제로 관리하는 대상에 맞춘다.
+export const isSettlementOpen = (p: Project) => !(p.taxInvoiceIssued && p.collectionCompleted && p.paymentCompleted);
+export const isCollectionOpen = (p: Project) => !p.collectionCompleted; // 매출: 미수금
+export const isPaymentOpen = (p: Project) => !p.paymentCompleted;       // 예산/비용: 지급 미완료
+
+/**
+ * 조회 연도로 거르되, 미완료 건은 연도와 무관하게 남긴다.
+ * 과거 연도의 미정산·미수금·미지급 건이 화면에서 사라지면 추적이 끊기기 때문 (2026-07-27).
+ * 연도 미지정(신규) 건도 계속 노출한다 — 날짜가 없는 건일수록 빨리 확인해야 한다.
+ */
+export const filterByYearKeepOpen = <T extends Project>(
+  projects: T[], year: string, isOpen: (p: Project) => boolean,
+): T[] => {
+  if (!year || year === '전체') return projects;
+  return projects.filter((p) => {
+    const y = projectYear(p);
+    if (y === null || y === year) return true;
+    return isOpen(p);
+  });
+};
+
+/** 조회 연도 밖인데 미완료라서 남아있는 '이월' 건인지 */
+export const isCarryOver = (p: Project, year: string): boolean => {
+  if (!year || year === '전체') return false;
+  const y = projectYear(p);
+  return y !== null && y !== year;
 };
 
 // 기본 필터: 올해 기준 (과거 수백 건이 매번 쏟아지는 문제 방지)

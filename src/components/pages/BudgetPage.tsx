@@ -1,5 +1,6 @@
 import { profitRateLabel } from '../../utils/formatters';
-import { activeProjects, sortByCurrentYearFirst } from '../../utils/filters';
+import { activeProjects, sortByCurrentYearFirst, filterByYearKeepOpen, isPaymentOpen } from '../../utils/filters';
+import { CarryOverBadge, ScopeNote } from '../common/CarryOver';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
@@ -21,14 +22,15 @@ const budgetSortValue = (p: Project, key: BudgetSortKey) => {
 };
 
 export function BudgetPage() {
-  const { projects, loading } = useAppData();
+  const { projects, loading, globalYear } = useAppData();
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
-  // 기본 순서: 당해년도 우선(헤더 정렬을 클릭하면 그 기준으로 바뀜)
-  const active = sortByCurrentYearFirst(activeProjects(projects));
+  // 조회 연도로 거르되 미완료 건은 연도 무관 유지 → 기준 연도 우선 정렬(헤더 정렬 클릭 시 그 기준으로 바뀜)
+  const active = sortByCurrentYearFirst(filterByYearKeepOpen(activeProjects(projects), globalYear, isPaymentOpen), globalYear);
   const { sorted, sortKey, dir, onSort } = useSortableRows<Project, BudgetSortKey>(active, budgetSortValue);
   return (
     <Card>
       <CardHeader title="예산/비용 현황" icon={<Wallet className="h-4 w-4 text-slate-400" />} />
+      <ScopeNote year={globalYear} openLabel="지급 미완료" />
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
@@ -45,7 +47,7 @@ export function BudgetPage() {
               <tr key={p.id} className="group hover:bg-slate-50">
                 <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                 <td className="px-5 py-3">
-                  <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
+                  <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link><CarryOverBadge project={p} year={globalYear} />
                   <div className="text-xs text-slate-400">{p.clientName}</div>
                 </td>
                 <td className="px-3 py-3 text-right"><MoneyText value={p.contractAmount} /></td>
