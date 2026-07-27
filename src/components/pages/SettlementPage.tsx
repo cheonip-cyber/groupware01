@@ -6,6 +6,8 @@ import { MonthBadge } from '../common/MonthBadge';
 import { settlementStatusStyle } from '../../utils/statusConfig';
 import { activeProjects, sortByCurrentYearFirst, filterByYearKeepOpen, isSettlementOpen } from '../../utils/filters';
 import { CarryOverBadge, ScopeNote } from '../common/CarryOver';
+import { GROUP_TYPE_LABEL } from '../project/ProjectTable';
+import { Layers } from 'lucide-react';
 import { ClipboardCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { SortableTh, useSortableRows } from '../common/SortableTh';
@@ -16,6 +18,24 @@ const settlementSortValue = (p: Project, key: SettlementSortKey) =>
   key === 'expectedProfit' ? p.expectedProfit
   : key === 'revenueMonth' ? (p.revenueMonth ?? '')
   : p.projectName;
+
+// 정산은 세금계산서·수금이 건별로 이뤄지므로 개별 행을 유지한다(그룹으로 접으면 부분 수금을 표현할 수 없음).
+// 대신 어느 묶음 소속인지만 표시해 맥락을 잃지 않게 한다. (2026-07-27)
+function groupChip(p: Project) {
+  const isChild = !!p.parentId;
+  const isMaster = !!p.groupChildCount && p.groupChildCount > 0;
+  if (!isChild && !isMaster) return null;
+  const label = GROUP_TYPE_LABEL[p.groupType ?? ''] ?? '그룹';
+  return (
+    <span
+      title={isMaster ? `${label} 대표 — 구성원 ${p.groupChildCount}건` : `${label} 구성원`}
+      className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 align-middle"
+    >
+      <Layers className="h-2.5 w-2.5" />
+      {isMaster ? `${label} 대표 ${p.groupChildCount}건` : label}
+    </span>
+  );
+}
 
 export function SettlementPage() {
   const { projects, loading, globalYear } = useAppData();
@@ -47,7 +67,7 @@ export function SettlementPage() {
                   <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                   <td className="px-3 py-3"><MonthBadge yearMonth={p.revenueMonth} /></td>
                   <td className="px-5 py-3">
-                    <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link><CarryOverBadge project={p} year={globalYear} />
+                    <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link><CarryOverBadge project={p} year={globalYear} />{groupChip(p)}
                     <div className="text-xs text-slate-400">{p.clientName}</div>
                   </td>
                   <td className="px-3 py-3"><StatusBadge label={p.settlementStatus} style={settlementStatusStyle[p.settlementStatus]} size="sm" /></td>
