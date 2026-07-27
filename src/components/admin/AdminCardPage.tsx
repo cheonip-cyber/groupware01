@@ -61,7 +61,7 @@ export function AdminCardPage() {
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
         cardSupabase.from('manual_expenses').select('*').order('transaction_date', { ascending: false }).limit(100),
-        cardSupabase.from('recurring_settings').select('*').order('payment_day', { ascending: true }),
+        cardSupabase.from('recurring_checklist_items').select('id, label, category, payment_day, default_amount, is_active').order('payment_day', { ascending: true }),
       ]);
       if (txnRes.error) throw txnRes.error;
       if (userRes.error) throw userRes.error;
@@ -72,7 +72,15 @@ export function AdminCardPage() {
       const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
       setCardTxns((txnRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류', user_name: userMap.get(t.user_id) ?? '미지정' })));
       setManualExpenses(meRes.data ?? []);
-      setRecurring(rsRes.data ?? []);
+      // 고정비 통합 정의표(recurring_checklist_items) 기준 — 구 recurring_settings 대체(2026-07-27)
+      setRecurring((rsRes.data ?? []).map((r: any) => ({
+        id: r.id,
+        category: r.category,
+        amount: Number(r.default_amount ?? 0),
+        payment_day: r.payment_day ?? 0,
+        description: r.label ?? null,
+        is_active: r.is_active,
+      })));
     } catch (e: any) {
       setError(e.message ?? String(e));
     }
@@ -304,7 +312,7 @@ export function AdminCardPage() {
                     <td className="px-4 py-2 text-xs text-slate-500">매월 {r.payment_day}일</td>
                     <td className="px-3 py-2 text-xs text-slate-600">{r.category}</td>
                     <td className="px-3 py-2 text-xs text-slate-400">{r.description ?? '-'}</td>
-                    <td className="px-3 py-2 text-right"><MoneyText value={r.amount} /></td>
+                    <td className="px-3 py-2 text-right">{r.amount > 0 ? <MoneyText value={r.amount} /> : <span className="text-xs text-slate-300">미설정</span>}</td>
                   </tr>
                 ))}
               </tbody>
