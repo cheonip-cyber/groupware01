@@ -5,7 +5,13 @@ import { useToast } from '../common/toast';
 import { MoneyText } from '../common/MoneyText';
 import { UploadCloud, X, Check, Loader2, ChevronDown } from 'lucide-react';
 
-interface RecurringTemplate { category: string; description: string }
+// 고정비 통합 정의표(recurring_checklist_items) 기반 템플릿 (2026-07-27)
+// — 고정비 체크리스트와 같은 정의를 공유해, 자동등록 결과가 체크리스트 상태에 그대로 반영되게 한다.
+interface RecurringTemplate {
+  category: string;
+  label: string;        // 정식명칭 (등록 시 description 정규화에 사용)
+  aliases: string[];    // 은행 적요 표기 흡수용 별칭 (정식명칭 포함)
+}
 
 interface Candidate {
   key: string;
@@ -15,14 +21,14 @@ interface Candidate {
   amount: number;
   category: string;
   description: string;
-  confidence: 'template' | 'keyword' | 'none'; // template=반복설정 정확매칭(자동선택), keyword=카테고리 추정만(수동선택), none=추정불가
+  confidence: 'template' | 'keyword' | 'none'; // template=고정비 정의표 정확매칭(자동선택), keyword=카테고리 추정만(수동선택), none=추정불가
   duplicate: boolean;
   likelyProject: boolean; // 같은 적요가 여러 수취인에게 반복 — 개인별 프로젝트성 지급으로 추정, 기본 별도 그룹
 }
 
 const CATEGORIES = ['급여/상여', '세금/공과', '대출/수수료', '렌탈/위탁', '임대료/관리비', '기기구입/기타'];
 
-// 반복설정에 등록 안 돼 있어도 이름만으로 카테고리를 짐작할 수 있는 일반적인 회계 용어들.
+// 고정비 정의표에 등록 안 돼 있어도 이름만으로 카테고리를 짐작할 수 있는 일반적인 회계 용어들.
 // 템플릿 매칭(정확한 과거 이력)보다는 신뢰도가 낮아 기본 체크는 안 하되, 카테고리는 미리 채워둔다.
 const KEYWORD_CATEGORY: [RegExp, string][] = [
   [/부가가치세|부가세|재산세|지방세|사업소득세|근로소득세|원천세|주민세|법인세|4대보험|국민연금|건강보험|고용보험|산재보험|사회보험/, '세금/공과'],
@@ -110,8 +116,23 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
       const iDate = col('거래일시'), iDesc = col('적요'), iOut = col('출금'), iTo = col('의뢰인/수취인');
       if (iDate === -1 || iDesc === -1 || iOut === -1) throw new Error('필수 컬럼(거래일시/적요/출금)을 찾지 못했습니다.');
 
-      const { data: templates } = await cardSupabase.from('recurring_settings').select('category, description');
-      const tpls: RecurringTemplate[] = templates ?? [];
+      // 고정비 통합 정의표에서 템플릿을 읽는다 (구 recurring_settings 대체)
+      const { data: templates } = await cardSupabase
+        .from('recurring_checklist_items')
+        .select('label, category, desc_pattern, match_groups')
+        .eq('is_active', true)
+        .order('sort_order');
+      const tpls: RecurringTemplate[] = (templates ?? []).flatMap((t: any) => {
+        const groups: string[][] = Array.isArray(t.match_groups) && t.match_groups.length > 0
+          ? t.match_groups
+          : String(t.desc_pattern ?? '').split(',').map((s: string) => s.trim()).filter(Boolean).map((s: string) => [s]);
+        // 그룹이 여러 개인 항목(예: 사업소득세+지방세+근로소득세)은 그룹별로 각각의 템플릿이 된다
+        return groups.map((aliases) => ({
+          category: t.category,
+          label: aliases[0],
+          aliases: aliases.filter(Boolean),
+        }));
+      });
 
       const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
       const { data: existing } = await cardSupabase.from('manual_expenses').select('transaction_date, amount').gte('transaction_date', since);
@@ -145,7 +166,9 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
 
         let best: RecurringTemplate | null = null, bestScore = 0;
         for (const t of tpls) {
-          const s = similarity(r.desc, t.description);
+          // 별칭이 적요에 그대로 포함되면 확정 매칭(1.0), 아니면 별칭별 유사도 중 최댓값
+          const contains = t.aliases.some((a) => r.desc.includes(a));
+          const s = contains ? 1 : Math.max(0, ...t.aliases.map((a) => similarity(r.desc, a)));
           if (s > bestScore) { bestScore = s; best = t; }
         }
         const templateMatched = bestScore >= 0.34;
@@ -167,7 +190,8 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
           recipient: r.recipient,
           amount: r.amount,
           category,
-          description: confidence === 'template' && best ? `${best.description}(${r.date.slice(5, 7)}월)` : r.desc,
+          // 매칭된 건은 정식명칭으로 정규화해 표시(원본 은행 적요는 raw_description에 보존)
+          description: confidence === 'template' && best ? `${best.label}(${r.date.slice(5, 7)}월)` : r.desc,
           confidence,
           duplicate: existingKeys.has(`${r.date}_${Math.round(r.amount)}`),
           likelyProject,
@@ -176,7 +200,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
 
       if (out.length === 0) throw new Error('추출 가능한 출금 내역이 없습니다.');
       setCandidates(out);
-      // 자동 선택: 반복설정과 정확히 매칭되고, 중복 의심도 아니고, 프로젝트성으로 추정되지도 않는 건만
+      // 자동 선택: 고정비 정의표와 정확히 매칭되고, 중복 의심도 아니고, 프로젝트성으로 추정되지도 않는 건만
       setSelected(new Set(out.filter((c) => c.confidence === 'template' && !c.duplicate && !c.likelyProject).map((c) => c.key)));
       setShowProjectGroup(false);
     } catch (e: any) {
@@ -213,6 +237,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
       const payload = rows.map((c) => ({
         transaction_date: c.transaction_date, category: c.category, amount: c.amount,
         description: c.description || c.rawDesc, status: 'paid',
+        raw_description: c.rawDesc, // 원본 은행 적요 보존(표시는 정식명칭으로 정규화)
       }));
       const { error } = await cardSupabase.from('manual_expenses').insert(payload);
       if (error) throw error;
@@ -259,7 +284,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
           <>
             <UploadCloud className="h-6 w-6 text-slate-300" />
             <p className="text-sm text-slate-500">은행 이체내역 엑셀(.xls/.xlsx)을 여기로 끌어다 놓거나 클릭해서 선택하세요</p>
-            <p className="text-xs text-slate-400">반복설정 항목과 자동 매칭된 건은 기본 선택되어 있습니다 — 추가 전 자유롭게 검토·수정하세요</p>
+            <p className="text-xs text-slate-400">고정비 항목과 자동 매칭된 건은 기본 선택되어 있습니다 — 추가 전 자유롭게 검토·수정하세요</p>
           </>
         )}
       </div>
@@ -272,7 +297,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
               <button onClick={() => setCandidates(null)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
             <p className="mb-2 flex flex-wrap gap-x-3 text-[11px] text-slate-400">
-              <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />반복설정 정확 매칭(기본 선택)</span>
+              <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-blue-500" />고정비 정의표 매칭(기본 선택)</span>
               <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-slate-400" />용어로 카테고리만 추정(직접 확인 후 선택)</span>
               <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-400" />최근 90일 내 동일 날짜·금액 있음(중복 의심)</span>
             </p>

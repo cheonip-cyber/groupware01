@@ -13,6 +13,19 @@ import { ClipboardList } from 'lucide-react';
 
 interface ChecklistItem {
   id: number; label: string; category: string; desc_pattern: string; payment_day: number | null;
+  // 통합 정의(2026-07-27): 그룹 배열 — 각 그룹은 별칭 배열.
+  // 판정 = 모든 그룹이 각각 (카테고리 일치 AND 별칭 중 하나가 description에 포함)되는 당월 지출 1건 이상 보유.
+  // 판관비 자동등록과 같은 정의표를 공유하므로 은행 표기가 달라도 상태가 어긋나지 않는다.
+  match_groups: string[][] | null;
+  default_amount: number | null;
+}
+
+// match_groups(신규) 우선, 없으면 구 desc_pattern(콤마=AND)을 단일 별칭 그룹으로 승계
+function toGroups(item: ChecklistItem): string[][] {
+  if (Array.isArray(item.match_groups) && item.match_groups.length > 0) {
+    return item.match_groups.filter((g) => Array.isArray(g) && g.length > 0);
+  }
+  return item.desc_pattern.split(',').map((s) => s.trim()).filter(Boolean).map((s) => [s]);
 }
 interface ExpenseRow { id: number; transaction_date: string; category: string; description: string; amount: number; }
 
@@ -72,12 +85,17 @@ export function FixedCostChecklist() {
   const today = new Date().getDate();
 
   const rows = useMemo(() => items.map((item) => {
-    const subLabels = item.desc_pattern.split(',').map((s) => s.trim()).filter(Boolean);
-    // 하위 패턴별로 이번달/지난달 매칭 항목을 찾는다 (사업소득세류는 3개 전부 있어야 '완료')
-    const perSub = subLabels.map((label) => {
-      const curMatches = thisMonth.filter((r) => r.description.includes(label));
-      const lastMatches = lastMonth.filter((r) => r.description.includes(label));
-      return { label, curMatches, lastTotal: lastMatches.reduce((s, r) => s + Number(r.amount), 0) };
+    const groups = toGroups(item);
+    // 표시용 명칭은 각 그룹의 첫 별칭(정식명칭). 나머지 별칭은 은행 표기 흡수용.
+    const subLabels = groups.map((g) => g[0]);
+    // 그룹별로 이번달/지난달 매칭 항목을 찾는다 (사업소득세류는 3그룹 전부 있어야 '완료').
+    // 카테고리를 함께 대조해 '관리비'처럼 넓은 별칭의 오매칭을 억제한다.
+    const matches = (rowsIn: ExpenseRow[], aliases: string[]) =>
+      rowsIn.filter((r) => r.category === item.category && aliases.some((a) => (r.description ?? '').includes(a)));
+    const perSub = groups.map((aliases) => {
+      const curMatches = matches(thisMonth, aliases);
+      const lastMatches = matches(lastMonth, aliases);
+      return { label: aliases[0], curMatches, lastTotal: lastMatches.reduce((s, r) => s + Number(r.amount), 0) };
     });
     const allFound = perSub.every((s) => s.curMatches.length > 0);
     const someFound = perSub.some((s) => s.curMatches.length > 0);
@@ -95,7 +113,12 @@ export function FixedCostChecklist() {
     setEditingId(row.item.id);
     setForm({
       date: ymd(new Date()),
-      amounts: row.perSub.map((s) => (s.curMatches.length > 0 ? '' : (s.lastTotal ? String(s.lastTotal) : ''))),
+      // 기본 금액: 지난달 실적 우선, 없으면 통합 정의표의 기준 금액(default_amount) — 단일 그룹 항목에만 적용
+      amounts: row.perSub.map((s) => {
+        if (s.curMatches.length > 0) return '';
+        if (s.lastTotal) return String(s.lastTotal);
+        return row.perSub.length === 1 && row.item.default_amount ? String(row.item.default_amount) : '';
+      }),
     });
   };
 
