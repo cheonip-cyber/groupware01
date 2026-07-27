@@ -27,7 +27,10 @@ function toGroups(item: ChecklistItem): string[][] {
   }
   return item.desc_pattern.split(',').map((s) => s.trim()).filter(Boolean).map((s) => [s]);
 }
-interface ExpenseRow { id: number; transaction_date: string; category: string; description: string; amount: number; }
+interface ExpenseRow {
+  id: number; transaction_date: string; category: string; description: string; amount: number;
+  recurring_id: number | null; // 고정비 항목 명시적 링크(2026-07-27) — 있으면 표기와 무관하게 소속 확정
+}
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -70,9 +73,9 @@ export function FixedCostChecklist() {
   const load = async () => {
     const [itemsRes, curRes, prevRes] = await Promise.all([
       cardSupabase.from('recurring_checklist_items').select('*').eq('is_active', true).order('sort_order'),
-      cardSupabase.from('manual_expenses').select('id, transaction_date, category, description, amount')
+      cardSupabase.from('manual_expenses').select('id, transaction_date, category, description, amount, recurring_id')
         .gte('transaction_date', cur.start).lt('transaction_date', cur.end),
-      cardSupabase.from('manual_expenses').select('id, transaction_date, category, description, amount')
+      cardSupabase.from('manual_expenses').select('id, transaction_date, category, description, amount, recurring_id')
         .gte('transaction_date', prev.start).lt('transaction_date', prev.end),
     ]);
     setItems((itemsRes.data ?? []) as ChecklistItem[]);
@@ -90,8 +93,17 @@ export function FixedCostChecklist() {
     const subLabels = groups.map((g) => g[0]);
     // 그룹별로 이번달/지난달 매칭 항목을 찾는다 (사업소득세류는 3그룹 전부 있어야 '완료').
     // 카테고리를 함께 대조해 '관리비'처럼 넓은 별칭의 오매칭을 억제한다.
+    // 판정 우선순위: ① recurring_id로 소속이 확정된 건 ② 미태깅 건은 카테고리+별칭 fallback
     const matches = (rowsIn: ExpenseRow[], aliases: string[]) =>
-      rowsIn.filter((r) => r.category === item.category && aliases.some((a) => (r.description ?? '').includes(a)));
+      rowsIn.filter((r) => {
+        const aliasHit = aliases.some((a) => (r.description ?? '').includes(a));
+        if (r.recurring_id === item.id) {
+          // 이 항목 소속 확정 — 그룹이 하나면 그대로 인정, 여러 그룹이면 별칭으로 어느 그룹인지 판별
+          return groups.length === 1 || aliasHit;
+        }
+        if (r.recurring_id != null) return false; // 다른 항목으로 확정된 건은 제외
+        return r.category === item.category && aliasHit;
+      });
     const perSub = groups.map((aliases) => {
       const curMatches = matches(thisMonth, aliases);
       const lastMatches = matches(lastMonth, aliases);
@@ -136,6 +148,8 @@ export function FixedCostChecklist() {
         amount: x.amount,
         description: row.subLabels.length > 1 ? `${x.label}(${cur.label.replace('월', '')}${suffix})` : `${row.item.label}(${cur.label})`,
         status: 'paid',
+        recurring_id: row.item.id, // 고정비 항목 명시적 링크
+      
       }));
       const { error } = await cardSupabase.from('manual_expenses').insert(rowsToInsert);
       if (error) throw error;

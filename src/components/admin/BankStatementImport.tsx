@@ -8,6 +8,7 @@ import { UploadCloud, X, Check, Loader2, ChevronDown } from 'lucide-react';
 // 고정비 통합 정의표(recurring_checklist_items) 기반 템플릿 (2026-07-27)
 // — 고정비 체크리스트와 같은 정의를 공유해, 자동등록 결과가 체크리스트 상태에 그대로 반영되게 한다.
 interface RecurringTemplate {
+  itemId: number;       // 고정비 항목 id — 등록 시 manual_expenses.recurring_id에 기록
   category: string;
   label: string;        // 정식명칭 (등록 시 description 정규화에 사용)
   aliases: string[];    // 은행 적요 표기 흡수용 별칭 (정식명칭 포함)
@@ -24,7 +25,10 @@ interface Candidate {
   confidence: 'template' | 'keyword' | 'none'; // template=고정비 정의표 정확매칭(자동선택), keyword=카테고리 추정만(수동선택), none=추정불가
   duplicate: boolean;
   likelyProject: boolean; // 같은 적요가 여러 수취인에게 반복 — 개인별 프로젝트성 지급으로 추정, 기본 별도 그룹
+  recurringId: number | null; // 고정비 항목 링크(사용자가 드롭다운으로 확정·수정 가능)
 }
+
+interface FixedCostItem { id: number; label: string; category: string }
 
 const CATEGORIES = ['급여/상여', '세금/공과', '대출/수수료', '렌탈/위탁', '임대료/관리비', '기기구입/기타'];
 
@@ -66,9 +70,21 @@ function excelDateToStr(v: unknown): string {
   return '';
 }
 
-function Row({ c, selected, onToggle, onUpdate }: {
+function Row({ c, selected, onToggle, onUpdate, items }: {
   c: Candidate; selected: boolean; onToggle: (key: string) => void; onUpdate: (key: string, patch: Partial<Candidate>) => void;
+  items: FixedCostItem[];
 }) {
+  // 고정비 항목을 지정/변경하면 카테고리·내용도 그 항목의 정식 표기로 함께 맞춘다
+  const onPickItem = (raw: string) => {
+    if (!raw) { onUpdate(c.key, { recurringId: null }); return; }
+    const it = items.find((i) => i.id === Number(raw));
+    if (!it) return;
+    onUpdate(c.key, {
+      recurringId: it.id,
+      category: it.category,
+      description: `${it.label}(${c.transaction_date.slice(5, 7)}월)`,
+    });
+  };
   return (
     <tr className={`${c.duplicate ? 'bg-amber-50/40' : c.confidence === 'template' ? 'bg-blue-50/30' : c.confidence === 'keyword' ? 'bg-slate-50/60' : ''} hover:bg-slate-50`}>
       <td className="px-2 py-1.5">
@@ -86,6 +102,14 @@ function Row({ c, selected, onToggle, onUpdate }: {
         <input value={c.description} onChange={(e) => onUpdate(c.key, { description: e.target.value })}
           className="w-full min-w-[120px] rounded border border-slate-200 px-1.5 py-0.5 text-xs outline-none" />
       </td>
+      <td className="px-2 py-1.5">
+        <select value={c.recurringId ?? ''} onChange={(e) => onPickItem(e.target.value)}
+          title="고정비 항목으로 지정하면 고정비 체크리스트에 자동 반영됩니다"
+          className={`rounded border px-1 py-0.5 text-xs outline-none ${c.recurringId ? 'border-blue-200 bg-blue-50/60 text-blue-700' : 'border-slate-200 text-slate-400'}`}>
+          <option value="">— (일반 지출)</option>
+          {items.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
+        </select>
+      </td>
       <td className="whitespace-nowrap px-2 py-1.5 text-right"><MoneyText value={c.amount} className="text-xs" /></td>
     </tr>
   );
@@ -98,6 +122,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showProjectGroup, setShowProjectGroup] = useState(false);
+  const [fixedItems, setFixedItems] = useState<FixedCostItem[]>([]);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -119,15 +144,17 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
       // 고정비 통합 정의표에서 템플릿을 읽는다 (구 recurring_settings 대체)
       const { data: templates } = await cardSupabase
         .from('recurring_checklist_items')
-        .select('label, category, desc_pattern, match_groups')
+        .select('id, label, category, desc_pattern, match_groups')
         .eq('is_active', true)
         .order('sort_order');
+      setFixedItems((templates ?? []).map((t: any) => ({ id: t.id, label: t.label, category: t.category })));
       const tpls: RecurringTemplate[] = (templates ?? []).flatMap((t: any) => {
         const groups: string[][] = Array.isArray(t.match_groups) && t.match_groups.length > 0
           ? t.match_groups
           : String(t.desc_pattern ?? '').split(',').map((s: string) => s.trim()).filter(Boolean).map((s: string) => [s]);
         // 그룹이 여러 개인 항목(예: 사업소득세+지방세+근로소득세)은 그룹별로 각각의 템플릿이 된다
         return groups.map((aliases) => ({
+          itemId: t.id as number,
           category: t.category,
           label: aliases[0],
           aliases: aliases.filter(Boolean),
@@ -195,6 +222,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
           confidence,
           duplicate: existingKeys.has(`${r.date}_${Math.round(r.amount)}`),
           likelyProject,
+          recurringId: confidence === 'template' && best ? best.itemId : null,
         };
       });
 
@@ -238,6 +266,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
         transaction_date: c.transaction_date, category: c.category, amount: c.amount,
         description: c.description || c.rawDesc, status: 'paid',
         raw_description: c.rawDesc, // 원본 은행 적요 보존(표시는 정식명칭으로 정규화)
+        recurring_id: c.recurringId, // 고정비 항목 링크 — 체크리스트 상태가 이 값으로 확정 판정됨
       }));
       const { error } = await cardSupabase.from('manual_expenses').insert(payload);
       if (error) throw error;
@@ -311,10 +340,11 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
                   <th className="px-2 py-2 font-medium">은행 적요 · 수취인</th>
                   <th className="px-2 py-2 font-medium">카테고리</th>
                   <th className="px-2 py-2 font-medium">내용</th>
+                  <th className="px-2 py-2 font-medium">고정비 항목</th>
                   <th className="px-2 py-2 text-right font-medium">금액</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-50">
-                  {mainList.map((c) => <Row key={c.key} c={c} selected={selected.has(c.key)} onToggle={toggle} onUpdate={updateCandidate} />)}
+                  {mainList.map((c) => <Row key={c.key} c={c} selected={selected.has(c.key)} onToggle={toggle} onUpdate={updateCandidate} items={fixedItems} />)}
                 </tbody>
               </table>
               {projectList.length > 0 && (
@@ -327,7 +357,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
                   {showProjectGroup && (
                     <table className="w-full text-xs">
                       <tbody className="divide-y divide-slate-50">
-                        {projectList.map((c) => <Row key={c.key} c={c} selected={selected.has(c.key)} onToggle={toggle} onUpdate={updateCandidate} />)}
+                        {projectList.map((c) => <Row key={c.key} c={c} selected={selected.has(c.key)} onToggle={toggle} onUpdate={updateCandidate} items={fixedItems} />)}
                       </tbody>
                     </table>
                   )}
