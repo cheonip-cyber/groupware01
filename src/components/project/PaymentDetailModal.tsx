@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { PaymentRequest, Instructor, Company } from '../../types';
 import { useAppData } from '../../store/appData';
 import { dataSource } from '../../services/dataSource';
@@ -82,6 +82,26 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   // 재검색으로 다른 유형을 선택한 경우, 화면 표시도 그 유형 기준으로 전환
   const effectiveIsPerson = pendingPayee ? pendingPayee.kind === 'instructor' : resolvedIsPerson;
 
+  // 검색으로 고른(아직 저장 전) 대상의 실제 레코드 — 계좌·사업자번호를 저장 전에 바로 보여주기 위함.
+  // 이전에는 저장된 payeeId 기준으로만 조회해, 대상을 새로 골라도 계좌가 '미등록'으로 남아 있었다.
+  const pendingEntity = useMemo(() => {
+    if (!pendingPayee) return undefined;
+    return pendingPayee.kind === 'instructor'
+      ? instructors.find((i) => String(i.id) === pendingPayee.id)
+      : companies.find((c) => String(c.id) === pendingPayee.id);
+  }, [pendingPayee, instructors, companies]);
+
+  /** 화면에 표시·수정할 실제 대상: 새로 고른 대상이 있으면 그것, 없으면 현재 연결된 대상 */
+  const shownPayee = pendingEntity ?? currentPayee;
+  const shownPayeeId = pendingPayee?.id ?? r.payeeId;
+
+  // 업체를 새로 고르면 부가세 기본값을 그 업체의 과세유형으로 다시 잡는다
+  useEffect(() => {
+    if (pendingPayee?.kind === 'company') {
+      setVatMode(defaultVatMode((pendingEntity as Company | undefined)?.taxType));
+    }
+  }, [pendingPayee, pendingEntity]);
+
   // 실제 화면에 표시할 지급처 정보: 재검색으로 임시 선택한 대상이 있으면 그걸 우선 표시(저장 전 미리보기)
   const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: resolvedIsPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
   const linked = !!displayPayee;
@@ -144,11 +164,11 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   };
 
   const saveAccount = async () => {
-    if (!r.payeeId) return;
+    if (!shownPayeeId) return;
     setBusy(true);
     try {
-      if (resolvedIsPerson) await dataSource.updateInstructor(String(r.payeeId), { bankName: bank, accountNumber: account } as Partial<Instructor>);
-      else await dataSource.updateCompany(String(r.payeeId), { bankName: bank, accountNumber: account } as Partial<Company>);
+      if (effectiveIsPerson) await dataSource.updateInstructor(String(shownPayeeId), { bankName: bank, accountNumber: account } as Partial<Instructor>);
+      else await dataSource.updateCompany(String(shownPayeeId), { bankName: bank, accountNumber: account } as Partial<Company>);
       await refresh();
       setEditAcct(false);
     } finally { setBusy(false); }
@@ -171,9 +191,9 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           {r.projectName && <Row label="프로젝트">{r.projectName}</Row>}
           <Row label="은행 / 계좌">
             {!editAcct ? (
-              currentPayee?.bankName
-                ? <>{currentPayee.bankName} | {currentPayee.accountNumber}
-                    <button onClick={() => { setBank(currentPayee.bankName ?? ''); setAccount(currentPayee.accountNumber ?? ''); setEditAcct(true); }}
+              shownPayee?.bankName
+                ? <>{shownPayee.bankName} | {shownPayee.accountNumber}
+                    <button onClick={() => { setBank(shownPayee.bankName ?? ''); setAccount(shownPayee.accountNumber ?? ''); setEditAcct(true); }}
                       className="ml-2 text-xs text-blue-600 underline">수정</button>
                   </>
                 : linked
@@ -192,8 +212,8 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
               </span>
             )}
           </Row>
-          {effectiveIsPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
-          {!effectiveIsPerson && isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
+          {effectiveIsPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((shownPayee as Instructor)?.residentNumber)}</span></Row>}
+          {!effectiveIsPerson && shownPayee && <Row label="사업자번호">{(shownPayee as Company).businessNumber || '-'}</Row>}
           {r.memo && <Row label="비고">{r.memo}</Row>}
         </div>
 

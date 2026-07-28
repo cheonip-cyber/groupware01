@@ -45,6 +45,11 @@ export function PaymentsPage() {
   // 월말 배치 준비용 일괄 예약 지급월 — 반드시 조기 반환(로딩)보다 위에 선언 (React 훅 규칙, 오류 #300 방지)
   const [bulkScheduleMonth, setBulkScheduleMonth] = useState(nextMonth);
   const [detail, setDetail] = useState<PaymentRequest | null>(null);
+  // 열려 있는 팝업은 스냅샷이라 저장해도 옛 값이 남는다 — 최신 데이터로 계속 동기화한다
+  // (지급처를 다시 연결해도 모달의 계좌 정보가 갱신되지 않던 문제)
+  useEffect(() => {
+    setDetail((cur) => (cur ? paymentRequests.find((x) => x.id === cur.id) ?? cur : cur));
+  }, [paymentRequests]);
   useEscClose(!!detail, () => setDetail(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [busy, setBusy] = useState(false);
 
