@@ -6,7 +6,7 @@ import { useToast } from '../common/toast';
 import { YearMonthPicker } from '../common/YearMonthPicker';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search } from 'lucide-react';
+import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search, Trash2 } from 'lucide-react';
 
 interface CardTxn {
   id: string;
@@ -147,6 +147,19 @@ export function AdminCardPage() {
     setEditId(null);
   };
 
+  // 카드 거래 삭제 — 오입력 정정용. 하드 삭제가 아니라 status='deleted' 소프트 삭제다.
+  // 목록 조회가 status='active'만 보고, 구글시트 동기화도 active만 내보내므로
+  // 삭제 즉시 화면·시트에서 함께 빠지고, 잘못 지운 경우 DB에서 되살릴 수 있다.
+  const deleteTx = async (t: any) => {
+    const label = `${formatDate(t.transaction_date)} · ${t.merchant_name} · ${Number(t.amount ?? 0).toLocaleString()}원`;
+    if (!confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`)) return;
+    const prev = cardTxns;
+    setCardTxns((list) => list.filter((x) => x.id !== t.id)); // 낙관적 반영
+    const { error: err } = await cardSupabase.from('card_transactions').update({ status: 'deleted' }).eq('id', t.id);
+    if (err) { setCardTxns(prev); toast.error(`삭제 실패: ${err.message}`); return; }
+    toast.success('카드 내역이 삭제되었습니다');
+  };
+
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
 
@@ -228,6 +241,7 @@ export function AdminCardPage() {
                 <th className="px-3 py-2.5 font-medium">용도</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액</th>
                 <th className="px-3 py-2.5 font-medium">구분</th>
+                <th className="px-3 py-2.5 font-medium">관리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredTxns.slice(0, 100).map((t, idx) => editId === t.id ? (
@@ -245,6 +259,7 @@ export function AdminCardPage() {
                         <button onClick={() => setEditId(null)} className="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-200">취소</button>
                       </span>
                     </td>
+                    <td className="px-3 py-2" />
                   </tr>
                 ) : (
                   <tr key={t.id} className={`group ${t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}`}>
@@ -261,6 +276,12 @@ export function AdminCardPage() {
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           t.project_linked ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                         {t.project_linked ? '프로젝트 귀속' : '일반'}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button onClick={() => deleteTx(t)} title="이 내역 삭제 (오입력 정정용)"
+                        className="rounded p-1 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </td>
                   </tr>
