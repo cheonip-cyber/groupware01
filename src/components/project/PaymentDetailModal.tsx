@@ -21,11 +21,23 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const isPerson = r.payeeType === '강사';
   const isVendor = r.payeeType === '업체';
 
-  const currentPayee: Instructor | Company | undefined = useMemo(() => {
+  // 지급처 확정: payee_id는 instructors/companies 각각의 PK라 값이 겹친다(예: 74 = 강사 여지은 & 업체 와이드비스).
+  // 따라서 반드시 유형과 함께 봐야 한다. 유형이 '기타'(미지정)인 과거 이관 건은 id만으로 확정할 수 없으므로
+  // 저장된 이름과 일치하는 쪽만 채택하고, 확정되지 않으면 아무것도 표시하지 않는다
+  // (예전에는 무조건 업체 테이블을 조회해 전혀 다른 업체의 계좌가 표시됐음 — 98건 해당).
+  const resolved: { entity: Instructor | Company; kind: 'instructor' | 'company' } | undefined = useMemo(() => {
     if (!r.payeeId) return undefined;
-    return isPerson ? instructors.find((i) => String(i.id) === String(r.payeeId))
-                    : companies.find((c) => String(c.id) === String(r.payeeId));
-  }, [r.payeeId, isPerson, instructors, companies]);
+    const inst = instructors.find((i) => String(i.id) === String(r.payeeId));
+    const comp = companies.find((c) => String(c.id) === String(r.payeeId));
+    if (isPerson) return inst ? { entity: inst, kind: 'instructor' } : undefined;
+    if (isVendor) return comp ? { entity: comp, kind: 'company' } : undefined;
+    if (comp && comp.companyName === r.payeeName) return { entity: comp, kind: 'company' };
+    if (inst && inst.name === r.payeeName) return { entity: inst, kind: 'instructor' };
+    return undefined;
+  }, [r.payeeId, r.payeeName, isPerson, isVendor, instructors, companies]);
+
+  const currentPayee = resolved?.entity;
+  const resolvedIsPerson = resolved?.kind === 'instructor';
 
   const [taxMode, setTaxMode] = useState(r.taxMode ?? 'rate33');
   const [mIncome, setMIncome] = useState(r.manualIncomeTax ?? 0);
@@ -62,10 +74,10 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   }, [query, isPerson, instructors, companies]);
 
   // 재검색으로 다른 유형을 선택한 경우, 화면 표시도 그 유형 기준으로 전환
-  const effectiveIsPerson = pendingPayee ? pendingPayee.kind === 'instructor' : isPerson;
+  const effectiveIsPerson = pendingPayee ? pendingPayee.kind === 'instructor' : resolvedIsPerson;
 
   // 실제 화면에 표시할 지급처 정보: 재검색으로 임시 선택한 대상이 있으면 그걸 우선 표시(저장 전 미리보기)
-  const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: isPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
+  const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: resolvedIsPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
   const linked = !!displayPayee;
 
   const buildPatch = (extra: Partial<PaymentRequest> = {}): Partial<PaymentRequest> => ({
@@ -102,7 +114,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     if (!r.payeeId) return;
     setBusy(true);
     try {
-      if (isPerson) await dataSource.updateInstructor(String(r.payeeId), { bankName: bank, accountNumber: account } as Partial<Instructor>);
+      if (resolvedIsPerson) await dataSource.updateInstructor(String(r.payeeId), { bankName: bank, accountNumber: account } as Partial<Instructor>);
       else await dataSource.updateCompany(String(r.payeeId), { bankName: bank, accountNumber: account } as Partial<Company>);
       await refresh();
       setEditAcct(false);

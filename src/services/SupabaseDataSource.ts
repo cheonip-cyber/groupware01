@@ -605,8 +605,13 @@ class SupabaseDataSource implements DataSource {
           dbPatch.actual_payment_amount = w.netAmount;
         }
       }
-      // 지급취소(완료 → 요청 되돌리기) 시 지급월 해제
-      if (patch.status === '지급요청') dbPatch.paid_month = null;
+      // 지급취소(완료 → 요청/대상 되돌리기) 시 지급월과 실지급액을 함께 해제.
+      // 실지급액을 남겨두면 '지급완료가 아닌데 실지급액이 있는' 불일치가 생겨
+      // 지급 리스트·집계에서 이미 지급한 것처럼 보일 수 있다.
+      if (patch.status !== '지급완료') {
+        dbPatch.paid_month = null;
+        dbPatch.actual_payment_amount = 0;
+      }
     }
     if (patch.infoConfirmed !== undefined) dbPatch.payment_info_confirmed = patch.infoConfirmed;
     // 지급 상세: 세금 방식 (구 그룹웨어 3.3/8.8/용역수동 이식)
@@ -617,6 +622,19 @@ class SupabaseDataSource implements DataSource {
     if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     // 대상 재연결 시 표시 이름도 함께 갱신 (누락 시 계좌만 바뀌고 화면 이름은 그대로 남아 "반영 안 됨"처럼 보이던 버그)
     if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
+    // 지급유형(payee_type)도 반드시 함께 갱신한다.
+    // payee_id는 instructors/companies 각각의 PK라 값이 겹친다(예: 74 = 강사 여지은 & 업체 와이드비스).
+    // 유형 없이는 대상이 확정되지 않는데, 이 저장이 빠져 있어 강사→업체로 재연결하면
+    // 이름·id만 바뀌고 유형은 옛 값으로 남아 팝업이 엉뚱한 사람의 계좌를 표시하던 버그가 있었음.
+    if (patch.payeeType !== undefined) {
+      dbPatch.payee_type = patch.payeeType === '강사' ? 'instructor' : patch.payeeType === '업체' ? 'company' : null;
+      // 강사·업체로 연결되면 지급관리 대상이 된다(카드결제 건 제외)
+      if (dbPatch.payee_type) {
+        const { data: cur } = await supabase.from('project_costs')
+          .select('is_card_payment').eq('id', Number(id)).maybeSingle();
+        if (cur && !cur.is_card_payment) dbPatch.is_payable = true;
+      }
+    }
     // 지급월 예약 (해당 월 말일 일괄 지급 배치 대상)
     if ('scheduledMonth' in patch) dbPatch.payment_scheduled_month = patch.scheduledMonth ?? null;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
