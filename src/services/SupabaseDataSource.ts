@@ -587,23 +587,16 @@ class SupabaseDataSource implements DataSource {
       // 지급월: 사용자가 선택한 값 우선(소급 처리 지원), 미지정 시 현재 월
       if (patch.status === '지급완료') {
         dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
-        // 실지급액(actual_payment_amount) 자동 계산 — 강사는 원천징수(3.3%/8.8%/수동) 후 순액,
-        // 업체·기타는 예산금액 그대로. 이 필드를 저장하는 곳이 이전엔 없어서
-        // 신규로 지급완료 처리되는 건이 계속 0으로 남는 문제가 있었음(과거 데이터는 별도 이관값 보유).
+        // actual_payment_amount에는 원천징수 '전' 총액(지급총액)을 저장한다. (2026-07-28 정정)
+        // 이 컬럼은 두 곳에서 총액으로 소비된다:
+        //   ① 사업소득지급내역(원천세 신고용) — 이 값을 지급총액으로 보고 세액을 다시 계산한다.
+        //   ② 예산/비용의 '실지출' — 회사가 실제로 부담한 비용은 강사 수령액 + 원천세 납부액 = 총액이다.
+        // 구 그룹웨어 이관분(29건)도 전부 총액으로 저장돼 있어 기준이 일치한다.
+        // 이전에는 순액(w.netAmount)을 저장해, 신고자료에서 원천징수가 두 번 적용되는 문제가 있었음
+        // (예: 900,000원 건 → 순액 870,300 저장 → 신고서에 총액 870,300·실지급 841,590으로 잘못 출력).
         const { data: cur } = await supabase.from('project_costs')
-          .select('payee_type, budget_amount, tax_mode, manual_income_tax, manual_resident_tax')
-          .eq('id', Number(id)).maybeSingle();
-        if (cur) {
-          const payeeTypeKo = cur.payee_type === 'instructor' ? '강사' : cur.payee_type === 'company' ? '업체' : '기타';
-          const w = calcWithholdingFor({
-            payeeType: payeeTypeKo,
-            amount: Number(patch.amount ?? cur.budget_amount ?? 0),
-            taxMode: patch.taxMode ?? cur.tax_mode ?? undefined,
-            manualIncomeTax: patch.manualIncomeTax ?? cur.manual_income_tax ?? undefined,
-            manualResidentTax: patch.manualResidentTax ?? cur.manual_resident_tax ?? undefined,
-          });
-          dbPatch.actual_payment_amount = w.netAmount;
-        }
+          .select('budget_amount').eq('id', Number(id)).maybeSingle();
+        if (cur) dbPatch.actual_payment_amount = Number(patch.amount ?? cur.budget_amount ?? 0);
       }
       // 지급취소(완료 → 요청/대상 되돌리기) 시 지급월과 실지급액을 함께 해제.
       // 실지급액을 남겨두면 '지급완료가 아닌데 실지급액이 있는' 불일치가 생겨
