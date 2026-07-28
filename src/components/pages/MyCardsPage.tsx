@@ -5,7 +5,7 @@ import { useToast } from '../common/toast';
 import { MoneyText } from '../common/MoneyText';
 import { YearMonthPicker } from '../common/YearMonthPicker';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard, Search } from 'lucide-react';
+import { CreditCard, Search, Trash2 } from 'lucide-react';
 
 // [수정검토실행 ⑲→ID매칭 전환] 카드사용내역 (개인): 로그인 사용자 본인의 카드 사용분만 표시.
 // 관리자 '카드사용 관리'와 동일하게 편집 가능 (본인이 사용한 내역이므로 편집 권한 부여).
@@ -78,6 +78,18 @@ export function MyCardsPage() {
     toast.success('카드 내역이 수정되었습니다');
   };
 
+  // 카드 내역 삭제 — 오입력 정정용. status='deleted' 소프트 삭제로,
+  // 목록·구글시트 동기화가 모두 status='active'만 대상이라 즉시 빠지고 필요 시 복구할 수 있다.
+  const deleteTx = async (t: Tx) => {
+    const label = `${formatDate(t.transaction_date)} · ${t.merchant_name} · ${Number(t.amount ?? 0).toLocaleString()}원`;
+    if (!confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`)) return;
+    const prev = txns;
+    setTxns((p) => p.filter((x) => x.id !== t.id)); // 낙관적 반영
+    const { error: err } = await cardSupabase.from('card_transactions').update({ status: 'deleted' }).eq('id', t.id);
+    if (err) { setTxns(prev); toast.error(`삭제 실패: ${err.message}`); return; }
+    toast.success('카드 내역이 삭제되었습니다');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -113,12 +125,13 @@ export function MyCardsPage() {
             <th className="px-3 py-2.5 font-medium">분류</th>
             <th className="px-3 py-2.5 font-medium">용도</th>
             <th className="px-3 py-2.5 text-right font-medium">금액</th>
+            <th className="px-3 py-2.5 font-medium">관리</th>
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-xs text-slate-400">불러오는 중…</td></tr>
+              <tr><td colSpan={7} className="px-5 py-10 text-center text-xs text-slate-400">불러오는 중…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-10 text-center text-xs text-slate-400">표시할 사용내역이 없습니다.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-10 text-center text-xs text-slate-400">표시할 사용내역이 없습니다.</td></tr>
             ) : filtered.slice(0, 200).map((t, i) => editId === t.id ? (
               <tr key={t.id} className="bg-blue-50/60">
                 <td className="px-5 py-2.5 text-xs text-slate-400">{i + 1}</td>
@@ -133,6 +146,7 @@ export function MyCardsPage() {
                     <button onClick={() => setEditId(null)} className="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-200">취소</button>
                   </span>
                 </td>
+                <td className="px-3 py-2.5" />
               </tr>
             ) : (
               <tr key={t.id} className="group">
@@ -142,6 +156,12 @@ export function MyCardsPage() {
                 <td className="px-3 py-2.5 text-xs text-slate-500">{t.category_name}</td>
                 <td className="cursor-pointer px-3 py-2.5 text-xs text-slate-400 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEdit(t)}>{t.purpose ?? '-'}</td>
                 <td className="px-3 py-2.5 text-right"><MoneyText value={Number(t.amount)} /></td>
+                <td className="px-3 py-2.5">
+                  <button onClick={() => deleteTx(t)} title="이 내역 삭제 (오입력 정정용)"
+                    className="rounded p-1 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
