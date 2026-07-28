@@ -518,7 +518,7 @@ class SupabaseDataSource implements DataSource {
         ? supabase.from('instructors').select('id, bank_name, account_number, resident_number, address').in('id', instructorIds)
         : Promise.resolve({ data: [] as any[] }),
       companyIds.length
-        ? supabase.from('companies').select('id, bank_name, account_number').in('id', companyIds)
+        ? supabase.from('companies').select('id, bank_name, account_number, tax_type').in('id', companyIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const instructorMap = new Map((instructors ?? []).map((i: any) => [i.id, i]));
@@ -556,6 +556,8 @@ class SupabaseDataSource implements DataSource {
         manualIncomeTax: Number(r.manual_income_tax ?? 0),
         manualResidentTax: Number(r.manual_resident_tax ?? 0),
         payeeAccountInfo: accountInfo,
+        vatMode: (r.vat_mode ?? null) as PaymentRequest['vatMode'],
+        payeeTaxType: r.payee_type === 'company' ? (acct as any)?.tax_type ?? undefined : undefined,
         payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
         bankName: acct?.bank_name ?? undefined,
         accountNumber: acct?.account_number ?? undefined,
@@ -615,6 +617,8 @@ class SupabaseDataSource implements DataSource {
     if (patch.payeeId !== undefined) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
     // 대상 재연결 시 표시 이름도 함께 갱신 (누락 시 계좌만 바뀌고 화면 이름은 그대로 남아 "반영 안 됨"처럼 보이던 버그)
     if (patch.payeeName !== undefined) dbPatch.payee_name = patch.payeeName;
+    // 업체 부가세 구분 — 지급요청 단계에서 확정한 값 저장
+    if (patch.vatMode !== undefined) dbPatch.vat_mode = patch.vatMode ?? null;
     // 지급유형(payee_type)도 반드시 함께 갱신한다.
     // payee_id는 instructors/companies 각각의 PK라 값이 겹친다(예: 74 = 강사 여지은 & 업체 와이드비스).
     // 유형 없이는 대상이 확정되지 않는데, 이 저장이 빠져 있어 강사→업체로 재연결하면

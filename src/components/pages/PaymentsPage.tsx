@@ -10,7 +10,8 @@ import { formatCompactKRW } from '../../utils/formatters';
 import { calcWithholdingFor } from '../../utils/withholding';
 import { Search, ShieldCheck, Undo2, AlertTriangle } from 'lucide-react';
 import { MonthPicker } from '../common/MonthPicker';
-import { downloadTransferSheet, downloadBusinessIncomeSheet } from '../../utils/paymentExport';
+import { downloadTransferSheet, downloadBusinessIncomeSheet, transferSummary } from '../../utils/paymentExport';
+import { calcVat, transferAmountFor, VAT_MODE_LABEL } from '../../utils/vat';
 import { EmptyState } from '../common/EmptyState';
 import { PageSkeleton } from '../common/Skeleton';
 import { PaymentDetailModal } from '../project/PaymentDetailModal';
@@ -19,7 +20,9 @@ import { activePayments } from '../../utils/filters';
 import type { PaymentRequest } from '../../types';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
-const netOf = (r: PaymentRequest) => calcWithholdingFor(r).netAmount;
+// 실지급(이체) 금액 — 강사는 원천징수 후 순액, 업체는 부가세 포함 총액.
+// 화면 합계와 자금이체양식이 같은 함수를 쓰도록 통일한다.
+const netOf = (r: PaymentRequest) => transferAmountFor(r);
 
 export function PaymentsPage() {
   const { paymentRequests, projects, loading, updatePaymentRequest } = useAppData();
@@ -259,7 +262,19 @@ export function PaymentsPage() {
               }}
               title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
               className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
-            <button onClick={() => downloadTransferSheet(pendingAll.filter((r) => r.status === '지급요청'), nowMonth)}
+            <button onClick={() => {
+              const targets = pendingAll.filter((r) => r.status === '지급요청');
+              const sum = transferSummary(targets);
+              if (sum.unconfirmed.length > 0) {
+                alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n` +
+                  sum.unconfirmed.slice(0, 8).map((r) => `· ${r.payeeName} ${r.amount.toLocaleString()}원`).join('\n') +
+                  (sum.unconfirmed.length > 8 ? `\n… 외 ${sum.unconfirmed.length - 8}건` : '') +
+                  `\n\n해당 건을 열어 부가세 구분을 확정한 뒤 다시 받아주세요.\n(확정 전에는 부가세가 빠진 금액으로 이체될 수 있습니다)`);
+                return;
+              }
+              if (!confirm(`자금이체 양식을 받습니다.\n\n건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n진행할까요?`)) return;
+              downloadTransferSheet(targets, nowMonth);
+            }}
               title="지급요청 상태 전체 자금이체 양식 다운로드"
               className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">자금이체</button>
           </div>
@@ -335,6 +350,7 @@ export function PaymentsPage() {
                 <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금 여부">입금</th>
                 <th className="px-2 py-2.5 text-center font-medium" title="세금계산서 발행 여부">세발</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
+                <th className="px-3 py-2.5 text-right font-medium">실지급</th>
                 <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
                 <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : tab === 'done' ? '지급월' : '교육일정'}</th>
@@ -380,6 +396,19 @@ export function PaymentsPage() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
+                      <td className="px-3 py-3 text-right">
+                        {r.payeeType === '업체' ? (() => {
+                          const vb = calcVat(r.amount, r.vatMode);
+                          return (
+                            <span className="inline-flex flex-col items-end">
+                              <MoneyText value={vb.total} />
+                              {vb.confirmed
+                                ? <span className="text-[10px] text-slate-400">{VAT_MODE_LABEL[vb.mode!]}{vb.vat > 0 ? ` · 부가세 ${vb.vat.toLocaleString()}` : ''}</span>
+                                : <span className="rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">부가세 미확인</span>}
+                            </span>
+                          );
+                        })() : <MoneyText value={netOf(r)} />}
+                      </td>
                       <td className="px-3 py-3 text-right text-xs">
                         {(() => { const w = calcWithholdingFor(r);
                           return w.totalTax > 0

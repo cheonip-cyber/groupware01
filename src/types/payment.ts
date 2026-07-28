@@ -22,6 +22,9 @@ export interface PaymentRequest {
   /** 프로젝트 교육일정(1차수 시작일, YYYY-MM-DD) — 지급대상 대시보드 판정 기준 */
   projectStartDate?: string;
   payeeType: '강사' | '업체' | '기타';
+  // 업체 지급건의 부가세 구분 (2026-07-28) — null이면 미확인. 지급요청 단계에서 확정한다.
+  vatMode?: 'exclusive' | 'inclusive' | 'exempt' | null;
+  payeeTaxType?: string;  // 연결된 업체의 과세유형(과세/면세) — 기본값 추천에 사용
   payeeName: string;
   amount: number;
   dueDate?: string;

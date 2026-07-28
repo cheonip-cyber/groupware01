@@ -4,6 +4,7 @@ import { useAppData } from '../../store/appData';
 import { dataSource } from '../../services/dataSource';
 import { MoneyText } from '../common/MoneyText';
 import { calcWithholdingFor, maskResidentNumber } from '../../utils/withholding';
+import { calcVat, defaultVatMode, VAT_MODE_LABEL, type VatMode } from '../../utils/vat';
 import { useEscClose } from '../../hooks/useEscClose';
 import { MonthPicker } from '../common/MonthPicker';
 import { useToast } from '../common/toast';
@@ -55,6 +56,11 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   const [account, setAccount] = useState('');
   const [editAcct, setEditAcct] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 업체 지급건의 부가세 구분 — 미확인이면 업체 과세유형(과세/면세)으로 기본값 추천.
+  // 예산/비용에는 공급가액을 입력하는 관행이라, 확정하지 않으면 부가세만큼 적게 이체된다.
+  const [vatMode, setVatMode] = useState<VatMode>(
+    (r.vatMode as VatMode | null) ?? defaultVatMode(r.payeeTaxType),
+  );
   const [justRequested, setJustRequested] = useState(false);
 
   const w = calcWithholdingFor({ payeeType: r.payeeType, amount: r.amount, taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident });
@@ -98,7 +104,18 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
       if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
       if (!confirmed) { alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.'); return; }
     }
-    onUpdateRequest(r.id, buildPatch({ status: '지급요청', infoConfirmed: true }));
+    const vb = isVendor ? calcVat(r.amount, vatMode) : null;
+    if (vb && !confirm(
+      `지급요청 금액을 확인해 주세요.\n\n` +
+      `구분: ${VAT_MODE_LABEL[vatMode]}\n` +
+      `공급가액: ${vb.supply.toLocaleString()}원\n` +
+      `부가세: ${vb.vat.toLocaleString()}원\n` +
+      `─────────────\n` +
+      `실제 이체액: ${vb.total.toLocaleString()}원\n\n이대로 요청할까요?`)) return;
+    onUpdateRequest(r.id, buildPatch({
+      status: '지급요청', infoConfirmed: true,
+      ...(isVendor ? { vatMode } : {}),
+    }));
     setJustRequested(true);
     toast.success('지급요청 완료');
     setTimeout(onClose, 600);
@@ -155,6 +172,33 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           </Row>
           {effectiveIsPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
           {!effectiveIsPerson && isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
+          {isVendor && (() => {
+            const vb = calcVat(r.amount, vatMode);
+            return (
+              <>
+                <Row label="부가세 구분">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {(['exclusive', 'inclusive', 'exempt'] as VatMode[]).map((m) => (
+                      <button key={m} onClick={() => setVatMode(m)}
+                        className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+                          vatMode === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                        {VAT_MODE_LABEL[m]}
+                      </button>
+                    ))}
+                    {r.payeeTaxType && <span className="text-[10px] text-slate-400">업체 등록: {r.payeeTaxType}</span>}
+                    {!r.vatMode && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">미확인</span>}
+                  </span>
+                </Row>
+                <Row label="지급 금액">
+                  <span className="text-xs text-slate-500">
+                    공급가액 {vb.supply.toLocaleString()}원 + 부가세 {vb.vat.toLocaleString()}원 =
+                    <b className="ml-1 text-sm text-slate-800">{vb.total.toLocaleString()}원</b>
+                    <span className="ml-1 text-[10px] text-slate-400">(실제 이체액)</span>
+                  </span>
+                </Row>
+              </>
+            );
+          })()}
           {r.memo && <Row label="비고">{r.memo}</Row>}
         </div>
 

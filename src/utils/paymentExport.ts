@@ -3,6 +3,7 @@
 // 판관비 내역·통합 이체(프로젝트 지급 + 판관비) 양식을 추가했다. 민감정보 포함이므로 관리자 전용 화면에서만 호출할 것.
 import type { PaymentRequest } from '../types';
 import { calcWithholdingFor } from './withholding';
+import { transferAmountFor, needsVatConfirm, calcVat } from './vat';
 
 const esc = (v: unknown) => {
   const s = v === null || v === undefined ? '' : String(v);
@@ -38,10 +39,12 @@ const bankCode = (name?: string) => {
 export function downloadTransferSheet(requests: PaymentRequest[], label: string) {
   const headers = ['입금은행', '입금계좌번호', '입금액(원)', '출금통장표시', '입금통장표시', 'CMS코드'];
   const mark = (r: PaymentRequest) => (r.projectName || r.payeeName).slice(0, 20); // 통장표시 최대 20자
-  const rows = requests.map((r) => {
-    const w = calcWithholdingFor(r);
-    return [bankCode(r.bankName), r.accountNumber ?? '', w.netAmount, mark(r), mark(r), ''];
-  });
+  // 입금액은 transferAmountFor 하나로 통일한다 — 강사는 원천징수 후 순액, 업체는 부가세 포함 총액.
+  // 이전에는 업체도 원천징수 함수를 그대로 통과시켜 입력액(공급가액)이 그대로 나갔고,
+  // 부가세만큼 적게 이체되는 문제가 있었다.
+  const rows = requests.map((r) => [
+    bankCode(r.bankName), r.accountNumber ?? '', transferAmountFor(r), mark(r), mark(r), '',
+  ]);
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }
 
@@ -78,13 +81,30 @@ export function downloadSgaSheet(rows: SgaRow[], label: string) {
 /** 통합 이체 내역: 지급요청(프로젝트) + 미지급 판관비를 은행 이체 계획용으로 통합 (관리자 전용) */
 export function downloadCombinedTransferSheet(requests: PaymentRequest[], sga: SgaRow[], label: string) {
   const headers = ['구분', '지급처', '은행명', '계좌번호', '실지급액', '내용/프로젝트'];
-  const projectRows: (string | number)[][] = requests.map((r) => {
-    const net = calcWithholdingFor(r).netAmount;
-    return ['프로젝트 지급', r.payeeName, r.bankName ?? '', r.accountNumber ?? '', net, r.projectName ?? ''];
-  });
+  // 실지급액은 transferAmountFor로 통일 (강사=원천징수 후, 업체=부가세 포함 총액)
+  const projectRows: (string | number)[][] = requests.map((r) => [
+    '프로젝트 지급', r.payeeName, r.bankName ?? '', r.accountNumber ?? '', transferAmountFor(r), r.projectName ?? '',
+  ]);
   const sgaRows: (string | number)[][] = sga.map((r) => [
     '판관비', r.category, '', '', r.amount, r.description ?? '',
   ]);
   const total = [...projectRows, ...sgaRows].reduce((s, row) => s + Number(row[4] || 0), 0);
   downloadCsv(`통합이체내역_${label}.csv`, headers, [...projectRows, ...sgaRows, ['합계', '', '', '', total, '']]);
+}
+
+
+/** 이체 전 검증 요약 — 다운로드 직전 사용자에게 보여줄 합계와 미확인 건수 */
+export function transferSummary(requests: PaymentRequest[]) {
+  const unconfirmed = requests.filter(needsVatConfirm);
+  let supply = 0, vat = 0, total = 0;
+  for (const r of requests) {
+    if (r.payeeType === '업체') {
+      const b = calcVat(r.amount, r.vatMode);
+      supply += b.supply; vat += b.vat; total += b.total;
+    } else {
+      const t = transferAmountFor(r);
+      supply += t; total += t;
+    }
+  }
+  return { count: requests.length, supply, vat, total, unconfirmed };
 }
