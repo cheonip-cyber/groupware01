@@ -14,6 +14,7 @@ import { PageSkeleton } from '../common/Skeleton';
 import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
 import { BankStatementImport } from './BankStatementImport';
+import { useEscClose } from '../../hooks/useEscClose';
 
 interface ManualExpense {
   id: number;
@@ -53,6 +54,7 @@ export function AdminSgaPage() {
   const [month, setMonth] = useState('');          // YYYY-MM ('' = 전체)
   const [categoryFilter, setCategoryFilter] = useState('');
   const [form, setForm] = useState<FormState | null>(null);
+  useEscClose(!!form, () => setForm(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [saving, setSaving] = useState(false);
 
   const load = async () => {

@@ -5,6 +5,7 @@ import { useToast } from '../common/toast';
 import { MoneyText } from '../common/MoneyText';
 import { UploadCloud, X, Check, Loader2, ChevronDown } from 'lucide-react';
 import { formatDescription, itemMonthKey, type FixedCostRule, type MonthBasis } from '../../utils/fixedCost';
+import { useEscClose } from '../../hooks/useEscClose';
 
 // 고정비 통합 정의표(recurring_checklist_items) 기반 템플릿 (2026-07-27)
 // — 고정비 체크리스트와 같은 정의를 공유해, 자동등록 결과가 체크리스트 상태에 그대로 반영되게 한다.
@@ -122,6 +123,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
   const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  useEscClose(!!candidates, () => setCandidates(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showProjectGroup, setShowProjectGroup] = useState(false);
   const [fixedItems, setFixedItems] = useState<FixedCostItem[]>([]);

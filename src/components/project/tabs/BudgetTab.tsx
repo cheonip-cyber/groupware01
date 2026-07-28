@@ -7,6 +7,7 @@ import { MoneyText } from '../../common/MoneyText';
 import { EmptyState } from '../../common/EmptyState';
 import { Plus, Trash2, Info, X, Pencil } from 'lucide-react';
 import { SavingLabel } from '../../common/SavingLabel';
+import { useEscClose } from '../../../hooks/useEscClose';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
@@ -24,6 +25,7 @@ function PayeePicker({
 }) {
   const [query, setQuery] = useState('');
   const [showDetail, setShowDetail] = useState(false);
+  useEscClose(showDetail, () => setShowDetail(false)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -362,6 +364,7 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
   onClose: () => void;
   onSave: (patch: { payeeName: string; budgetAmount: number; remarks?: string; payeeType: 'instructor' | 'company' | 'etc'; payeeId?: string | null; isCardPayment: boolean; category?: string }) => void;
 }) {
+  useEscClose(true, onClose); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const initType: 'instructor' | 'company' | 'etc' = row.payeeType === '강사' ? 'instructor' : row.payeeType === '업체' ? 'company' : 'etc';
   const [payeeType, setPayeeType] = useState<'instructor' | 'company' | 'etc'>(initType);
   const [payeeId, setPayeeId] = useState(row.payeeId ?? '');

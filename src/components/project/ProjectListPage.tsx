@@ -10,6 +10,7 @@ import { PageSkeleton } from '../common/Skeleton';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../common/toast';
 import { Plus, X } from 'lucide-react';
+import { useEscClose } from '../../hooks/useEscClose';
 
 const PAGE_SIZE = 50;
 
@@ -26,6 +27,7 @@ export function ProjectListPage() {
   }));
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  useEscClose(createOpen, () => setCreateOpen(false)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
