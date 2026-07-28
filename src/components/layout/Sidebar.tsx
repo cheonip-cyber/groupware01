@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Receipt, Wallet, CreditCard,
-  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink,
+  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink, Zap,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -22,6 +22,7 @@ const assetItems: { to?: string; popup?: string; label: string; icon: typeof Cre
   { to: '/companies', label: '업체관리', icon: Building2 },
   { to: '/my-cards', label: '카드사용내역', icon: CreditCard },
   { popup: 'https://cardsamsotta.netlify.app/', label: '카드사용 등록', icon: ExternalLink },
+  { to: '/hub', label: '업무자동화', icon: Zap },
 ];
 
 // 분석·설정
