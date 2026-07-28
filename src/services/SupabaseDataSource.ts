@@ -302,6 +302,29 @@ class SupabaseDataSource implements DataSource {
     return String(data.id);
   }
 
+  /**
+   * update 결과 검증 (2026-07-28)
+   * supabase의 .update()는 RLS/조건 불일치로 **0건이 수정돼도 error가 null**이다.
+   * 그래서 화면은 성공으로 보이는데 DB는 그대로인 상황이 생기고, 나중에 "처리했는데 되살아났다"로 나타난다.
+   * (실제로 병합 처리한 프로젝트가 목록에 그대로 남아 있던 사례가 있었음 — updated_at이 생성일과 동일)
+   * 모든 변경은 이 함수를 통해 '실제 반영 건수'를 확인한다.
+   */
+  private static async updateChecked(
+    table: string, patch: Record<string, unknown>,
+    match: { column: string; value: any; op?: 'eq' | 'in' },
+    what: string,
+  ): Promise<number> {
+    const base = supabase.from(table).update(patch);
+    const q = match.op === 'in' ? base.in(match.column, match.value) : base.eq(match.column, match.value);
+    const { data, error } = await q.select('id');
+    if (error) throw error;
+    const n = (data ?? []).length;
+    if (n === 0) {
+      throw new Error(`${what}: 변경이 반영되지 않았습니다(0건). 권한이 없거나 대상이 존재하지 않습니다.`);
+    }
+    return n;
+  }
+
   async updateProject(id: string, patch: Partial<Project>): Promise<Project | undefined> {
     const dbPatch: Record<string, unknown> = {};
 
@@ -345,8 +368,7 @@ class SupabaseDataSource implements DataSource {
     }
 
     dbPatch.updated_at = new Date().toISOString();
-    const { error } = await supabase.from('projects').update(dbPatch).eq('id', Number(id));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('projects', dbPatch, { column: 'id', value: Number(id) }, '프로젝트 수정');
     return this.getProject(id);
   }
 
@@ -638,8 +660,7 @@ class SupabaseDataSource implements DataSource {
     if ('vendorTaxInvoiceDate' in patch) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate ?? null;
 
     if (Object.keys(dbPatch).length > 0) {
-      const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(id));
-      if (error) throw error;
+      await SupabaseDataSource.updateChecked('project_costs', dbPatch, { column: 'id', value: Number(id) }, '지급 정보 수정');
     }
     const { data: r, error: fetchErr } = await supabase
       .from('project_costs').select('*, projects(project_name, session_1_date, client_payment_received, is_tax_invoice_issued, clients(name))').eq('id', Number(id)).maybeSingle();
@@ -711,8 +732,7 @@ class SupabaseDataSource implements DataSource {
       dbPatch.is_payable = !card && (type === 'instructor' || type === 'company');
     }
     if (patch.category !== undefined) dbPatch.category = patch.category;
-    const { error } = await supabase.from('project_costs').update(dbPatch).eq('id', Number(costId));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('project_costs', dbPatch, { column: 'id', value: Number(costId) }, '예산 항목 수정');
   }
 
   async addProjectCost(projectId: string, input: {
@@ -919,24 +939,21 @@ class SupabaseDataSource implements DataSource {
     const { data: grandChildren } = await supabase.from('projects').select('id').in('parent_id', numIds).limit(1);
     if (grandChildren && grandChildren.length > 0) throw new Error('자체 구성(자식)을 가진 프로젝트는 다른 그룹에 묶을 수 없습니다.');
 
-    const { error: childErr } = await supabase.from('projects')
-      .update({ parent_id: Number(masterId), group_type: groupType, is_master: false })
-      .in('id', childIds.map(Number));
-    if (childErr) throw childErr;
-    const { error: masterErr } = await supabase.from('projects')
-      .update({ is_master: true, group_type: groupType })
-      .eq('id', Number(masterId));
-    if (masterErr) throw masterErr;
+    await SupabaseDataSource.updateChecked('projects',
+      { parent_id: Number(masterId), group_type: groupType, is_master: false },
+      { column: 'id', value: childIds.map(Number), op: 'in' }, '그룹 구성원 연결');
+    await SupabaseDataSource.updateChecked('projects',
+      { is_master: true, group_type: groupType },
+      { column: 'id', value: Number(masterId) }, '그룹 마스터 지정');
   }
 
   /** 그룹에서 자식 해제 — 마지막 자식이면 마스터의 그룹 유형도 정리한다 (#6) */
   async detachFromGroup(childId: string): Promise<void> {
     const { data: child } = await supabase.from('projects').select('id, parent_id').eq('id', Number(childId)).maybeSingle();
     const masterId = child?.parent_id ?? null;
-    const { error } = await supabase.from('projects')
-      .update({ parent_id: null, group_type: null, distribution_ratio: null })
-      .eq('id', Number(childId));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('projects',
+      { parent_id: null, group_type: null, distribution_ratio: null },
+      { column: 'id', value: Number(childId) }, '그룹 해제');
     if (masterId != null) {
       const { data: rest } = await supabase.from('projects').select('id').eq('parent_id', masterId).limit(1);
       if (!rest || rest.length === 0) {
