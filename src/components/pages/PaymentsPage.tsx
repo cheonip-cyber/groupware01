@@ -18,6 +18,7 @@ import { PaymentDetailModal } from '../project/PaymentDetailModal';
 import { DistCompleteCell } from '../project/GroupSection';
 import { activePayments } from '../../utils/filters';
 import type { PaymentRequest } from '../../types';
+import { useDialog } from '../common/dialog';
 
 // 실지급액(이체 기준): 강사(개인)는 3.3% 원천징수 공제 후
 // 실지급(이체) 금액 — 강사는 원천징수 후 순액, 업체는 부가세 포함 총액.
@@ -26,6 +27,7 @@ const netOf = (r: PaymentRequest) => transferAmountFor(r);
 
 export function PaymentsPage() {
   const { paymentRequests, projects, loading, updatePaymentRequest } = useAppData();
+  const dialog = useDialog();
   const nowMonth = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
@@ -191,7 +193,7 @@ export function PaymentsPage() {
 
   const runBulk = async (fn: (r: PaymentRequest) => Promise<unknown>, confirmMsg: string) => {
     if (selectedRows.length === 0) return;
-    if (!confirm(confirmMsg)) return;
+    if (!await dialog.confirm(confirmMsg)) return;
     setBusy(true);
     try { for (const r of selectedRows) await fn(r); }
     finally { setBusy(false); setSelected(new Set()); }
@@ -199,8 +201,8 @@ export function PaymentsPage() {
 
   const bulkComplete = async () => {
     const targets = selectedRows.filter((r) => r.status === '지급요청');
-    if (targets.length === 0) { alert('지급완료 처리할 수 있는 건(지급요청 상태)이 선택되지 않았습니다.'); return; }
-    if (!confirm(`지급요청 상태 ${targets.length}건을 지급완료 처리할까요?\n지급월: ${bulkMonth}`)) return;
+    if (targets.length === 0) { await dialog.alert('지급완료 처리할 수 있는 건(지급요청 상태)이 선택되지 않았습니다.'); return; }
+    if (!await dialog.confirm(`지급요청 상태 ${targets.length}건을 지급완료 처리할까요?\n지급월: ${bulkMonth}`)) return;
     setBusy(true);
     try { for (const r of targets) await updatePaymentRequest(r.id, { status: '지급완료', paidMonth: bulkMonth }); }
     finally { setBusy(false); setSelected(new Set()); }
@@ -260,24 +262,24 @@ export function PaymentsPage() {
             {tabBtn('target', '지급대상', targetAll.length)}
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => {
-                const pw = prompt('주민등록번호가 포함된 자료입니다. 다운로드 비밀번호를 입력하세요.');
-                if (pw !== '0511') { if (pw !== null) alert('비밀번호가 올바르지 않습니다.'); return; }
+            <button onClick={async () => {
+                const pw = await dialog.prompt('주민등록번호가 포함된 자료입니다.\n다운로드 비밀번호를 입력하세요.', { title: '보안 확인', tone: 'warning', mask: true, placeholder: '비밀번호' });
+                if (pw !== '0511') { if (pw !== null) await dialog.alert('비밀번호가 올바르지 않습니다.'); return; }
                 downloadBusinessIncomeSheet(doneAll.filter((r) => r.paidMonth === nowMonth), nowMonth);
               }}
               title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
               className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
-            <button onClick={() => {
+            <button onClick={async () => {
               const targets = pendingAll.filter((r) => r.status === '지급요청');
               const sum = transferSummary(targets);
               if (sum.unconfirmed.length > 0) {
-                alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n` +
+                await dialog.alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n` +
                   sum.unconfirmed.slice(0, 8).map((r) => `· ${r.payeeName} ${r.amount.toLocaleString()}원`).join('\n') +
                   (sum.unconfirmed.length > 8 ? `\n… 외 ${sum.unconfirmed.length - 8}건` : '') +
                   `\n\n해당 건을 열어 부가세 구분을 확정한 뒤 다시 받아주세요.\n(확정 전에는 부가세가 빠진 금액으로 이체될 수 있습니다)`);
                 return;
               }
-              if (!confirm(`자금이체 양식을 받습니다.\n\n건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n진행할까요?`)) return;
+              if (!await dialog.confirm(`자금이체 양식을 받습니다.\n\n건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n진행할까요?`)) return;
               downloadTransferSheet(targets, nowMonth);
             }}
               title="지급요청 상태 전체 자금이체 양식 다운로드"
@@ -438,7 +440,7 @@ export function PaymentsPage() {
                             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료</button>
                         )}
                         {r.status === '지급완료' && (
-                          <button onClick={() => { if (confirm(`'${r.payeeName}' 님의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`)) updatePaymentRequest(r.id, { status: '지급요청' }); }}
+                          <button onClick={async () => { if (await dialog.confirm(`'${r.payeeName}' 님의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`)) updatePaymentRequest(r.id, { status: '지급요청' }); }}
                             title="지급 취소 (요청 단계로 되돌리기)"
                             className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 hover:bg-amber-50 hover:text-amber-600">
                             <Undo2 className="h-3.5 w-3.5" /> 취소

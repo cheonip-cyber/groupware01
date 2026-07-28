@@ -15,6 +15,7 @@ import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
 import { BankStatementImport } from './BankStatementImport';
 import { useEscClose } from '../../hooks/useEscClose';
+import { useDialog } from '../common/dialog';
 
 interface ManualExpense {
   id: number;
@@ -46,6 +47,7 @@ const emptyForm = (): FormState => ({
 export function AdminSgaPage() {
   const { paymentRequests, projects } = useAppData();
   const toast = useToast();
+  const dialog = useDialog();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ManualExpense[]>([]);
@@ -118,7 +120,7 @@ export function AdminSgaPage() {
   };
 
   const remove = async (r: ManualExpense) => {
-    if (!confirm(`'${r.category} · ${r.description ?? ''}' ${Number(r.amount).toLocaleString('ko-KR')}원 항목을 삭제할까요?`)) return;
+    if (!await dialog.confirm(`'${r.category} · ${r.description ?? ''}' ${Number(r.amount).toLocaleString('ko-KR')}원 항목을 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) return;
     const { error: err } = await cardSupabase.from('manual_expenses').delete().eq('id', r.id);
     if (err) { toast.error(`삭제 실패: ${err.message}`); return; }
     toast.success('삭제되었습니다');

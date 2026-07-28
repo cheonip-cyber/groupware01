@@ -12,6 +12,7 @@ import type { Project } from '../../types';
 import { activeProjects } from '../../utils/filters';
 import { FixedCostChecklist } from './FixedCostChecklist';
 import { CashFlowThisMonth } from './CashFlowThisMonth';
+import { useDialog } from '../common/dialog';
 
 // 관리자 전용 경영 현황: 회사 총매출 · 총사용비용(프로젝트+판관비+카드 일반) · 최종 경영이익
 // 프로젝트 이익률(대시보드, 직원 공용)과 별도로, 판관비·카드까지 포함한 회사 단위 손익을 본다
@@ -22,6 +23,7 @@ interface CardTx { amount: number; transaction_date: string; project_linked?: bo
 
 export function AdminOverviewPage() {
   const { projects, paymentRequests, loading, globalYear } = useAppData();
+  const dialog = useDialog();
   const [sga, setSga] = useState<SgaRow[]>([]);
   const [cardTxns, setCardTxns] = useState<CardTx[]>([]);
   const [eduCategoryId, setEduCategoryId] = useState<number | null>(null);
@@ -95,16 +97,16 @@ export function AdminOverviewPage() {
 
   // 이체 자료 다운로드 전 공통 검증 — 부가세 미확인 업체 건이 섞이면 그만큼 적게 이체된다.
   // 지급관리 화면과 같은 규칙을 적용한다(자료를 받는 창구가 두 곳이라 한쪽만 막으면 의미가 없음).
-  const guardTransfer = (targets: typeof pendingRequests, run: () => void) => {
+  const guardTransfer = async (targets: typeof pendingRequests, run: () => void) => {
     const sum = transferSummary(targets);
     if (sum.unconfirmed.length > 0) {
-      alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n`
+      await dialog.alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n`
         + sum.unconfirmed.slice(0, 8).map((r) => `· ${r.payeeName} ${r.amount.toLocaleString()}원`).join('\n')
         + (sum.unconfirmed.length > 8 ? `\n… 외 ${sum.unconfirmed.length - 8}건` : '')
         + `\n\n지급관리에서 부가세 구분을 확정한 뒤 다시 받아주세요.`);
       return;
     }
-    if (!confirm(`건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n다운로드할까요?`)) return;
+    if (!await dialog.confirm(`건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n다운로드할까요?`)) return;
     run();
   };
 
@@ -170,10 +172,10 @@ export function AdminOverviewPage() {
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <Download className="h-4 w-4" /> 자금이체양식
             </button>
-            <button onClick={() => {
+            <button onClick={async () => {
               // 주민번호 포함 자료 — 구 그룹웨어 확정 요청: 다운로드 전 비밀번호 확인
-              const pw = prompt('주민등록번호가 포함된 자료입니다. 다운로드 비밀번호를 입력하세요.');
-              if (pw !== '0511') { if (pw !== null) alert('비밀번호가 올바르지 않습니다.'); return; }
+              const pw = await dialog.prompt('주민등록번호가 포함된 자료입니다.\n다운로드 비밀번호를 입력하세요.', { title: '보안 확인', tone: 'warning', mask: true, placeholder: '비밀번호' });
+              if (pw !== '0511') { if (pw !== null) await dialog.alert('비밀번호가 올바르지 않습니다.'); return; }
               downloadBusinessIncomeSheet(paymentRequests.filter((r) => r.status === '지급완료' && r.paidMonth === dlMonth), dlMonth);
             }}
               className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">

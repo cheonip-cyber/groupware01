@@ -15,12 +15,14 @@ import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle } from '../../utils/statusConfig';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
+import { useDialog } from '../common/dialog';
 
 // 순서: 요청사항 4 — "정산/결산 컬럼 이후 순서로 지급 배치"
 const TABS = ['개요', '운영', '매출', '예산/비용', '정산/결산', '지급', '히스토리'] as const;
 type Tab = typeof TABS[number];
 
 export function ProjectDetail() {
+  const dialog = useDialog();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
@@ -151,7 +153,7 @@ export function ProjectDetail() {
                 onRecover={() => recoverNotionLink(project.id)}
                 onDelete={async () => {
                   try { await deleteProject(project.id); navigate('/projects'); }
-                  catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+                  catch (e) { await dialog.alert(e instanceof Error ? e.message : String(e)); }
                 }} />
             </div>
           )}

@@ -5,6 +5,7 @@ import { MoneyText } from '../common/MoneyText';
 import { useToast } from '../common/toast';
 import { ClipboardList } from 'lucide-react';
 import { formatDescription, type FixedCostRule, type MonthBasis } from '../../utils/fixedCost';
+import { useDialog } from '../common/dialog';
 
 // 고정비 누락 방지 체크리스트 (2026-07-09 설계, 2026-07-09 다중항목/경고단계 개편)
 // — "사람이 기억"이 아니라 "시스템이 먼저 확인"하는 구조.
@@ -74,6 +75,7 @@ const STAGE_STYLE: Record<Exclude<DueStage, null>, { label: string; cls: string 
 
 export function FixedCostChecklist() {
   const toast = useToast();
+  const dialog = useDialog();
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [thisMonth, setThisMonth] = useState<ExpenseRow[]>([]);
   const [lastMonth, setLastMonth] = useState<ExpenseRow[]>([]);
@@ -178,7 +180,7 @@ export function FixedCostChecklist() {
   const uncheck = async (row: typeof rows[number]) => {
     const ids = row.perSub.flatMap((s) => s.curMatches.map((m) => m.id));
     if (ids.length === 0) return;
-    if (!confirm(`'${row.item.label}(${cur.label})' 등록을 취소할까요? (${ids.length}건 삭제)`)) return;
+    if (!await dialog.confirm(`'${row.item.label}(${cur.label})' 등록을 취소할까요? (${ids.length}건 삭제)`, { tone: 'danger', confirmText: '삭제' })) return;
     setBusy(true);
     try {
       const { error } = await cardSupabase.from('manual_expenses').delete().in('id', ids);

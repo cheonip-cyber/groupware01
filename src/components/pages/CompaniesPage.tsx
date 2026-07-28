@@ -6,6 +6,7 @@ import { EmptyState } from '../common/EmptyState';
 import { Building2, Plus, Trash2, Pencil, Check, X, Search } from 'lucide-react';
 import type { Company } from '../../types';
 import { SavingLabel } from '../common/SavingLabel';
+import { useDialog } from '../common/dialog';
 
 type CompanyForm = {
   companyName: string;
@@ -31,6 +32,7 @@ const taxTypeBadge: Record<string, string> = {
 
 export function CompaniesPage() {
   const toast = useToast();
+  const dialog = useDialog();
   const { companies, loading, addCompany, updateCompany, deleteCompany } = useAppData();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,7 +70,7 @@ export function CompaniesPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`'${name}' 업체를 삭제할까요?`)) return;
+    if (!await dialog.confirm(`'${name}' 업체를 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) return;
     await deleteCompany(id);
   };
 

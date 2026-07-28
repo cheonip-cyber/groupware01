@@ -7,6 +7,7 @@ import { YearMonthPicker } from '../common/YearMonthPicker';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search, Trash2 } from 'lucide-react';
+import { useDialog } from '../common/dialog';
 
 interface CardTxn {
   id: string;
@@ -42,6 +43,7 @@ const DUPLICATE_RISK_KEYWORD = '플젝중복';
 
 export function AdminCardPage() {
   const toast = useToast();
+  const dialog = useDialog();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardTxns, setCardTxns] = useState<CardTxn[]>([]);
@@ -152,7 +154,7 @@ export function AdminCardPage() {
   // 삭제 즉시 화면·시트에서 함께 빠지고, 잘못 지운 경우 DB에서 되살릴 수 있다.
   const deleteTx = async (t: any) => {
     const label = `${formatDate(t.transaction_date)} · ${t.merchant_name} · ${Number(t.amount ?? 0).toLocaleString()}원`;
-    if (!confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`)) return;
+    if (!await dialog.confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`, { tone: 'danger', confirmText: '삭제' })) return;
     const prev = cardTxns;
     setCardTxns((list) => list.filter((x) => x.id !== t.id)); // 낙관적 반영
     const { error: err } = await cardSupabase.from('card_transactions').update({ status: 'deleted' }).eq('id', t.id);

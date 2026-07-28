@@ -6,6 +6,7 @@ import { MoneyText } from '../common/MoneyText';
 import { UploadCloud, X, Check, Loader2, ChevronDown } from 'lucide-react';
 import { formatDescription, itemMonthKey, type FixedCostRule, type MonthBasis } from '../../utils/fixedCost';
 import { useEscClose } from '../../hooks/useEscClose';
+import { useDialog } from '../common/dialog';
 
 // 고정비 통합 정의표(recurring_checklist_items) 기반 템플릿 (2026-07-27)
 // — 고정비 체크리스트와 같은 정의를 공유해, 자동등록 결과가 체크리스트 상태에 그대로 반영되게 한다.
@@ -120,6 +121,7 @@ function Row({ c, selected, onToggle, onUpdate, items }: {
 
 export function BankStatementImport({ onImported }: { onImported: () => void }) {
   const toast = useToast();
+  const dialog = useDialog();
   const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
@@ -294,7 +296,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
     if (dups.length > 0) {
       const preview = dups.slice(0, 5).map((c) => `· ${c.transaction_date} ${c.description || c.rawDesc}`).join('\n');
       const more = dups.length > 5 ? `\n… 외 ${dups.length - 5}건` : '';
-      if (!confirm(`이미 등록된 것으로 보이는 ${dups.length}건이 선택되어 있습니다.\n\n${preview}${more}\n\n그래도 추가할까요?`)) return;
+      if (!await dialog.confirm(`이미 등록된 것으로 보이는 ${dups.length}건이 선택되어 있습니다.\n\n${preview}${more}\n\n그래도 추가할까요?`)) return;
     }
     setSaving(true);
     try {

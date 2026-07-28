@@ -4,6 +4,7 @@ import { dataSource } from '../../services/dataSource';
 import type { NotionFieldMapping, NotionFieldDataType, NotionSyncDirection, Client } from '../../types';
 import { Settings, RefreshCw, Plus, Trash2, TimerReset } from 'lucide-react';
 import { useToast } from '../common/toast';
+import { useDialog } from '../common/dialog';
 
 function ClientPaymentLagSection() {
   const toast = useToast();
@@ -91,6 +92,7 @@ const DIRECTIONS: { value: NotionSyncDirection; label: string }[] = [
 ];
 
 function NotionMappingSection() {
+  const dialog = useDialog();
   const [mappings, setMappings] = useState<NotionFieldMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -117,7 +119,7 @@ function NotionMappingSection() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('이 매핑을 삭제할까요? (동기화 대상에서 완전히 제외됩니다)')) return;
+    if (!await dialog.confirm('이 매핑을 삭제할까요? (동기화 대상에서 완전히 제외됩니다)', { tone: 'danger', confirmText: '삭제' })) return;
     await dataSource.deleteNotionFieldMapping(id);
     await load();
   };

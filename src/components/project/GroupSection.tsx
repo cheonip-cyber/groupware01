@@ -7,6 +7,7 @@ import { formatDate } from '../../utils/formatters';
 import { GROUP_TYPE_LABEL } from './ProjectTable';
 import { Layers, Plus, Search, Unlink, CornerDownRight, Pencil, Trash2, Check, X, Receipt, Wallet } from 'lucide-react';
 import { useToast } from '../common/toast';
+import { useDialog } from '../common/dialog';
 
 // 계열사 1행의 세금계산서/입금 완료 토글 — 체크와 동시에 날짜를 받는다 (상세화면·목록 펼침뷰 공용)
 export function DistCompleteCell({ done, dateValue, onComplete, onUndo, label }:
@@ -38,6 +39,7 @@ export function DistCompleteCell({ done, dateValue, onComplete, onUndo, label }:
 // 세금계산서 발행·고객사 입금 두 가지만 계열사별로 관리한다. 전원 완료 시 DB 트리거가 마스터·노션에 자동 반영.
 function DistributionSection({ project }: { project: Project }) {
   const toast = useToast();
+  const dialog = useDialog();
   const [items, setItems] = useState<RevenueDistribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -105,7 +107,7 @@ function DistributionSection({ project }: { project: Project }) {
                 </td>
                 <td className="py-2 text-right">
                   <button disabled={busy} title="삭제"
-                    onClick={() => { if (confirm(`'${d.clientName}' 항목을 삭제할까요?`)) run(() => dataSource.deleteDistribution(d.id)); }}
+                    onClick={async () => { if (await dialog.confirm(`'${d.clientName}' 항목을 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) run(() => dataSource.deleteDistribution(d.id)); }}
                     className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                 </td>
               </tr>
@@ -145,6 +147,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
   allProjects: Project[];
   onChanged: () => Promise<void>;
 }) {
+  const dialog = useDialog();
   const children = useMemo(
     () => allProjects.filter((p) => p.parentId === project.id),
     [allProjects, project.id],
@@ -193,7 +196,7 @@ export function GroupSection({ project, allProjects, onChanged }: {
               {GROUP_TYPE_LABEL[project.groupType] ?? project.groupType}
             </span>
           )}
-          <button disabled={busy} onClick={() => { if (confirm('이 프로젝트를 그룹에서 해제할까요?')) run(() => dataSource.detachFromGroup(project.id)); }}
+          <button disabled={busy} onClick={async () => { if (await dialog.confirm('이 프로젝트를 그룹에서 해제할까요?')) run(() => dataSource.detachFromGroup(project.id)); }}
             className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-500 hover:text-red-500">
             <Unlink className="h-3 w-3" /> 그룹 해제
           </button>
@@ -282,11 +285,11 @@ export function GroupSection({ project, allProjects, onChanged }: {
                       className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-indigo-600"><Pencil className="h-3.5 w-3.5" /></button>
                   )}
                   <button disabled={busy} title="그룹에서 해제"
-                    onClick={() => { if (confirm(`'${c.projectName}'을(를) 그룹에서 해제할까요? (프로젝트는 목록에 남습니다)`)) run(() => dataSource.detachFromGroup(c.id)); }}
+                    onClick={async () => { if (await dialog.confirm(`'${c.projectName}'을(를) 그룹에서 해제할까요? (프로젝트는 목록에 남습니다)`)) run(() => dataSource.detachFromGroup(c.id)); }}
                     className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-amber-500"><Unlink className="h-3.5 w-3.5" /></button>
                   {deletable && (
                     <button disabled={busy} title="구성 삭제 (앱에서 생성한 항목, 비용 없음일 때만)"
-                      onClick={() => { if (confirm(`'${c.projectName}'을(를) 완전히 삭제할까요? 이 동작은 되돌릴 수 없습니다.`)) run(() => dataSource.deleteGroupChild(c.id)); }}
+                      onClick={async () => { if (await dialog.confirm(`'${c.projectName}'을(를) 완전히 삭제할까요? 이 동작은 되돌릴 수 없습니다.`, { tone: 'danger', confirmText: '삭제' })) run(() => dataSource.deleteGroupChild(c.id)); }}
                       className="rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
                   )}
                 </>

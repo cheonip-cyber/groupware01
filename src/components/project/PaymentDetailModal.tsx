@@ -5,6 +5,7 @@ import { dataSource } from '../../services/dataSource';
 import { MoneyText } from '../common/MoneyText';
 import { calcWithholdingFor, maskResidentNumber } from '../../utils/withholding';
 import { calcVat, defaultVatMode, VAT_MODE_LABEL, type VatMode } from '../../utils/vat';
+import { useDialog } from '../common/dialog';
 import { useEscClose } from '../../hooks/useEscClose';
 import { MonthPicker } from '../common/MonthPicker';
 import { useToast } from '../common/toast';
@@ -19,6 +20,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   useEscClose(true, onClose);
   const { instructors, companies, refresh } = useAppData();
   const toast = useToast();
+  const dialog = useDialog();
   const isPerson = r.payeeType === '강사';
   const isVendor = r.payeeType === '업체';
 
@@ -138,13 +140,13 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     setPendingPayee(null);
   };
 
-  const handleRequest = () => {
+  const handleRequest = async () => {
     if (r.status === '지급대상') {
-      if (!linked) { alert('지급 대상을 먼저 연결하세요.'); return; }
-      if (!confirmed) { alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.'); return; }
+      if (!linked) { await dialog.alert('지급 대상을 먼저 연결하세요.', { tone: 'warning' }); return; }
+      if (!confirmed) { await dialog.alert('지급 정보(계좌·금액) 확인 후 요청할 수 있습니다.', { tone: 'warning' }); return; }
     }
     const vb = isVendor ? calcVat(r.amount, vatMode) : null;
-    if (vb && !confirm(
+    if (vb && !await dialog.confirm(
       `지급요청 금액을 확인해 주세요.\n\n` +
       `구분: ${VAT_MODE_LABEL[vatMode]}\n` +
       `공급가액: ${vb.supply.toLocaleString()}원\n` +

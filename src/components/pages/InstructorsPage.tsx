@@ -8,6 +8,7 @@ import { maskResidentNumber } from '../../utils/withholding';
 import { useToast } from '../common/toast';
 import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
+import { useDialog } from '../common/dialog';
 
 type SensitiveForm = {
   name: string;
@@ -23,6 +24,7 @@ const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', addr
 export function InstructorsPage() {
   const { instructors, paymentRequests, projects, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
   const toast = useToast();
+  const dialog = useDialog();
   const [panel, setPanel] = useState<Instructor | null>(null);       // 상세 슬라이드 패널
   useEscClose(!!panel, () => setPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [noAccountOnly, setNoAccountOnly] = useState(false);          // 계좌 미등록 필터 (76명 정비용)
@@ -59,7 +61,7 @@ export function InstructorsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`'${name}' 강사를 삭제할까요?`)) return;
+    if (!await dialog.confirm(`'${name}' 강사를 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) return;
     await deleteInstructor(id);
   };
 

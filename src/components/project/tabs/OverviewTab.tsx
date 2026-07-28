@@ -6,6 +6,7 @@ import { projectStatusStyle, priorityStyle } from '../../../utils/statusConfig';
 import { formatDate } from '../../../utils/formatters';
 import { ExternalLink, AlertTriangle, Pencil, Check, X } from 'lucide-react';
 import { useState } from 'react';
+import { useDialog } from '../../common/dialog';
 
 const PRIORITY_OPTIONS = Object.keys(priorityStyle);
 
@@ -15,6 +16,7 @@ function EditableField({ value, display, editable, type = 'text', options, onSav
   value: string; display?: React.ReactNode; editable: boolean; type?: 'text' | 'date' | 'select';
   options?: { value: string; label: string }[]; onSave: (v: string) => Promise<void>; placeholder?: string;
 }) {
+  const dialog = useDialog();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -35,7 +37,7 @@ function EditableField({ value, display, editable, type = 'text', options, onSav
     if (draft === value) { setEditing(false); return; }
     setSaving(true);
     try { await onSave(draft); setEditing(false); }
-    catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+    catch (e) { await dialog.alert(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }
   };
 
@@ -64,6 +66,7 @@ export function OverviewTab({ project, instructors, clients, onUpdate, onRecover
   onRecover: () => Promise<void>; onDelete: () => Promise<void>;
   onGoBudgetTab?: () => void;
 }) {
+  const dialog = useDialog();
   // 강사비 지급대상이 업체(대표자) 명의여도 강사 개인명이 보이도록 서버에서 계산한 trainerNames를 우선 사용
   const trainerNames = project.trainerNames ?? instructors.filter((i) => project.trainerIds.includes(i.id)).map((i) => i.name);
   const [recovering, setRecovering] = useState(false);
@@ -94,7 +97,7 @@ export function OverviewTab({ project, instructors, clients, onUpdate, onRecover
             </button>
             <button
               onClick={async () => {
-                if (!confirm(`'${project.projectName}' 프로젝트를 그룹웨어에서 완전히 삭제할까요?\n예산 항목도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+                if (!await dialog.confirm(`'${project.projectName}' 프로젝트를 그룹웨어에서 완전히 삭제할까요?\n예산 항목도 함께 삭제되며 되돌릴 수 없습니다.`, { tone: 'danger', confirmText: '삭제' })) return;
                 setRecovering(true);
                 try { await onDelete(); } finally { setRecovering(false); }
               }}

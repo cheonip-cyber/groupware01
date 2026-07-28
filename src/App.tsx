@@ -18,6 +18,7 @@ import { AdminCardPage } from './components/admin/AdminCardPage';
 import { AdminSgaPage } from './components/admin/AdminSgaPage';
 import { RequireAdmin } from './auth/RequireAdmin';
 import { ToastProvider } from './components/common/toast';
+import { DialogProvider } from './components/common/dialog';
 
 // ErrorBoundary: 런타임 에러를 빈화면이 아니라 메시지로 표시
 class ErrorBoundary extends React.Component<
@@ -54,6 +55,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+      <DialogProvider>
       <AppLayout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -74,6 +76,7 @@ export default function App() {
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </AppLayout>
+      </DialogProvider>
       </ToastProvider>
     </ErrorBoundary>
   );

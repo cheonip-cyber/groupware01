@@ -6,6 +6,7 @@ import { MoneyText } from '../common/MoneyText';
 import { YearMonthPicker } from '../common/YearMonthPicker';
 import { formatDate } from '../../utils/formatters';
 import { CreditCard, Search, Trash2 } from 'lucide-react';
+import { useDialog } from '../common/dialog';
 
 // [수정검토실행 ⑲→ID매칭 전환] 카드사용내역 (개인): 로그인 사용자 본인의 카드 사용분만 표시.
 // 관리자 '카드사용 관리'와 동일하게 편집 가능 (본인이 사용한 내역이므로 편집 권한 부여).
@@ -17,6 +18,7 @@ interface Tx { id: number | string; transaction_date: string; merchant_name: str
 export function MyCardsPage() {
   const { profile } = useAuth();
   const toast = useToast();
+  const dialog = useDialog();
   const [txns, setTxns] = useState<Tx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,7 +84,7 @@ export function MyCardsPage() {
   // 목록·구글시트 동기화가 모두 status='active'만 대상이라 즉시 빠지고 필요 시 복구할 수 있다.
   const deleteTx = async (t: Tx) => {
     const label = `${formatDate(t.transaction_date)} · ${t.merchant_name} · ${Number(t.amount ?? 0).toLocaleString()}원`;
-    if (!confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`)) return;
+    if (!await dialog.confirm(`이 카드 내역을 삭제할까요?\n\n${label}\n\n삭제하면 목록과 구글시트에서 제외됩니다.`, { tone: 'danger', confirmText: '삭제' })) return;
     const prev = txns;
     setTxns((p) => p.filter((x) => x.id !== t.id)); // 낙관적 반영
     const { error: err } = await cardSupabase.from('card_transactions').update({ status: 'deleted' }).eq('id', t.id);

@@ -8,6 +8,7 @@ import { EmptyState } from '../../common/EmptyState';
 import { Plus, Trash2, Info, X, Pencil } from 'lucide-react';
 import { SavingLabel } from '../../common/SavingLabel';
 import { useEscClose } from '../../../hooks/useEscClose';
+import { useDialog } from '../../common/dialog';
 
 const CATEGORIES = ['강사비', '인건비', '교육비', '대관비', '기타'] as const;
 
@@ -161,6 +162,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
   addInstructor: (input: Omit<Instructor, 'id'>) => Promise<string>;
   addCompany: (input: Omit<Company, 'id'>) => Promise<string>;
 }) {
+  const dialog = useDialog();
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('강사비');
@@ -319,7 +321,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
                       </button>
                     )}
                     <button
-                      onClick={() => { if (confirm(`'${r.payeeName}' 예산 항목을 삭제할까요?`)) onDeleteCost(r.id); }}
+                      onClick={async () => { if (await dialog.confirm(`'${r.payeeName}' 예산 항목을 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) onDeleteCost(r.id); }}
                       className="text-slate-400 hover:text-red-500"
                       title="삭제 (관리자 권한 필요)"
                     >
