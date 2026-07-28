@@ -44,9 +44,11 @@ const bankCode = (name?: string) => {
  */
 export function downloadTransferSheet(requests: PaymentRequest[], label: string) {
   const headers = ['은행', '계좌번호', '실지급액', '지급처', '대표자명', '프로젝트명', '비고'];
+  // 계좌번호는 구분자(-) 없이 숫자만 — 은행 업로드 양식 안내 사항
+  const digitsOnly = (v?: string) => (v ?? '').replace(/[^0-9]/g, '');
   const rows = requests.map((r) => [
     r.bankName ?? '',
-    r.accountNumber ?? '',
+    digitsOnly(r.accountNumber),
     transferAmountFor(r),
     r.payeeName,
     r.ceoName ?? r.payeeName,

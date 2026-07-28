@@ -353,7 +353,6 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
                 <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : tab === 'done' ? '지급월' : '교육일정'}</th>
-                <th className="px-3 py-2.5 font-medium">상태</th>
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
@@ -428,19 +427,10 @@ export function PaymentsPage() {
                             ? <span className="flex items-center gap-1">{r.projectStartDate}{overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />기준1</span>}</span>
                             : <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-600" title="교육일정 미확인 — 같은 프로젝트 지급대상의 50% 이상이 지급완료라 누락 의심으로 표시됨">일정 미확인·기준2</span>}
                       </td>
-                      <td className="px-3 py-3">
-                        {r.status === '지급완료' && r.paidMonth
-                          ? <StatusBadge label={`지급/${Number(r.paidMonth.slice(5, 7))}월`} style={paymentStatusStyle['지급완료']} size="sm" />
-                          : <StatusBadge label={r.status} style={paymentStatusStyle[r.status]} size="sm" />}
-                      </td>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {r.status === '지급요청' && (
-                          <span className="flex items-center gap-1.5">
-                            <MonthPicker value={payMonth[r.id] ?? nowMonth} onChange={(ym) => setPayMonth((s) => ({ ...s, [r.id]: ym }))}
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-blue-400" />
-                            <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료</button>
-                          </span>
+                          <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료</button>
                         )}
                         {r.status === '지급완료' && (
                           <button onClick={() => { if (confirm(`'${r.payeeName}' 님의 지급을 취소할까요?\n(상태가 '지급요청'으로 되돌아가고 지급월이 해제됩니다)`)) updatePaymentRequest(r.id, { status: '지급요청' }); }}

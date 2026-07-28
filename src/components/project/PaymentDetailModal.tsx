@@ -97,6 +97,22 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   });
 
   const handleSave = () => {
+    // 지급완료 건은 이미 이체가 끝난 상태 — 금액·상태·예정월은 손대지 않고
+    // 잘못 연결된 지급처와 부가세 구분만 정정할 수 있게 한다(분류 오류·계좌없음 수정용).
+    if (r.status === '지급완료') {
+      const patch: Partial<PaymentRequest> = {
+        ...(pendingPayee ? {
+          payeeId: pendingPayee.id, payeeName: pendingPayee.label,
+          payeeType: pendingPayee.kind === 'instructor' ? '강사' : '업체',
+        } : {}),
+        ...(isVendor ? { vatMode } : {}),
+      };
+      if (Object.keys(patch).length === 0) { toast.error('변경할 내용이 없습니다'); return; }
+      onUpdateRequest(r.id, patch);
+      toast.success('지급처 정보가 수정되었습니다');
+      setPendingPayee(null);
+      return;
+    }
     onUpdateRequest(r.id, buildPatch());
     toast.success('저장되었습니다');
     setPendingPayee(null);
@@ -160,7 +176,13 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
                     <button onClick={() => { setBank(currentPayee.bankName ?? ''); setAccount(currentPayee.accountNumber ?? ''); setEditAcct(true); }}
                       className="ml-2 text-xs text-blue-600 underline">수정</button>
                   </>
-                : linked ? <span className="text-red-500">미등록</span> : <span className="text-slate-400">-</span>
+                : linked
+                  ? <span className="inline-flex items-center gap-1.5">
+                      <span className="text-red-500">미등록</span>
+                      <button onClick={() => { setBank(''); setAccount(''); setEditAcct(true); }}
+                        className="text-xs text-blue-600 underline">등록</button>
+                    </span>
+                  : <span className="text-slate-400">-</span>
             ) : (
               <span className="flex items-center gap-1.5">
                 <input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="은행" className="w-20 rounded border border-slate-200 px-1.5 py-1 text-xs outline-none" />
@@ -175,8 +197,9 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           {r.memo && <Row label="비고">{r.memo}</Row>}
         </div>
 
-        {/* 대상 재검색 (강사/업체/업체 대표자명 통합 검색) — 선택 후 하단 저장 버튼으로 반영 */}
-        {(isPerson || isVendor) && (
+        {/* 대상 재검색 (강사/업체/업체 대표자명 통합 검색) — 선택 후 하단 저장 버튼으로 반영.
+            유형이 '기타'(대상 미연결)인 건이야말로 연결이 가장 필요하므로 항상 노출한다. */}
+        {(
           <div className="mb-4">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-300" />
@@ -293,10 +316,10 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
               {justRequested ? '지급요청 완료' : '지급요청'}
             </button>
           )}
-          {r.status !== '지급완료' && (
-            <button onClick={handleSave}
-              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">저장</button>
-          )}
+          <button onClick={handleSave} title={r.status === '지급완료' ? '지급처·부가세 구분만 수정됩니다(금액·상태는 변경되지 않음)' : undefined}
+            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
+            {r.status === '지급완료' ? '지급처 수정' : '저장'}
+          </button>
         </div>
       </div>
     </div>
