@@ -90,6 +90,9 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
     ...(pendingPayee ? { payeeId: pendingPayee.id, payeeName: pendingPayee.label, payeeType: pendingPayee.kind === 'instructor' ? '강사' : '업체' } : {}),
     taxMode, manualIncomeTax: mIncome, manualResidentTax: mResident,
     scheduledMonth: schedule,
+    // 업체 부가세 구분 — '저장'으로도 확정 가능해야 한다.
+    // (이미 지급요청된 건은 요청 버튼이 없어 저장 외에 확정 경로가 없음)
+    ...(isVendor ? { vatMode } : {}),
     ...extra,
   });
 
@@ -112,10 +115,7 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
       `부가세: ${vb.vat.toLocaleString()}원\n` +
       `─────────────\n` +
       `실제 이체액: ${vb.total.toLocaleString()}원\n\n이대로 요청할까요?`)) return;
-    onUpdateRequest(r.id, buildPatch({
-      status: '지급요청', infoConfirmed: true,
-      ...(isVendor ? { vatMode } : {}),
-    }));
+    onUpdateRequest(r.id, buildPatch({ status: '지급요청', infoConfirmed: true }));
     setJustRequested(true);
     toast.success('지급요청 완료');
     setTimeout(onClose, 600);
@@ -172,33 +172,6 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
           </Row>
           {effectiveIsPerson && <Row label="주민등록번호"><span className="font-mono">{maskResidentNumber((currentPayee as Instructor)?.residentNumber)}</span></Row>}
           {!effectiveIsPerson && isVendor && currentPayee && <Row label="사업자번호">{(currentPayee as Company).businessNumber || '-'}</Row>}
-          {isVendor && (() => {
-            const vb = calcVat(r.amount, vatMode);
-            return (
-              <>
-                <Row label="부가세 구분">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {(['exclusive', 'inclusive', 'exempt'] as VatMode[]).map((m) => (
-                      <button key={m} onClick={() => setVatMode(m)}
-                        className={`rounded px-2 py-0.5 text-[11px] font-medium ${
-                          vatMode === m ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                        {VAT_MODE_LABEL[m]}
-                      </button>
-                    ))}
-                    {r.payeeTaxType && <span className="text-[10px] text-slate-400">업체 등록: {r.payeeTaxType}</span>}
-                    {!r.vatMode && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">미확인</span>}
-                  </span>
-                </Row>
-                <Row label="지급 금액">
-                  <span className="text-xs text-slate-500">
-                    공급가액 {vb.supply.toLocaleString()}원 + 부가세 {vb.vat.toLocaleString()}원 =
-                    <b className="ml-1 text-sm text-slate-800">{vb.total.toLocaleString()}원</b>
-                    <span className="ml-1 text-[10px] text-slate-400">(실제 이체액)</span>
-                  </span>
-                </Row>
-              </>
-            );
-          })()}
           {r.memo && <Row label="비고">{r.memo}</Row>}
         </div>
 
@@ -263,6 +236,34 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
             </div>
           </div>
         )}
+
+        {/* 부가세 계산 (업체만) — 강사의 '세금 계산' 패널과 대칭 구조 */}
+        {isVendor && (() => {
+          const vb = calcVat(r.amount, vatMode);
+          return (
+            <div className={`mb-4 rounded-xl border p-3 ${r.vatMode ? 'border-blue-100 bg-blue-50/60' : 'border-amber-200 bg-amber-50/60'}`}>
+              <div className="mb-2 flex items-center justify-between">
+                <p className={`text-xs font-bold ${r.vatMode ? 'text-blue-900' : 'text-amber-800'}`}>
+                  부가세 계산 {!r.vatMode && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px]">미확인 — 확정 후 저장하세요</span>}
+                </p>
+                <span className="flex overflow-hidden rounded-lg border border-blue-200 bg-white text-[11px] font-semibold">
+                  {(['exclusive', 'inclusive', 'exempt'] as VatMode[]).map((m) => (
+                    <button key={m} onClick={() => setVatMode(m)}
+                      className={`px-2.5 py-1 ${vatMode === m ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-blue-50'}`}>
+                      {VAT_MODE_LABEL[m]}
+                    </button>
+                  ))}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><p className="text-slate-500">공급가액</p><p className="font-bold"><MoneyText value={vb.supply} /></p></div>
+                <div><p className="text-slate-500">실지급액 (이체금액)</p><p className="font-bold text-blue-700"><MoneyText value={vb.total} /></p></div>
+                <div><p className="text-slate-500">부가세 (10%)</p><p className="font-medium"><MoneyText value={vb.vat} /></p></div>
+                <div><p className="text-slate-500">업체 등록 과세유형</p><p className="font-medium">{r.payeeTaxType ?? '-'}</p></div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 지급 예정월 */}
         <div className="mb-4 flex items-center justify-between">

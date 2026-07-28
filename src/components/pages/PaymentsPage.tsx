@@ -350,7 +350,6 @@ export function PaymentsPage() {
                 <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금 여부">입금</th>
                 <th className="px-2 py-2.5 text-center font-medium" title="세금계산서 발행 여부">세발</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
-                <th className="px-3 py-2.5 text-right font-medium">실지급</th>
                 <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
                 <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : tab === 'done' ? '지급월' : '교육일정'}</th>
@@ -396,21 +395,22 @@ export function PaymentsPage() {
                         )}
                       </td>
                       <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
-                      <td className="px-3 py-3 text-right">
+                      {/* 세금 내역: 강사는 원천세(차감), 업체는 부가세(가산) — 세금은 유형과 무관하게 이 컬럼에 모은다 */}
+                      <td className="px-3 py-3 text-right text-xs">
                         {r.payeeType === '업체' ? (() => {
                           const vb = calcVat(r.amount, r.vatMode);
+                          if (!vb.confirmed) {
+                            return <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">부가세 미확인</span>;
+                          }
                           return (
                             <span className="inline-flex flex-col items-end">
-                              <MoneyText value={vb.total} />
-                              {vb.confirmed
-                                ? <span className="text-[10px] text-slate-400">{VAT_MODE_LABEL[vb.mode!]}{vb.vat > 0 ? ` · 부가세 ${vb.vat.toLocaleString()}` : ''}</span>
-                                : <span className="rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">부가세 미확인</span>}
+                              {vb.vat > 0
+                                ? <span className="text-blue-600">+{vb.vat.toLocaleString('ko-KR')}</span>
+                                : <span className="text-slate-300">-</span>}
+                              <span className="text-[10px] text-slate-400">{VAT_MODE_LABEL[vb.mode!]}</span>
                             </span>
                           );
-                        })() : <MoneyText value={netOf(r)} />}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs">
-                        {(() => { const w = calcWithholdingFor(r);
+                        })() : (() => { const w = calcWithholdingFor(r);
                           return w.totalTax > 0
                             ? <span className="text-red-500">-{w.incomeTax.toLocaleString('ko-KR')} / -{w.residentTax.toLocaleString('ko-KR')}</span>
                             : <span className="text-slate-300">-</span>; })()}
