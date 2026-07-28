@@ -46,6 +46,7 @@ export interface PaymentRequest {
   bankName?: string;
   accountNumber?: string;
   residentNumber?: string;   // 강사(개인)만 — 화면에는 마스킹 표시
+  ceoName?: string;          // 업체 대표자명 — 자금이체 양식의 '대표자명' 칸
   address?: string;
 }
 

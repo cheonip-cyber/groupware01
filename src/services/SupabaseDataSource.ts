@@ -426,8 +426,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.address !== undefined) dbPatch.address = patch.address || null;
     if (patch.bankName !== undefined) dbPatch.bank_name = patch.bankName || null;
     if (patch.accountNumber !== undefined) dbPatch.account_number = patch.accountNumber || null;
-    const { error } = await supabase.from('instructors').update(dbPatch).eq('id', Number(id));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('instructors', dbPatch, { column: 'id', value: Number(id) }, '강사 정보 수정');
   }
 
   async deleteInstructor(id: string): Promise<void> {
@@ -481,8 +480,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.managerContact !== undefined) dbPatch.manager_contact = patch.managerContact || null;
     if (patch.email !== undefined) dbPatch.email = patch.email || null;
     if (patch.businessDescription !== undefined) dbPatch.business_description = patch.businessDescription || null;
-    const { error } = await supabase.from('companies').update(dbPatch).eq('id', Number(id));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('companies', dbPatch, { column: 'id', value: Number(id) }, '업체 정보 수정');
   }
 
   async deleteCompany(id: string): Promise<void> {
@@ -540,7 +538,7 @@ class SupabaseDataSource implements DataSource {
         ? supabase.from('instructors').select('id, bank_name, account_number, resident_number, address').in('id', instructorIds)
         : Promise.resolve({ data: [] as any[] }),
       companyIds.length
-        ? supabase.from('companies').select('id, bank_name, account_number, tax_type').in('id', companyIds)
+        ? supabase.from('companies').select('id, bank_name, account_number, tax_type, ceo_name').in('id', companyIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const instructorMap = new Map((instructors ?? []).map((i: any) => [i.id, i]));
@@ -579,6 +577,8 @@ class SupabaseDataSource implements DataSource {
         manualResidentTax: Number(r.manual_resident_tax ?? 0),
         payeeAccountInfo: accountInfo,
         vatMode: (r.vat_mode ?? null) as PaymentRequest['vatMode'],
+        // 자금이체 양식의 '대표자명' — 업체는 대표자, 강사는 본인 이름
+        ceoName: r.payee_type === 'company' ? (acct as any)?.ceo_name ?? undefined : (r.payee_name ?? undefined),
         payeeTaxType: r.payee_type === 'company' ? (acct as any)?.tax_type ?? undefined : undefined,
         payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
         bankName: acct?.bank_name ?? undefined,
@@ -697,10 +697,9 @@ class SupabaseDataSource implements DataSource {
   async recoverNotionLink(id: string): Promise<void> {
     // 노션 원본이 삭제된 경우 복구: 기존 연결을 끊고 현재 그룹웨어 데이터로 노션에 새 페이지를 재생성한다
     // (원래 페이지가 되살아나는 것이 아니라, 현재 데이터 기준의 새 페이지가 만들어진다)
-    const { error: updErr } = await supabase.from('projects').update({
+    await SupabaseDataSource.updateChecked('projects', {
       notion_page_id: null, notion_missing: false, notion_missing_checked_at: new Date().toISOString(),
-    }).eq('id', Number(id));
-    if (updErr) throw updErr;
+    }, { column: 'id', value: Number(id) }, '노션 재생성 준비');
     const { error: qErr } = await supabase.from('notion_push_queue').insert({
       entity_type: 'project', entity_id: Number(id), status: 'pending',
     });
@@ -798,8 +797,7 @@ class SupabaseDataSource implements DataSource {
     if (patch.syncDirection !== undefined) dbPatch.sync_direction = patch.syncDirection;
     if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
     if (patch.supabaseColumn !== undefined) dbPatch.supabase_column = patch.supabaseColumn;
-    const { error } = await supabase.from('notion_field_mappings').update(dbPatch).eq('id', Number(id));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('notion_field_mappings', dbPatch, { column: 'id', value: Number(id) }, '노션 필드 매핑 수정');
   }
 
   async deleteNotionFieldMapping(id: string): Promise<void> {
@@ -858,7 +856,7 @@ class SupabaseDataSource implements DataSource {
 
     // 마스터 유형 동기화: 유형이 비어 있으면 이번 추가 유형으로 표시 (#1)
     if (!masterRow.group_type) {
-      await supabase.from('projects').update({ is_master: true, group_type: input.groupType }).eq('id', Number(masterId));
+      await SupabaseDataSource.updateChecked('projects', { is_master: true, group_type: input.groupType }, { column: 'id', value: Number(masterId) }, '그룹 마스터 유형 표시');
     }
   }
 
@@ -896,7 +894,7 @@ class SupabaseDataSource implements DataSource {
     // 마스터를 매출분배 유형으로 표시 (최초 1건 추가 시)
     const { data: masterRow } = await supabase.from('projects').select('group_type').eq('id', Number(masterId)).maybeSingle();
     if (masterRow && !masterRow.group_type) {
-      await supabase.from('projects').update({ is_master: true, group_type: 'distribution' }).eq('id', Number(masterId));
+      await SupabaseDataSource.updateChecked('projects', { is_master: true, group_type: 'distribution' }, { column: 'id', value: Number(masterId) }, '매출분배 마스터 표시');
     }
   }
 
@@ -909,8 +907,7 @@ class SupabaseDataSource implements DataSource {
     if ('taxInvoiceDate' in patch) dbPatch.tax_invoice_date = patch.taxInvoiceDate ?? null;
     if (patch.paymentReceived !== undefined) dbPatch.payment_received = patch.paymentReceived;
     if ('paymentDate' in patch) dbPatch.payment_date = patch.paymentDate ?? null;
-    const { error } = await supabase.from('revenue_distributions').update(dbPatch).eq('id', Number(id));
-    if (error) throw error;
+    await SupabaseDataSource.updateChecked('revenue_distributions', dbPatch, { column: 'id', value: Number(id) }, '매출분배 수정');
   }
 
   async deleteDistribution(id: string): Promise<void> {
@@ -921,7 +918,7 @@ class SupabaseDataSource implements DataSource {
     if (row) {
       const { data: rest } = await supabase.from('revenue_distributions').select('id').eq('project_id', row.project_id).limit(1);
       if (!rest || rest.length === 0) {
-        await supabase.from('projects').update({ group_type: null }).eq('id', row.project_id);
+        await SupabaseDataSource.updateChecked('projects', { group_type: null }, { column: 'id', value: row.project_id }, '마스터 그룹유형 정리');
       }
     }
   }
@@ -957,7 +954,7 @@ class SupabaseDataSource implements DataSource {
     if (masterId != null) {
       const { data: rest } = await supabase.from('projects').select('id').eq('parent_id', masterId).limit(1);
       if (!rest || rest.length === 0) {
-        await supabase.from('projects').update({ group_type: null }).eq('id', masterId);
+        await SupabaseDataSource.updateChecked('projects', { group_type: null }, { column: 'id', value: masterId }, '마스터 그룹유형 정리');
       }
     }
   }

@@ -35,15 +35,23 @@ const bankCode = (name?: string) => {
   return key ? BANK_CODES[key] : name; // 미등록 은행은 원문 유지 (수기 확인용)
 };
 
-/** 자금이체양식: 은행 CMS 대량이체 업로드용 — 구 그룹웨어 확정 양식 (지급요청 상태 건 대상) */
+/**
+ * 자금이체양식 — 실제 사용 중인 은행 업로드 서식에 맞춘 컬럼 구성 (2026-07-28, 첨부 양식 기준)
+ * 은행 / 계좌번호 / 실지급액 / 지급처 / 대표자명 / 프로젝트명 / 비고
+ *  - 은행: 코드가 아닌 은행명 그대로(양식 안내: "081" 또는 "하나" 모두 허용)
+ *  - 실지급액: transferAmountFor — 강사는 원천징수 후 순액, 업체는 부가세 포함 총액
+ *  - 대표자명: 업체는 대표자, 강사는 본인 이름
+ */
 export function downloadTransferSheet(requests: PaymentRequest[], label: string) {
-  const headers = ['입금은행', '입금계좌번호', '입금액(원)', '출금통장표시', '입금통장표시', 'CMS코드'];
-  const mark = (r: PaymentRequest) => (r.projectName || r.payeeName).slice(0, 20); // 통장표시 최대 20자
-  // 입금액은 transferAmountFor 하나로 통일한다 — 강사는 원천징수 후 순액, 업체는 부가세 포함 총액.
-  // 이전에는 업체도 원천징수 함수를 그대로 통과시켜 입력액(공급가액)이 그대로 나갔고,
-  // 부가세만큼 적게 이체되는 문제가 있었다.
+  const headers = ['은행', '계좌번호', '실지급액', '지급처', '대표자명', '프로젝트명', '비고'];
   const rows = requests.map((r) => [
-    bankCode(r.bankName), r.accountNumber ?? '', transferAmountFor(r), mark(r), mark(r), '',
+    r.bankName ?? '',
+    r.accountNumber ?? '',
+    transferAmountFor(r),
+    r.payeeName,
+    r.ceoName ?? r.payeeName,
+    r.projectName ?? '',
+    r.memo ?? '',
   ]);
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }
