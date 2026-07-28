@@ -116,9 +116,3 @@ export async function addComment(appId: number, content: string, author: string,
     .insert({ app_id: appId, content, author, created_by: userId ?? null });
   if (error) throw error;
 }
-
-export async function deleteComment(id: number): Promise<void> {
-  const { data, error } = await supabase.from('hub_comments').delete().eq('id', id).select('id');
-  if (error) throw error;
-  ensureAffected(data, '의견 삭제');
-}
