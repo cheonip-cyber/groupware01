@@ -6,6 +6,7 @@ import {
   listApps, createApp, updateApp, deleteApp, bumpClick,
   listComments, addComment, type HubApp, type HubComment, type HubAppInput,
 } from '../../services/hubService';
+import { BoardSection } from './BoardSection';
 import '../../styles/hub.css';
 
 // 업무자동화(앱 허브) — samsotta-hub의 기능·디자인을 그룹웨어에 이식 (2026-07-28)
@@ -159,6 +160,7 @@ export function HubPage() {
         </button>
         <nav aria-label="주요 메뉴">
           <a href="#apps">앱 둘러보기</a>
+          <a href="#board">자료실</a>
           {/* AI 뉴스 다이제스트(매일 08:00 발행) — 해당 사이트가 iframe 임베드를 차단(X-Frame-Options: DENY)하므로 새 창으로 연결한다 */}
           <a href="https://baeksang.dev/daily" target="_blank" rel="noopener noreferrer" className="nav-external"
             title="AI·개발 뉴스 다이제스트 — 새 창으로 열립니다">
@@ -303,6 +305,8 @@ export function HubPage() {
           </div>
         )}
       </section>
+
+      <BoardSection />
 
       <section className="bottom-cta">
         <p>HAVE A USEFUL APP?</p>

@@ -1293,3 +1293,66 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ===== 자료실(파일 게시판) — 2026-07-28 추가분 =====
+   원본 samsotta-hub에는 없던 화면이라, 기존 디자인 토큰(--ink/--orange/--line 등)을
+   그대로 써서 톤을 맞춘다. 모든 선택자는 다른 규칙과 동일하게 .hub-scope 하위다. */
+.hub-scope .board-section { border-top: 1px solid var(--line); }
+
+.hub-scope .section-sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+.hub-scope .storage-meter {
+  margin: 18px 0 26px; padding: 14px 16px;
+  border: 1px solid var(--line); background: var(--white);
+}
+.hub-scope .storage-meter-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; color: var(--ink-soft);
+}
+.hub-scope .storage-meter-head strong { font-size: 14px; font-weight: 850; color: var(--ink); }
+.hub-scope .storage-bar {
+  margin: 9px 0 7px; height: 8px; background: var(--blue-pale); overflow: hidden;
+}
+.hub-scope .storage-bar span { display: block; height: 100%; background: var(--green); transition: width .3s; }
+.hub-scope .storage-meter.tone-warn .storage-bar span { background: var(--orange); }
+.hub-scope .storage-meter.tone-danger .storage-bar span { background: var(--wine); }
+.hub-scope .storage-meter.tone-danger { border-color: var(--wine); }
+.hub-scope .storage-note { margin: 0; font-size: 12px; color: var(--muted); }
+
+.hub-scope .board-empty {
+  padding: 40px 0; text-align: center; color: var(--muted); font-size: 14px;
+}
+.hub-scope .board-list { list-style: none; margin: 0; padding: 0; }
+.hub-scope .board-item {
+  display: flex; gap: 20px; justify-content: space-between; align-items: flex-start;
+  padding: 18px 0; border-top: 1px solid var(--line);
+}
+.hub-scope .board-item-main { min-width: 0; flex: 1; }
+.hub-scope .board-item-main h3 { margin: 0; font-size: 16px; font-weight: 850; }
+.hub-scope .board-content {
+  margin: 6px 0 0; color: var(--ink-soft); font-size: 13px; white-space: pre-wrap; word-break: break-word;
+}
+.hub-scope .board-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.hub-scope .board-file {
+  border: 1px solid var(--line); background: var(--white); cursor: pointer;
+  padding: 5px 10px; font-size: 12px; font-weight: 700; color: var(--ink);
+}
+.hub-scope .board-file:hover { border-color: var(--orange); background: #fff7ec; }
+.hub-scope .board-file span { color: var(--muted); font-weight: 600; margin-left: 4px; }
+.hub-scope .board-item-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.hub-scope .board-delete {
+  border: none; background: none; cursor: pointer; padding: 0;
+  color: var(--wine); font-size: 12px; font-weight: 700; text-decoration: underline;
+}
+.hub-scope .form-hint { margin: 0; font-size: 12px; color: var(--muted); }
+.hub-scope .picked-files { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--ink-soft); }
+.hub-scope .picked-files li { display: flex; justify-content: space-between; padding: 3px 0; }
+.hub-scope .picked-files span { color: var(--muted); }
+
+@media (max-width: 640px) {
+  .hub-scope .board-item { flex-direction: column; gap: 10px; }
+  .hub-scope .board-item-meta { flex-direction: row; align-items: center; gap: 10px; }
+}
