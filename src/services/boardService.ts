@@ -125,7 +125,12 @@ export async function createPost(
   const uploaded: string[] = [];
   try {
     for (const f of files) {
-      const path = `${post.id}/${Date.now()}_${f.name.replace(/[^\w.\-가-힣]/g, '_')}`;
+      // Storage 키는 ASCII만 허용된다 — 한글 파일명을 그대로 쓰면 InvalidKey(400)로 거부된다.
+      // 그래서 경로는 확장자만 살린 안전한 이름으로 만들고, 원래 파일명은 DB(file_name)에 보관해
+      // 내려받을 때 서명 URL의 download 옵션으로 복원한다.
+      const ext = (f.name.split('.').pop() ?? '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+      const rand = Math.random().toString(36).slice(2, 8);
+      const path = `${post.id}/${Date.now()}_${rand}${ext ? `.${ext}` : ''}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, f, { upsert: false });
       if (upErr) throw upErr;
       uploaded.push(path);
