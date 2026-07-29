@@ -32,6 +32,7 @@ const budgetBucket = (category: string | null): 'trainer' | 'operation' | 'mater
 
 interface CostRow {
   id: number; project_id: number; category: string | null; payee_type: string | null; payee_id: number | null;
+  payee_instructor_id: number | null; payee_company_id: number | null;
   payee_name: string | null; budget_amount: number | null; actual_payment_amount: number | null;
   status: string; paid_month: string | null; is_card_payment: boolean; is_payable: boolean;
   is_cost_recognized: boolean; remarks: string | null;
@@ -128,15 +129,15 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     paymentCompleted: paymentStatus === '지급완료',
     collectionCompleted: !!row.client_payment_received,
 
-    trainerIds: [...new Set(costs.filter((c) => c.payee_type === 'instructor' && c.payee_id).map((c) => String(c.payee_id)))],
-    vendorIds: [...new Set(costs.filter((c) => c.payee_type === 'company' && c.payee_id).map((c) => String(c.payee_id)))],
+    trainerIds: [...new Set(costs.filter((c) => c.payee_instructor_id).map((c) => String(c.payee_instructor_id)))],
+    vendorIds: [...new Set(costs.filter((c) => c.payee_company_id).map((c) => String(c.payee_company_id)))],
     // 강사비 카테고리는 지급유형이 company로 저장돼 있어도(업체 명의 세금계산서 등) 개요에는 실제 강사 개인명이 보여야 한다 —
     // instructor면 강사DB 이름, company면 대표자명(없으면 업체명)을 우선하고, 매핑이 없으면 저장된 텍스트로 폴백한다.
     trainerNames: [...new Set(
       costs.filter((c) => budgetBucket(c.category) === 'trainer').map((c) => {
-        if (c.payee_type === 'instructor' && c.payee_id) return instructorNameMap?.get(c.payee_id) ?? c.payee_name ?? '';
-        if (c.payee_type === 'company' && c.payee_id) {
-          const co = companyNameMap?.get(c.payee_id);
+        if (c.payee_instructor_id) return instructorNameMap?.get(c.payee_instructor_id) ?? c.payee_name ?? '';
+        if (c.payee_company_id) {
+          const co = companyNameMap?.get(c.payee_company_id);
           return co ? (co.ceo || co.name) : (c.payee_name ?? '');
         }
         return c.payee_name ?? '';
@@ -530,11 +531,11 @@ class SupabaseDataSource implements DataSource {
   }
 
   private async buildPaymentRequests(rows: any[]): Promise<PaymentRequest[]> {
-    // 유형(payee_type)이 비어 있는 구 이관 건도 계좌를 찾을 수 있도록 양쪽 후보를 모두 조회한다.
-    // 예전에는 유형이 일치할 때만 조회해, 계좌가 멀쩡히 등록돼 있는데도 '계좌없음'으로 보였다(지급완료 351건 중 314건).
-    const wantsBoth = (r: any) => r.payee_id && (r.payee_type === null || r.payee_type === undefined);
-    const instructorIds = [...new Set(rows.filter((r) => (r.payee_type === 'instructor' && r.payee_id) || wantsBoth(r)).map((r) => r.payee_id))];
-    const companyIds = [...new Set(rows.filter((r) => (r.payee_type === 'company' && r.payee_id) || wantsBoth(r)).map((r) => r.payee_id))];
+    // 지급대상은 payee_instructor_id / payee_company_id 두 전용 컬럼으로 확정된다(2026-07-29 구조 개선).
+    // 예전에는 payee_id 하나가 유형에 따라 두 테이블을 가리켜(같은 id가 106개 겹침) 대상이 확정되지 않았고,
+    // 화면마다 이름 대조로 우회해야 했다. 이제 DB가 FK로 무결성을 보장하므로 우회 로직이 필요 없다.
+    const instructorIds = [...new Set(rows.filter((r) => r.payee_instructor_id).map((r) => r.payee_instructor_id))];
+    const companyIds = [...new Set(rows.filter((r) => r.payee_company_id).map((r) => r.payee_company_id))];
 
     const [{ data: instructors }, { data: companies }] = await Promise.all([
       instructorIds.length
@@ -548,18 +549,9 @@ class SupabaseDataSource implements DataSource {
     const companyMap = new Map((companies ?? []).map((c: any) => [c.id, c]));
 
     return rows.map((r: any) => {
-      // 유형이 확정된 건은 그대로. 미지정 건은 payee_id가 양 테이블에서 겹칠 수 있으므로
-      // 저장된 이름과 일치하는 쪽만 채택하고, 확정되지 않으면 계좌를 붙이지 않는다(엉뚱한 계좌 노출 방지).
-      const resolveUntyped = () => {
-        const inst: any = instructorMap.get(r.payee_id);
-        const comp: any = companyMap.get(r.payee_id);
-        if (comp && comp.company_name === r.payee_name) return comp;
-        if (inst && inst.name === r.payee_name) return inst;
-        return null;
-      };
-      const acct = r.payee_type === 'instructor' ? instructorMap.get(r.payee_id)
-        : r.payee_type === 'company' ? companyMap.get(r.payee_id)
-        : r.payee_id ? resolveUntyped() : null;
+      const isInst = !!r.payee_instructor_id;
+      const isComp = !!r.payee_company_id;
+      const acct = isInst ? instructorMap.get(r.payee_instructor_id) : isComp ? companyMap.get(r.payee_company_id) : null;
       const accountInfo = acct && acct.bank_name && acct.account_number ? `${acct.bank_name} ${acct.account_number}` : undefined;
       return {
         id: String(r.id),
@@ -570,7 +562,7 @@ class SupabaseDataSource implements DataSource {
         projectPaymentReceived: !!r.projects?.client_payment_received,
         projectTaxInvoiceIssued: !!r.projects?.is_tax_invoice_issued,
         projectStartDate: r.projects?.session_1_date ?? undefined,
-        payeeType: r.payee_type === 'instructor' ? '강사' : r.payee_type === 'company' ? '업체' : '기타',
+        payeeType: isInst ? '강사' : isComp ? '업체' : '기타',
         payeeName: r.payee_name ?? '',
         // 실지급액(actual_payment_amount)은 미지급 건에서 항상 0으로 초기화되어 있어,
         // 무조건 ??(nullish) 우선순위를 쓰면 예산금액이 있어도 0으로 표시되는 버그가 있었음(169건 영향).
@@ -592,9 +584,9 @@ class SupabaseDataSource implements DataSource {
         payeeAccountInfo: accountInfo,
         vatMode: (r.vat_mode ?? null) as PaymentRequest['vatMode'],
         // 자금이체 양식의 '대표자명' — 업체는 대표자, 강사는 본인 이름
-        ceoName: r.payee_type === 'company' ? (acct as any)?.ceo_name ?? undefined : (r.payee_name ?? undefined),
-        payeeTaxType: r.payee_type === 'company' ? (acct as any)?.tax_type ?? undefined : undefined,
-        payeeId: r.payee_id != null ? String(r.payee_id) : undefined,
+        ceoName: isComp ? (acct as any)?.ceo_name ?? undefined : (r.payee_name ?? undefined),
+        payeeTaxType: isComp ? (acct as any)?.tax_type ?? undefined : undefined,
+        payeeId: isInst ? String(r.payee_instructor_id) : isComp ? String(r.payee_company_id) : undefined,
         bankName: acct?.bank_name ?? undefined,
         accountNumber: acct?.account_number ?? undefined,
         residentNumber: acct?.resident_number ?? undefined,
@@ -661,6 +653,10 @@ class SupabaseDataSource implements DataSource {
     // 이름·id만 바뀌고 유형은 옛 값으로 남아 팝업이 엉뚱한 사람의 계좌를 표시하던 버그가 있었음.
     if (patch.payeeType !== undefined) {
       dbPatch.payee_type = patch.payeeType === '강사' ? 'instructor' : patch.payeeType === '업체' ? 'company' : null;
+      // 전용 컬럼도 함께 — 반대쪽은 반드시 비워 제약 위반을 막는다
+      const pid = patch.payeeId !== undefined ? (patch.payeeId ? Number(patch.payeeId) : null) : null;
+      dbPatch.payee_instructor_id = dbPatch.payee_type === 'instructor' ? pid : null;
+      dbPatch.payee_company_id = dbPatch.payee_type === 'company' ? pid : null;
       // 강사·업체로 연결되면 지급관리 대상이 된다(카드결제 건 제외)
       if (dbPatch.payee_type) {
         const { data: cur } = await supabase.from('project_costs')
@@ -731,6 +727,14 @@ class SupabaseDataSource implements DataSource {
     if (patch.remarks !== undefined) dbPatch.remarks = patch.remarks;
     if (patch.payeeType !== undefined) dbPatch.payee_type = patch.payeeType !== 'etc' ? patch.payeeType : null;
     if ('payeeId' in patch) dbPatch.payee_id = patch.payeeId ? Number(patch.payeeId) : null;
+    // 전용 컬럼(진실의 원천)도 함께 갱신 — 유형이나 대상이 바뀌면 반대쪽은 반드시 비운다.
+    // 둘 다 채워지면 DB 제약(project_costs_payee_exclusive)에 걸린다.
+    if (patch.payeeType !== undefined || 'payeeId' in patch) {
+      const pid = patch.payeeId ? Number(patch.payeeId) : null;
+      const t = patch.payeeType;
+      dbPatch.payee_instructor_id = t === 'instructor' ? pid : null;
+      dbPatch.payee_company_id = t === 'company' ? pid : null;
+    }
     if (patch.isCardPayment !== undefined) dbPatch.is_card_payment = patch.isCardPayment;
     // is_payable = 카드결제가 아니고, 지급대상 유형이 강사/업체인 경우에만 true.
     // '기타(직접입력)'는 계좌·사업자 정보가 없는 메모성 항목이라 지급관리(지급대상/지급요청) 대상에서 제외한다.
@@ -762,6 +766,9 @@ class SupabaseDataSource implements DataSource {
       category: input.category,
       payee_type: input.payeeType && input.payeeType !== 'etc' ? input.payeeType : null,
       payee_id: input.payeeId ? Number(input.payeeId) : null,
+      // 전용 컬럼(진실의 원천) — 유형에 맞는 쪽만 채운다
+      payee_instructor_id: input.payeeType === 'instructor' && input.payeeId ? Number(input.payeeId) : null,
+      payee_company_id: input.payeeType === 'company' && input.payeeId ? Number(input.payeeId) : null,
       payee_name: input.payeeName,
       budget_amount: input.budgetAmount,
       is_card_payment: input.isCardPayment ?? false,
