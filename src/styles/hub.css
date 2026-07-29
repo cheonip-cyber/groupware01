@@ -1089,6 +1089,16 @@
     display: none;
   }
 
+  /* 외부 링크(AI TODAY)는 실제 이동 대상이라 작은 화면에서도 노출한다
+     — 원본은 앵커 링크만 있어 전부 숨겼지만, 여기서는 기능 버튼 역할을 한다 */
+  .hub-scope .site-header a.nav-external {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 10px;
+    font-size: 12px;
+  }
+
   .hub-scope .site-header nav {
     gap: 0;
   }
