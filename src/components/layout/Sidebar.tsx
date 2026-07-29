@@ -18,16 +18,16 @@ const workItems = [
 // 자산·관계 — 강사/업체/카드 등 참조 데이터
 // to: 내부 라우팅, popup: 외부 URL을 새 팝업 창으로 오픈(예: 개인 카드사용 등록은 별도 카드앱에서 처리)
 const assetItems: { to?: string; popup?: string; label: string; icon: typeof CreditCard }[] = [
-  { to: '/instructors', label: '강사관리', icon: Users },
-  { to: '/companies', label: '업체관리', icon: Building2 },
   { to: '/my-cards', label: '카드사용내역', icon: CreditCard },
   { popup: 'https://cardsamsotta.netlify.app/', label: '카드사용 등록', icon: ExternalLink },
   { to: '/hub', label: '업무자동화', icon: Zap },
 ];
 
-// 분석·설정
+// 분석·설정 — 강사/업체 관리를 이곳으로 이동(2026-07-29): 리포트·강사·업체·설정 순
 const insightItems = [
   { to: '/reports', label: '리포트', icon: BarChart3 },
+  { to: '/instructors', label: '강사관리', icon: Users },
+  { to: '/companies', label: '업체관리', icon: Building2 },
   { to: '/settings', label: '설정', icon: Settings },
 ];
 

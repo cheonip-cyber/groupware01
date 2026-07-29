@@ -63,8 +63,17 @@ export function PaymentsPage() {
   // 지급관리에는 '지급요청'된 항목만 표시 — 요청 전 건은 각 프로젝트의 지급 탭에서 검토·요청한다 (혼재로 복잡해 보이던 문제 해소)
   const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급요청'), [transferable]);
   const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
-  // 지급대상(미요청) 전체 — 아직 요청 전 상태
-  const targetAllRaw = useMemo(() => transferable.filter((r) => r.status === '지급대상'), [transferable]);
+  // 지급대상(미요청) 전체 — 아직 요청 전 상태.
+  // '제안중'(DB: 요청/담당·제안/PT) 단계는 수주가 확정되지 않아 지급 대상이 아니므로 제외한다.
+  // (지급요청·지급완료 탭은 이미 진행된 건이라 그대로 둔다)
+  const proposalProjectIds = useMemo(
+    () => new Set(projects.filter((p) => p.projectStatus === '제안중').map((p) => p.id)),
+    [projects],
+  );
+  const targetAllRaw = useMemo(
+    () => transferable.filter((r) => r.status === '지급대상' && !proposalProjectIds.has(r.projectId)),
+    [transferable, proposalProjectIds],
+  );
 
   // 지급대상 대시보드: 기준1(교육일정이 이번 달 이하 = 이미 지났거나 이번 달) 또는
   // 기준2(교육일정 미확인 시, 같은 프로젝트의 지급대상 중 50% 이상이 이미 지급완료 — 누락 의심)로 필터링

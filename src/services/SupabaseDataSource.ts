@@ -530,22 +530,36 @@ class SupabaseDataSource implements DataSource {
   }
 
   private async buildPaymentRequests(rows: any[]): Promise<PaymentRequest[]> {
-    const instructorIds = [...new Set(rows.filter((r) => r.payee_type === 'instructor' && r.payee_id).map((r) => r.payee_id))];
-    const companyIds = [...new Set(rows.filter((r) => r.payee_type === 'company' && r.payee_id).map((r) => r.payee_id))];
+    // 유형(payee_type)이 비어 있는 구 이관 건도 계좌를 찾을 수 있도록 양쪽 후보를 모두 조회한다.
+    // 예전에는 유형이 일치할 때만 조회해, 계좌가 멀쩡히 등록돼 있는데도 '계좌없음'으로 보였다(지급완료 351건 중 314건).
+    const wantsBoth = (r: any) => r.payee_id && (r.payee_type === null || r.payee_type === undefined);
+    const instructorIds = [...new Set(rows.filter((r) => (r.payee_type === 'instructor' && r.payee_id) || wantsBoth(r)).map((r) => r.payee_id))];
+    const companyIds = [...new Set(rows.filter((r) => (r.payee_type === 'company' && r.payee_id) || wantsBoth(r)).map((r) => r.payee_id))];
 
     const [{ data: instructors }, { data: companies }] = await Promise.all([
       instructorIds.length
-        ? supabase.from('instructors').select('id, bank_name, account_number, resident_number, address').in('id', instructorIds)
+        ? supabase.from('instructors').select('id, name, bank_name, account_number, resident_number, address').in('id', instructorIds)
         : Promise.resolve({ data: [] as any[] }),
       companyIds.length
-        ? supabase.from('companies').select('id, bank_name, account_number, tax_type, ceo_name').in('id', companyIds)
+        ? supabase.from('companies').select('id, company_name, bank_name, account_number, tax_type, ceo_name').in('id', companyIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const instructorMap = new Map((instructors ?? []).map((i: any) => [i.id, i]));
     const companyMap = new Map((companies ?? []).map((c: any) => [c.id, c]));
 
     return rows.map((r: any) => {
-      const acct = r.payee_type === 'instructor' ? instructorMap.get(r.payee_id) : r.payee_type === 'company' ? companyMap.get(r.payee_id) : null;
+      // 유형이 확정된 건은 그대로. 미지정 건은 payee_id가 양 테이블에서 겹칠 수 있으므로
+      // 저장된 이름과 일치하는 쪽만 채택하고, 확정되지 않으면 계좌를 붙이지 않는다(엉뚱한 계좌 노출 방지).
+      const resolveUntyped = () => {
+        const inst: any = instructorMap.get(r.payee_id);
+        const comp: any = companyMap.get(r.payee_id);
+        if (comp && comp.company_name === r.payee_name) return comp;
+        if (inst && inst.name === r.payee_name) return inst;
+        return null;
+      };
+      const acct = r.payee_type === 'instructor' ? instructorMap.get(r.payee_id)
+        : r.payee_type === 'company' ? companyMap.get(r.payee_id)
+        : r.payee_id ? resolveUntyped() : null;
       const accountInfo = acct && acct.bank_name && acct.account_number ? `${acct.bank_name} ${acct.account_number}` : undefined;
       return {
         id: String(r.id),
