@@ -43,10 +43,13 @@ const bankCode = (name?: string) => {
  *  - 대표자명: 업체는 대표자, 강사는 본인 이름
  */
 export function downloadTransferSheet(requests: PaymentRequest[], label: string) {
-  const headers = ['은행', '계좌번호', '실지급액', '지급처', '대표자명', '프로젝트명', '비고'];
+  const headers = ['지급월', '은행', '계좌번호', '실지급액', '지급처', '대표자명', '프로젝트명', '비고'];
   // 계좌번호는 구분자(-) 없이 숫자만 — 은행 업로드 양식 안내 사항
   const digitsOnly = (v?: string) => (v ?? '').replace(/[^0-9]/g, '');
+  // 지급월: 예약된 지급월 > 실제 지급월 > 다운로드 기준월 순으로 표기
+  const payMonth = (r: PaymentRequest) => r.scheduledMonth || r.paidMonth || label;
   const rows = requests.map((r) => [
+    payMonth(r),
     r.bankName ?? '',
     digitsOnly(r.accountNumber),
     transferAmountFor(r),

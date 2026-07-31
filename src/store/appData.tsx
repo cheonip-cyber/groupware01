@@ -48,6 +48,30 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => { paymentRequestsRef.current = paymentRequests; }, [paymentRequests]);
 
   const initialLoadedRef = useRef(false);
+
+  /**
+   * 프로젝트가 바뀌면 지급요청 목록에 복제돼 있는 파생 필드도 즉시 맞춘다. (2026-07-29)
+   * 지급관리의 '정산' 표시 등은 paymentRequests에 들어 있어, 프로젝트만 갱신하면
+   * 화면을 새로고침하기 전까지 옛 값이 남는 문제가 있었다.
+   * 서버를 다시 호출하지 않고 메모리에서만 맞추므로 로딩이 걸리지 않는다.
+   */
+  const syncPaymentsFromProjects = useCallback((list: Project[]) => {
+    const byId = new Map(list.map((p) => [p.id, p]));
+    setPaymentRequests((prev) => prev.map((r) => {
+      const p = byId.get(r.projectId);
+      if (!p) return r;
+      const next = {
+        projectName: p.projectName,
+        clientName: p.clientName,
+        projectStartDate: p.startDate,
+        projectPaymentReceived: p.collectionCompleted,
+        projectTaxInvoiceIssued: p.taxInvoiceIssued,
+      };
+      const changed = (Object.keys(next) as (keyof typeof next)[]).some((k) => (r as any)[k] !== next[k]);
+      return changed ? { ...r, ...next } : r;
+    }));
+  }, []);
+
   const refresh = useCallback(async () => {
     // 최초 1회만 로딩 화면 표시. 이후 저장·수정 뒤의 재조회는 조용히 진행한다 —
     // 로딩 전환이 열려 있는 팝업과 화면 상태를 파괴해 오류(#300)와 깜빡임을 일으키던 문제의 근본 수정.
@@ -91,6 +115,18 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return merged;
     }));
+    // 낙관적 반영 단계에서도 지급요청의 파생 필드를 함께 맞춘다 —
+    // 서버 재조회를 기다리지 않고 다른 화면(지급관리 등)에 바로 보이게 한다.
+    setPaymentRequests((prev) => prev.map((r) => {
+      if (r.projectId !== id) return r;
+      const next: Partial<PaymentRequest> = {};
+      if (patch.projectName !== undefined) next.projectName = patch.projectName;
+      if (patch.clientName !== undefined) next.clientName = patch.clientName;
+      if (patch.startDate !== undefined) next.projectStartDate = patch.startDate;
+      if (patch.collectionCompleted !== undefined) next.projectPaymentReceived = patch.collectionCompleted;
+      if (patch.taxInvoiceIssued !== undefined) next.projectTaxInvoiceIssued = patch.taxInvoiceIssued;
+      return Object.keys(next).length > 0 ? { ...r, ...next } : r;
+    }));
 
     // 동일 프로젝트에 대한 저장은 순서대로 직렬화 — 나중에 도착한 저장이 앞선 저장을 덮어쓰지 않도록 한다.
     const prevChain = pendingWritesRef.current.get(id) ?? Promise.resolve();
@@ -105,6 +141,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (updated && pendingWritesRef.current.get(id) === chain) {
         const p = await projectService.list();
         setProjects(p);
+        syncPaymentsFromProjects(p); // 지급관리의 정산·세금계산서 표시를 즉시 반영(추가 조회 없음)
       }
     });
     pendingWritesRef.current.set(id, chain);
@@ -113,12 +150,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (e) {
       // 실패 시 해당 프로젝트만 서버 최신 상태로 재조회해 되돌린다 (전체 스냅샷 원복은 다른 진행 중인 저장을 지울 수 있어 사용하지 않는다)
       const p = await projectService.list().catch(() => null);
-      if (p) setProjects(p);
+      if (p) { setProjects(p); syncPaymentsFromProjects(p); }
       throw e;
     } finally {
       if (pendingWritesRef.current.get(id) === chain) pendingWritesRef.current.delete(id);
     }
-  }, []);
+  }, [syncPaymentsFromProjects]);
 
   const updatePaymentRequest = useCallback(async (id: string, patch: Partial<PaymentRequest>) => {
     const snapshot = paymentRequestsRef.current;

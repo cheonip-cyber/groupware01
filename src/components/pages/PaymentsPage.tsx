@@ -279,7 +279,9 @@ export function PaymentsPage() {
               title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
               className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
             <button onClick={async () => {
-              const targets = pendingAll.filter((r) => r.status === '지급요청');
+              // 화면에 보이는 목록과 동일한 기준으로 받는다.
+              // 이전에는 pendingAll 전체를 받아 7월을 선택해도 8월분까지 섞여 나왔다.
+              const targets = rows.filter((r) => r.status === '지급요청');
               const sum = transferSummary(targets);
               if (sum.unconfirmed.length > 0) {
                 await dialog.alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n` +
@@ -291,7 +293,7 @@ export function PaymentsPage() {
               if (!await dialog.confirm(`자금이체 양식을 받습니다.\n\n건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n진행할까요?`)) return;
               downloadTransferSheet(targets, nowMonth);
             }}
-              title="지급요청 상태 전체 자금이체 양식 다운로드"
+              title="현재 조회 조건(연·월)에 해당하는 지급요청 건만 다운로드"
               className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">자금이체</button>
           </div>
         </div>
@@ -363,12 +365,12 @@ export function PaymentsPage() {
                 <th className="px-3 py-2.5 font-medium">지급처</th>
                 <th className="px-3 py-2.5 font-medium">유형</th>
                 <th className="px-3 py-2.5 font-medium">프로젝트</th>
-                <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금 여부">입금</th>
+                <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금(정산) 여부">정산</th>
                 <th className="px-2 py-2.5 text-center font-medium" title="세금계산서 발행 여부">세발</th>
                 <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
                 <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
                 <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
-                <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급예정일' : tab === 'done' ? '지급월' : '교육일정'}</th>
+                <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급월' : tab === 'done' ? '지급월' : '교육일정'}</th>
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
@@ -399,7 +401,7 @@ export function PaymentsPage() {
                       <td className="max-w-[200px] truncate px-3 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
                         <Link to={`/projects/${r.projectId}`} className="text-slate-500 hover:text-blue-600 hover:underline">{r.projectName}</Link>
                       </td>
-                      <td className="px-2 py-3 text-center text-xs" title="프로젝트 고객 입금 여부">{r.projectPaymentReceived ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}</td>
+                      <td className="px-2 py-3 text-center text-xs" title="프로젝트 고객 입금(정산) 여부">{r.projectPaymentReceived ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}</td>
                       <td className="px-2 py-3 text-center text-xs" onClick={(e) => e.stopPropagation()}>
                         {r.payeeType !== '업체' ? (
                           <span className="text-slate-300" title="개인(강사)은 세금계산서 발행 대상이 아닙니다 — 3.3%/8.8% 원천징수로 처리">-</span>
