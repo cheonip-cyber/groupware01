@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useAppData } from '../../store/appData';
 import { useToast } from '../common/toast';
+import { useEscClose } from '../../hooks/useEscClose';
 import { Card, CardHeader } from '../common/Card';
 import { EmptyState } from '../common/EmptyState';
-import { Building2, Plus, Trash2, Pencil, Check, X, Search } from 'lucide-react';
+import { Building2, Plus, Trash2, X, Search } from 'lucide-react';
 import type { Company } from '../../types';
 import { SavingLabel } from '../common/SavingLabel';
 import { useDialog } from '../common/dialog';
@@ -39,9 +40,60 @@ export function CompaniesPage() {
   const [form, setForm] = useState<CompanyForm>(emptyForm);
   const [search, setSearch] = useState('');
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<CompanyForm>(emptyForm);
-  const [editSaving, setEditSaving] = useState(false);
+  // 목록 클릭 → 프로필 카드에서 직접 수정 (강사 관리와 동일한 방식)
+  const [panel, setPanel] = useState<Company | null>(null);
+  const [panelForm, setPanelForm] = useState<Record<string, string>>({});
+  const [panelSaving, setPanelSaving] = useState(false);
+  useEscClose(!!panel, () => setPanel(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
+
+  const FIELDS: [string, string, string][] = [
+    ['업체명', 'companyName', 'text'],
+    ['대표자명', 'ceoName', 'text'],
+    ['사업자번호', 'businessNumber', 'text'],
+    ['과세유형', 'taxType', 'tax'],
+    ['담당자 연락처', 'managerContact', 'text'],
+    ['이메일', 'email', 'text'],
+    ['은행', 'bankName', 'text'],
+    ['계좌번호', 'accountNumber', 'text'],
+    ['사업 내용', 'businessDescription', 'area'],
+  ];
+
+  const openPanel = (c: Company) => {
+    setPanel(c);
+    setPanelForm({
+      companyName: c.companyName ?? '', ceoName: c.ceoName ?? '',
+      businessNumber: c.businessNumber ?? '', taxType: c.taxType ?? '',
+      managerContact: c.managerContact ?? '', email: c.email ?? '',
+      bankName: c.bankName ?? '', accountNumber: c.accountNumber ?? '',
+      businessDescription: c.businessDescription ?? '',
+    });
+  };
+
+  /** 값이 바뀐 항목만 저장 — 지급 이력 등 연결 데이터는 id 기준이라 영향받지 않는다 */
+  const savePanel = async () => {
+    if (!panel) return;
+    setPanelSaving(true);
+    try {
+      const cur: Record<string, string> = {
+        companyName: panel.companyName ?? '', ceoName: panel.ceoName ?? '',
+        businessNumber: panel.businessNumber ?? '', taxType: panel.taxType ?? '',
+        managerContact: panel.managerContact ?? '', email: panel.email ?? '',
+        bankName: panel.bankName ?? '', accountNumber: panel.accountNumber ?? '',
+        businessDescription: panel.businessDescription ?? '',
+      };
+      const patch: Record<string, string | undefined> = {};
+      for (const k of Object.keys(cur)) {
+        if ((panelForm[k] ?? '') !== cur[k]) patch[k] = panelForm[k] || undefined;
+      }
+      if (Object.keys(patch).length === 0) { toast.error('변경된 내용이 없습니다'); return; }
+      if ('companyName' in patch && !panelForm.companyName.trim()) { toast.error('업체명은 비울 수 없습니다'); return; }
+      await updateCompany(panel.id, patch as any);
+      setPanel((c) => (c ? { ...c, ...(patch as any) } : c));
+      toast.success('저장되었습니다');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '저장하지 못했습니다');
+    } finally { setPanelSaving(false); }
+  };
 
   const resetForm = () => { setForm(emptyForm); setOpen(false); };
 
@@ -74,39 +126,7 @@ export function CompaniesPage() {
     await deleteCompany(id);
   };
 
-  const startEdit = (c: Company) => {
-    setEditingId(c.id);
-    setEditForm({
-      companyName: c.companyName,
-      businessDescription: c.businessDescription ?? '',
-      ceoName: c.ceoName ?? '',
-      managerContact: c.managerContact ?? '',
-      bankName: c.bankName ?? '',
-      accountNumber: c.accountNumber ?? '',
-      businessNumber: c.businessNumber ?? '',
-      taxType: c.taxType ?? '과세',
-      email: c.email ?? '',
-    });
-  };
 
-  const cancelEdit = () => { setEditingId(null); setEditForm(emptyForm); };
-
-  const saveEdit = async (id: string) => {
-    setEditSaving(true);
-    await updateCompany(id, {
-      companyName: editForm.companyName,
-      businessDescription: editForm.businessDescription || undefined,
-      ceoName: editForm.ceoName || undefined,
-      managerContact: editForm.managerContact || undefined,
-      bankName: editForm.bankName || undefined,
-      accountNumber: editForm.accountNumber || undefined,
-      businessNumber: editForm.businessNumber || undefined,
-      taxType: editForm.taxType,
-      email: editForm.email || undefined,
-    });
-    setEditSaving(false);
-    cancelEdit();
-  };
 
   // 검색(업체명/대표자명/사업내용) 필터 + 가나다순 정렬
   const filtered = useMemo(() => {
@@ -193,44 +213,8 @@ export function CompaniesPage() {
             </tr></thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map((c, idx) => {
-                const isEditing = editingId === c.id;
-                if (isEditing) {
-                  return (
-                    <tr key={c.id} className="bg-blue-50/40">
-                      <td className="px-4 py-2 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
-                      <td className="px-3 py-2"><input className={editInputCls} value={editForm.companyName} onChange={(e) => setEditForm((s) => ({ ...s, companyName: e.target.value }))} /></td>
-                      <td className="px-3 py-2"><input className={editInputCls} value={editForm.businessDescription} onChange={(e) => setEditForm((s) => ({ ...s, businessDescription: e.target.value }))} /></td>
-                      <td className="px-3 py-2 space-y-1">
-                        <input placeholder="대표자명" className={editInputCls} value={editForm.ceoName} onChange={(e) => setEditForm((s) => ({ ...s, ceoName: e.target.value }))} />
-                        <input placeholder="담당자 연락처" className={editInputCls} value={editForm.managerContact} onChange={(e) => setEditForm((s) => ({ ...s, managerContact: e.target.value }))} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1">
-                          <input placeholder="은행" className={editInputCls} value={editForm.bankName} onChange={(e) => setEditForm((s) => ({ ...s, bankName: e.target.value }))} />
-                          <input placeholder="계좌번호" className={editInputCls} value={editForm.accountNumber} onChange={(e) => setEditForm((s) => ({ ...s, accountNumber: e.target.value }))} />
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <select className={editInputCls} value={editForm.taxType} onChange={(e) => setEditForm((s) => ({ ...s, taxType: e.target.value as CompanyForm['taxType'] }))}>
-                          <option value="과세">과세</option>
-                          <option value="면세">면세</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-1.5">
-                          <button onClick={() => saveEdit(c.id)} disabled={editSaving} className="text-green-600 hover:text-green-700" title="저장">
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button onClick={cancelEdit} className="text-slate-400 hover:text-slate-600" title="취소">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }
                 return (
-                  <tr key={c.id} className="hover:bg-slate-50">
+                  <tr key={c.id} className="cursor-pointer hover:bg-slate-50" onClick={() => openPanel(c)}>
                     <td className="px-4 py-3 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-3 font-semibold text-slate-800">{c.companyName}</td>
                     <td className="max-w-xs whitespace-pre-line px-3 py-3 text-xs text-slate-500">{c.businessDescription || '-'}</td>
@@ -246,11 +230,8 @@ export function CompaniesPage() {
                         {c.taxType || '-'}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1.5">
-                        <button onClick={() => startEdit(c)} className="text-slate-400 hover:text-blue-500" title="편집">
-                          <Pencil className="h-4 w-4" />
-                        </button>
                         <button onClick={() => handleDelete(c.id, c.companyName)} className="text-slate-400 hover:text-red-500" title="삭제(관리자 권한 필요)">
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -261,6 +242,56 @@ export function CompaniesPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {panel && (
+        <div className="modal-overlay fixed inset-0 z-50 flex justify-end bg-ink-950/40 backdrop-blur-[2px]" onClick={() => setPanel(null)}>
+          <div className="modal-slide h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-pop" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">{panel.companyName}</h3>
+              <button onClick={() => setPanel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-800">
+              업체 정보는 그룹웨어에서만 관리되며 외부로 동기화되지 않습니다.
+              <b> 과세유형</b>은 지급요청 시 부가세 기본값 판단에 사용되니 정확히 입력해주세요.
+            </p>
+            <div className="space-y-3">
+              {FIELDS.map(([label, key, kind]) => (
+                <label key={key} className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-slate-400">{label}</span>
+                  {kind === 'area' ? (
+                    <textarea rows={2} value={panelForm[key] ?? ''}
+                      onChange={(e) => setPanelForm((f) => ({ ...f, [key]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />
+                  ) : kind === 'tax' ? (
+                    <select value={panelForm[key] ?? ''}
+                      onChange={(e) => setPanelForm((f) => ({ ...f, [key]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400">
+                      <option value="">미지정</option>
+                      <option value="과세">과세</option>
+                      <option value="면세">면세</option>
+                    </select>
+                  ) : (
+                    <input value={panelForm[key] ?? ''}
+                      onChange={(e) => setPanelForm((f) => ({ ...f, [key]: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />
+                  )}
+                </label>
+              ))}
+              {!panelForm.bankName && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">계좌가 등록되지 않았습니다 — 위 은행·계좌번호를 입력해주세요.</p>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={() => setPanel(null)}
+                  className="rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100">닫기</button>
+                <button onClick={savePanel} disabled={panelSaving}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+                  {panelSaving ? '저장 중…' : '저장'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </Card>
