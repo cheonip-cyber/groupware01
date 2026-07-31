@@ -61,19 +61,55 @@ export function downloadTransferSheet(requests: PaymentRequest[], label: string)
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }
 
-/** 사업소득지급내역: 강사(개인) 원천세 신고용 — '지급완료' + 지급월 일치 건 대상 */
+/**
+ * 사업소득자료 — 국세청 신고 프로그램 업로드 양식 (2026-07-31, 첨부 양식 기준)
+ * 순번 / 귀속년월 / 지급년월일 / 소득자명 / 주민등록번호 / 기본주소 / 상세주소 /
+ * 소득구분 / 영수일자 / 지급총액 / 세율(%) / 소득세 / 지방소득세 / 내.외국인구분 / 연말정산
+ *
+ * 고정 규칙(업로드 양식 요구사항):
+ *  - 귀속년월: 지급월을 YYYYMM 형식으로
+ *  - 주민등록번호: 하이픈이 없으면 6자리 뒤에 넣어 표기
+ *  - 상세주소·영수일자·연말정산: 공란
+ *  - 소득구분: '학원강사' 고정
+ *  - 세율: 0.033 고정 (양식이 비율 값을 요구 — 화면 표기 3.3%와 다름)
+ *  - 내.외국인구분: 0 고정
+ */
 export function downloadBusinessIncomeSheet(requests: PaymentRequest[], month: string) {
-  const headers = ['귀속년월', '지급월', '지급일자', '소득자명', '주민등록번호', '주소', '지급총액', '세율(%)', '소득세', '지방소득세', '실지급액', '프로젝트'];
+  const headers = ['', '귀속년월', '지급년월일', '소득자명', '주민등록번호', '기본주소', '상세주소',
+    '소득구분', '영수일자', '지급총액', '세율(%)', '소득세', '지방소득세', '내.외국인구분', '연말정산'];
+
+  /** 주민등록번호 표기: 하이픈이 없으면 앞 6자리 뒤에 삽입 */
+  const formatRrn = (v?: string) => {
+    const raw = (v ?? '').trim();
+    if (!raw) return '';
+    if (raw.includes('-')) return raw;
+    const d = raw.replace(/[^0-9]/g, '');
+    return d.length > 6 ? `${d.slice(0, 6)}-${d.slice(6)}` : d;
+  };
+
   const rows = requests
     .filter((r) => r.payeeType === '강사')
-    .map((r) => {
+    .map((r, idx) => {
       const w = calcWithholdingFor(r);
       return [
-        month, r.paidMonth ?? month, r.paidDate ?? '', r.payeeName, r.residentNumber ?? '', r.address ?? '',
-        r.amount, w.rate, w.incomeTax, w.residentTax, w.netAmount, r.projectName ?? '',
+        idx + 1,
+        (r.paidMonth ?? month).replace('-', ''),   // 귀속년월 = 지급월(YYYYMM)
+        r.paidDate ?? '',                          // 지급년월일
+        r.payeeName,
+        formatRrn(r.residentNumber),
+        r.address ?? '',                           // 기본주소
+        '',                                        // 상세주소 — 공란
+        '학원강사',                                 // 소득구분 — 고정
+        '',                                        // 영수일자 — 공란
+        r.amount,
+        '0.033',                                   // 세율 — 고정
+        w.incomeTax,
+        w.residentTax,
+        '0',                                       // 내.외국인구분 — 고정
+        '',                                        // 연말정산 — 공란
       ];
     });
-  downloadCsv(`사업소득지급내역_${month}.csv`, headers, rows);
+  downloadCsv(`사업소득자료_${month}.csv`, headers, rows);
 }
 
 export interface SgaRow {
