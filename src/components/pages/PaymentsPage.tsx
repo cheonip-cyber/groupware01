@@ -472,7 +472,16 @@ export function PaymentsPage() {
                                 className={`rounded border bg-transparent px-1.5 py-0.5 text-xs ${overdue ? 'border-red-200 font-semibold text-red-600' : r.scheduledMonth ? 'border-transparent hover:border-slate-200' : 'border-amber-200 text-amber-600'}`} />
                               {overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
                             </span>
-                          : tab === 'done' ? (r.paidMonth ?? '-')
+                          : tab === 'done'
+                            ? <span onClick={(e) => e.stopPropagation()} className="flex flex-col items-start gap-0.5">
+                                <span>{r.paidMonth ?? '-'}</span>
+                                {/* 실제 지급일 — 원천세 신고자료에 그대로 들어가므로 여기서 바로 고칠 수 있게 한다.
+                                    기본값은 지급완료를 실행한 날이고, 월중 개별 지급 건만 바꾸면 된다. */}
+                                <input type="date" value={r.paidDate ?? ''}
+                                  onChange={(e) => updatePaymentRequest(r.id, { paidDate: e.target.value || undefined })}
+                                  title="실제 지급(이체)일 — 사업소득 신고자료에 사용됩니다"
+                                  className="rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] text-slate-500 hover:border-slate-200 focus:border-blue-400 focus:outline-none" />
+                              </span>
                           : r.projectStartDate
                             ? <span className="flex items-center gap-1">{r.projectStartDate}{overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />기준1</span>}</span>
                             : <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-600" title="교육일정 미확인 — 같은 프로젝트 지급대상의 50% 이상이 지급완료라 누락 의심으로 표시됨">일정 미확인·기준2</span>}

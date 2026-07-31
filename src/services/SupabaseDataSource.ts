@@ -595,6 +595,7 @@ class SupabaseDataSource implements DataSource {
         vendorTaxInvoiceReceived: !!r.vendor_tax_invoice_received,
         vendorTaxInvoiceDate: r.vendor_tax_invoice_date ?? undefined,
         paidMonth: r.paid_month ?? undefined,
+        paidDate: r.paid_date ?? undefined,
         createdMonth: r.created_at ? String(r.created_at).slice(0, 7) : undefined,
       } as PaymentRequest;
     });
@@ -617,6 +618,9 @@ class SupabaseDataSource implements DataSource {
       // 지급월: 사용자가 선택한 값 우선(소급 처리 지원), 미지정 시 현재 월
       if (patch.status === '지급완료') {
         dbPatch.paid_month = patch.paidMonth ?? new Date().toISOString().slice(0, 7);
+        // 실제 지급일자 — 지정값이 없으면 '지급완료를 실행한 날'을 기본으로 기록한다(일괄 처리도 동일).
+        // 월말 일괄이 대부분이지만 월중 개별 지급 건도 실제 날짜가 남아야 신고 자료를 채울 수 있다.
+        dbPatch.paid_date = patch.paidDate ?? new Date().toISOString().slice(0, 10);
         // actual_payment_amount에는 원천징수 '전' 총액(지급총액)을 저장한다. (2026-07-28 정정)
         // 이 컬럼은 두 곳에서 총액으로 소비된다:
         //   ① 사업소득지급내역(원천세 신고용) — 이 값을 지급총액으로 보고 세액을 다시 계산한다.
@@ -633,6 +637,7 @@ class SupabaseDataSource implements DataSource {
       // 지급 리스트·집계에서 이미 지급한 것처럼 보일 수 있다.
       if (patch.status !== '지급완료') {
         dbPatch.paid_month = null;
+        dbPatch.paid_date = null;
         dbPatch.actual_payment_amount = 0;
       }
     }
@@ -666,6 +671,7 @@ class SupabaseDataSource implements DataSource {
     }
     // 지급월 예약 (해당 월 말일 일괄 지급 배치 대상)
     if ('scheduledMonth' in patch) dbPatch.payment_scheduled_month = patch.scheduledMonth ?? null;
+    if ('paidDate' in patch) dbPatch.paid_date = patch.paidDate ?? null;
     if (patch.vendorTaxInvoiceReceived !== undefined) dbPatch.vendor_tax_invoice_received = patch.vendorTaxInvoiceReceived;
     if ('vendorTaxInvoiceDate' in patch) dbPatch.vendor_tax_invoice_date = patch.vendorTaxInvoiceDate ?? null;
 

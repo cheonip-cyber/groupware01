@@ -63,13 +63,13 @@ export function downloadTransferSheet(requests: PaymentRequest[], label: string)
 
 /** 사업소득지급내역: 강사(개인) 원천세 신고용 — '지급완료' + 지급월 일치 건 대상 */
 export function downloadBusinessIncomeSheet(requests: PaymentRequest[], month: string) {
-  const headers = ['귀속년월', '지급월', '소득자명', '주민등록번호', '주소', '지급총액', '세율(%)', '소득세', '지방소득세', '실지급액', '프로젝트'];
+  const headers = ['귀속년월', '지급월', '지급일자', '소득자명', '주민등록번호', '주소', '지급총액', '세율(%)', '소득세', '지방소득세', '실지급액', '프로젝트'];
   const rows = requests
     .filter((r) => r.payeeType === '강사')
     .map((r) => {
       const w = calcWithholdingFor(r);
       return [
-        month, r.paidMonth ?? month, r.payeeName, r.residentNumber ?? '', r.address ?? '',
+        month, r.paidMonth ?? month, r.paidDate ?? '', r.payeeName, r.residentNumber ?? '', r.address ?? '',
         r.amount, w.rate, w.incomeTax, w.residentTax, w.netAmount, r.projectName ?? '',
       ];
     });
