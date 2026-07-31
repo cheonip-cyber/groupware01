@@ -52,7 +52,9 @@ export function AdminCardPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [month, setMonth] = useState(''); // YYYY-MM ('' = 전체)
+  // 기본 조회 범위는 '지금 이 시점의 월' — 과거 내역까지 한 번에 쌓이면 확인이 어렵다.
+  // 상단 월 선택에서 전체나 다른 월을 고르면 그대로 적용된다.
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM ('' = 전체)
 
   const load = async () => {
     setLoading(true);
