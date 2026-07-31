@@ -41,6 +41,17 @@ export function PaymentsPage() {
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');
   const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>('전체');
+  // 지급 완료 탭은 과거 월이 모두 쌓여 목록이 과도해지므로, 기본을 '지금 이 시점의 월'로 좁힌다.
+  // 검색 영역에서 전체나 다른 월을 고르면 그대로 적용된다(선택은 유지).
+  useEffect(() => {
+    if (tab === 'done') {
+      setYear(new Date().getFullYear().toString());
+      setMonth(new Date().toISOString().slice(5, 7));
+    } else {
+      setYear('전체');
+      setMonth('전체');
+    }
+  }, [tab]);
   const [payMonth, setPayMonth] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
@@ -288,9 +299,13 @@ export function PaymentsPage() {
             <button onClick={async () => {
                 const pw = await dialog.prompt('주민등록번호가 포함된 자료입니다.\n다운로드 비밀번호를 입력하세요.', { title: '보안 확인', tone: 'warning', mask: true, placeholder: '비밀번호' });
                 if (pw !== '0511') { if (pw !== null) await dialog.alert('비밀번호가 올바르지 않습니다.'); return; }
-                downloadBusinessIncomeSheet(doneAll.filter((r) => r.paidMonth === nowMonth), nowMonth);
+                // 조회 조건(연·월)이 지정돼 있으면 그 월, 아니면 실행 시점의 현재월
+                const m = year !== '전체' && month !== '전체' ? `${year}-${month}` : nowMonth;
+                const list = doneAll.filter((r) => r.paidMonth === m);
+                if (list.length === 0) { await dialog.alert(`${m} 지급완료 내역이 없습니다.`, { tone: 'warning' }); return; }
+                downloadBusinessIncomeSheet(list, m);
               }}
-              title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
+              title="조회 중인 월의 지급완료(강사) 사업소득 지급내역 다운로드"
               className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
             <button onClick={async () => {
               // 화면에 보이는 목록을 그대로 받는다(연·월 필터 동일 적용).
