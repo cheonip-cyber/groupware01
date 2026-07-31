@@ -254,7 +254,7 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
               </select>
 
               {payeeType === 'etc' ? (
-                <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="지급대상명 직접 입력"
+                <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="카드 또는 지급대상이 아닌 경우에만 '기타' 선택"
                   className={`${inputCls} col-span-2`} />
               ) : (
                 <PayeePicker
@@ -395,7 +395,7 @@ function BudgetItemEditModal({ row, instructors, companies, onClose, onSave }: {
           </select>
 
           {payeeType === 'etc' ? (
-            <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="지급대상명 직접 입력" className={`${inputCls} col-span-2`} />
+            <input value={payeeName} onChange={(e) => setPayeeName(e.target.value)} placeholder="카드 또는 지급대상이 아닌 경우에만 '기타' 선택" className={`${inputCls} col-span-2`} />
           ) : (
             <div className="col-span-2">
               <PayeePicker
