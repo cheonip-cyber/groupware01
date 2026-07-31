@@ -43,3 +43,15 @@ export function calcWithholdingFor(req: { payeeType?: string; amount: number; ta
   const totalTax = incomeTax + residentTax;
   return { rate: req.taxMode === 'rate88' ? 8.8 : 3.3, incomeTax, residentTax, totalTax, netAmount: gross - totalTax };
 }
+
+/**
+ * 신고자료용 원천징수 계산 — 지급처 유형을 보지 않고 세율 설정(taxMode)만으로 계산한다. (2026-07-31)
+ * 사업소득지급내역은 '세금계산서를 받지 않은 지급건' 전부가 대상이라,
+ * 업체로 등록된 개인(예: 강사가 업체 명의로 등록된 경우)도 포함된다.
+ * calcWithholdingFor는 이체금액 산출에도 쓰이므로 건드리지 않고 별도로 둔다.
+ */
+export function calcWithholdingForReport(
+  req: { amount: number; taxMode?: string; manualIncomeTax?: number; manualResidentTax?: number },
+): Withholding {
+  return calcWithholdingFor({ ...req, payeeType: '강사' });
+}
