@@ -293,9 +293,14 @@ export function PaymentsPage() {
               title="이번 달 지급완료(강사) 사업소득 지급내역 다운로드"
               className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-700">사업소득</button>
             <button onClick={async () => {
-              // 화면에 보이는 목록과 동일한 기준으로 받는다.
-              // 이전에는 pendingAll 전체를 받아 7월을 선택해도 8월분까지 섞여 나왔다.
-              const targets = rows.filter((r) => r.status === '지급요청');
+              // 화면에 보이는 목록을 그대로 받는다(연·월 필터 동일 적용).
+              // 지급 대기 탭에서는 지급요청 건, 지급 완료 탭에서는 완료 건(재발행용)이 대상이다.
+              // 이전에는 '지급요청'으로만 걸러 지급 완료 탭에서 0건이 받아졌다.
+              const targets = rows.filter((r) => r.status === '지급요청' || r.status === '지급완료');
+              if (targets.length === 0) {
+                await dialog.alert('현재 조회 조건에 받을 내역이 없습니다.\n연도·월 필터를 확인해주세요.', { tone: 'warning' });
+                return;
+              }
               const sum = transferSummary(targets);
               if (sum.unconfirmed.length > 0) {
                 await dialog.alert(`부가세 구분이 확인되지 않은 업체 건 ${sum.unconfirmed.length}건이 있습니다.\n\n` +
@@ -305,9 +310,12 @@ export function PaymentsPage() {
                 return;
               }
               if (!await dialog.confirm(`자금이체 양식을 받습니다.\n\n건수: ${sum.count}건\n공급가액: ${sum.supply.toLocaleString()}원\n부가세: ${sum.vat.toLocaleString()}원\n─────────────\n이체 총액: ${sum.total.toLocaleString()}원\n\n진행할까요?`)) return;
-              downloadTransferSheet(targets, nowMonth);
+              // 파일명은 실제 조회 조건을 따른다 — 항상 현재월이 붙어 6월 자료가 7월 파일로 저장되던 문제
+              const label = year !== '전체' && month !== '전체' ? `${year}-${month}`
+                : year !== '전체' ? year : nowMonth;
+              downloadTransferSheet(targets, label);
             }}
-              title="현재 조회 조건(연·월)에 해당하는 지급요청 건만 다운로드"
+              title="현재 조회 조건(연·월)에 보이는 목록으로 자금이체 양식 다운로드"
               className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700">자금이체</button>
           </div>
         </div>
