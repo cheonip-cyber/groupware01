@@ -41,18 +41,6 @@ export function PaymentsPage() {
   const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
   const [month, setMonth] = useState('전체');
   const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>('전체');
-  // 지급 완료 탭은 과거 월이 모두 쌓여 목록이 과도해지므로, 기본을 '지금 이 시점의 월'로 좁힌다.
-  // 검색 영역에서 전체나 다른 월을 고르면 그대로 적용된다(선택은 유지).
-  useEffect(() => {
-    if (tab === 'done') {
-      setYear(new Date().getFullYear().toString());
-      setMonth(new Date().toISOString().slice(5, 7));
-    } else {
-      setYear('전체');
-      setMonth('전체');
-    }
-  }, [tab]);
-  const [payMonth, setPayMonth] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   // 월말 배치 준비용 일괄 예약 지급월 — 반드시 조기 반환(로딩)보다 위에 선언 (React 훅 규칙, 오류 #300 방지)
@@ -121,13 +109,20 @@ export function PaymentsPage() {
   // 탭별 기준일: 대기=지급예정일(dueDate), 완료=지급월(paidMonth), 대상=교육일정(projectStartDate)
   const baseOf = (r: PaymentRequest) => (tab === 'pending' ? r.dueDate ?? '' : tab === 'done' ? r.paidMonth ?? '' : r.projectStartDate ?? '');
 
-  // 완료 탭 진입 시 데이터가 있는 최근 연도 자동 선택 (구 시스템 개선 이력 이식)
+  // 탭 전환 시 기본 조회 범위 설정 — 기본값을 정하는 곳은 여기 한 군데뿐이다.
+  // (예전에 같은 [tab] 효과가 둘로 나뉘어, 앞에서 현재월을 넣어도 뒤에서 '월 전체'로 덮어쓰던 문제)
+  // 완료 탭은 과거 지급분이 모두 쌓여 목록이 과도해지므로 '지금 이 시점의 연·월'을 기본으로 한다.
+  // 해당 월에 지급 내역이 없으면 데이터가 있는 최근 연도로 대신 맞춘다(빈 화면 방지).
   useEffect(() => {
     setSelected(new Set());
     if (tab === 'done') {
+      const now = new Date();
+      const y = String(now.getFullYear());
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const hasThisMonth = doneAll.some((r) => (r.paidMonth ?? '') === `${y}-${m}`);
+      if (hasThisMonth) { setYear(y); setMonth(m); return; }
       const ys = [...new Set(doneAll.map((r) => (r.paidMonth ?? '').slice(0, 4)).filter(Boolean))].sort().reverse();
-      setYear(ys[0] ?? '전체');
-      setMonth('전체');
+      setYear(ys[0] ?? '전체'); setMonth('전체');
     } else {
       setYear('전체'); setMonth('전체');
     }
@@ -484,7 +479,8 @@ export function PaymentsPage() {
                       </td>
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {r.status === '지급요청' && (
-                          <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: payMonth[r.id] ?? nowMonth })}
+                          <button onClick={() => updatePaymentRequest(r.id, { status: '지급완료', paidMonth: r.scheduledMonth ?? nowMonth })}
+                            title={`지급월 ${r.scheduledMonth ?? nowMonth} 로 처리됩니다`}
                             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">지급완료</button>
                         )}
                         {r.status === '지급완료' && (
