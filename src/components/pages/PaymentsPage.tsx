@@ -393,22 +393,18 @@ export function PaymentsPage() {
                     <input type="checkbox" checked={selected.size > 0 && selected.size >= selectableIds.length} onChange={toggleAll} className="h-4 w-4" title="전체 선택" />
                   )}
                 </th>
-                <th className="px-3 py-2.5 font-medium">No.</th>
                 <th className="px-3 py-2.5 font-medium">지급처</th>
-                <th className="px-3 py-2.5 font-medium">유형</th>
                 <th className="px-3 py-2.5 font-medium">프로젝트</th>
                 <th className="px-2 py-2.5 text-center font-medium" title="프로젝트 고객 입금(정산) 여부">정산</th>
                 <th className="px-2 py-2.5 text-center font-medium" title="세금계산서 발행 여부">세발</th>
-                <th className="px-3 py-2.5 text-right font-medium">금액(세전)</th>
-                <th className="px-3 py-2.5 text-right font-medium">세금 내역</th>
-                <th className="px-3 py-2.5 text-right font-medium">실지급액</th>
-                <th className="px-3 py-2.5 font-medium">{tab === 'pending' ? '지급월' : tab === 'done' ? '지급월' : '교육일정'}</th>
+                <th className="px-3 py-2.5 text-right font-medium">금액</th>
+                <th className="pl-1 pr-3 py-2.5 font-medium">{tab === 'target' ? '교육일정' : '지급일'}</th>
                 <th className="px-3 py-2.5 font-medium">처리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
                 {monthGroups.map((g) => [
                   <tr key={`h-${g.key}`} className="bg-slate-50/80">
-                    <td colSpan={12} className="px-4 py-1.5 text-xs font-bold text-slate-500">
+                    <td colSpan={8} className="px-4 py-1.5 text-xs font-bold text-slate-500">
                       {g.key === '' ? '지급월 미지정' : `${g.key.replace('-', '년 ')}월`}{g.key === nowMonth ? ' · 이번 달' : ''}
                       <span className="ml-2 font-normal text-slate-400">{g.items.length}건 · 이체액 {g.items.reduce((t, r) => t + netOf(r), 0).toLocaleString('ko-KR')}원</span>
                     </td>
@@ -423,13 +419,22 @@ export function PaymentsPage() {
                       <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                         {canSelect && <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="h-4 w-4" />}
                       </td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-400">{idx + 1}</td>
-                      <td className="px-3 py-3 font-medium text-slate-800">
-                        {r.payeeName}
-                        {!r.bankName && <span className="ml-1.5 text-[11px] text-red-500">계좌없음</span>}
-                        {r.infoConfirmed && <ShieldCheck className="ml-1.5 inline h-3.5 w-3.5 text-emerald-500" />}
+                      {/* 지급처 + 유형 뱃지 — 유형을 별도 좁은 칸에 두면 '업/체'처럼 세로로 잘렸다 */}
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-800">
+                          {r.payeeName}
+                          {r.infoConfirmed && <ShieldCheck className="ml-1.5 inline h-3.5 w-3.5 text-emerald-500" />}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            r.payeeType === '강사' ? 'bg-violet-50 text-violet-700'
+                            : r.payeeType === '업체' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{r.payeeType}</span>
+                          {r.payeeType === '업체' && r.vatMode === 'exempt' && (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">면세</span>
+                          )}
+                          {!r.bankName && <span className="text-[10px] font-semibold text-red-500">계좌없음</span>}
+                        </div>
                       </td>
-                      <td className="px-3 py-3 text-slate-500">{r.payeeType}</td>
                       <td className="max-w-[200px] truncate px-3 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
                         <Link to={`/projects/${r.projectId}`} className="text-slate-500 hover:text-blue-600 hover:underline">{r.projectName}</Link>
                       </td>
@@ -443,29 +448,23 @@ export function PaymentsPage() {
                             onUndo={() => updatePaymentRequest(r.id, { vendorTaxInvoiceReceived: false, vendorTaxInvoiceDate: undefined })} />
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right text-slate-700"><MoneyText value={r.amount} /></td>
-                      {/* 세금 내역: 강사는 원천세(차감), 업체는 부가세(가산) — 세금은 유형과 무관하게 이 컬럼에 모은다 */}
-                      <td className="px-3 py-3 text-right text-xs">
-                        {r.payeeType === '업체' ? (() => {
-                          const vb = calcVat(r.amount, r.vatMode);
-                          if (!vb.confirmed) {
-                            return <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">부가세 미확인</span>;
-                          }
-                          return (
-                            <span className="inline-flex flex-col items-end">
-                              {vb.vat > 0
-                                ? <span className="text-blue-600">+{vb.vat.toLocaleString('ko-KR')}</span>
-                                : <span className="text-slate-300">-</span>}
-                              <span className="text-[10px] text-slate-400">{VAT_MODE_LABEL[vb.mode!]}</span>
-                            </span>
-                          );
-                        })() : (() => { const w = calcWithholdingFor(r);
-                          return w.totalTax > 0
-                            ? <span className="text-red-500">-{w.incomeTax.toLocaleString('ko-KR')} / -{w.residentTax.toLocaleString('ko-KR')}</span>
-                            : <span className="text-slate-300">-</span>; })()}
+                      {/* 금액: 실지급(이체) 금액을 크게, 세전 금액과 세금은 아래에 작게 —
+                          세 칸으로 흩어져 있어 총액 파악에 눈이 좌우로 오가던 문제 해소 */}
+                      <td className="px-3 py-3 text-right">
+                        <div className="font-semibold text-slate-800"><MoneyText value={netOf(r)} /></div>
+                        <div className="mt-0.5 text-[11px] text-slate-400">
+                          {r.amount.toLocaleString('ko-KR')}
+                          {r.payeeType === '업체' ? (() => {
+                            const vb = calcVat(r.amount, r.vatMode);
+                            if (!vb.confirmed) return <span className="ml-1 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-semibold text-amber-700">부가세 미확인</span>;
+                            return vb.vat > 0 ? <span className="ml-1 text-blue-600">+{vb.vat.toLocaleString('ko-KR')}</span> : null;
+                          })() : (() => {
+                            const w = calcWithholdingFor(r);
+                            return w.totalTax > 0 ? <span className="ml-1 text-red-500">−{w.totalTax.toLocaleString('ko-KR')}</span> : null;
+                          })()}
+                        </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold text-slate-800"><MoneyText value={netOf(r)} /></td>
-                      <td className={`px-3 py-3 ${overdue ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
+                      <td className={`pl-1 pr-3 py-3 ${overdue ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
                         {tab === 'pending'
                           ? <span onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
                               <MonthPicker value={r.scheduledMonth ?? nowMonth} onChange={(ym) => updatePaymentRequest(r.id, { scheduledMonth: ym })}
@@ -473,14 +472,12 @@ export function PaymentsPage() {
                               {overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />연체</span>}
                             </span>
                           : tab === 'done'
-                            ? <span onClick={(e) => e.stopPropagation()} className="flex flex-col items-start gap-0.5">
-                                <span>{r.paidMonth ?? '-'}</span>
-                                {/* 실제 지급일 — 원천세 신고자료에 그대로 들어가므로 여기서 바로 고칠 수 있게 한다.
-                                    기본값은 지급완료를 실행한 날이고, 월중 개별 지급 건만 바꾸면 된다. */}
+                            ? <span onClick={(e) => e.stopPropagation()} className="whitespace-nowrap">
+                                {/* 실제 지급일 한 줄 표기(26-07-31) — 원천세 신고자료에 그대로 들어가므로 여기서 바로 고친다 */}
                                 <input type="date" value={r.paidDate ?? ''}
                                   onChange={(e) => updatePaymentRequest(r.id, { paidDate: e.target.value || undefined })}
-                                  title="실제 지급(이체)일 — 사업소득 신고자료에 사용됩니다"
-                                  className="rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] text-slate-500 hover:border-slate-200 focus:border-blue-400 focus:outline-none" />
+                                  title={`실제 지급(이체)일 — 사업소득 신고자료에 사용됩니다 (지급월 ${r.paidMonth ?? '-'})`}
+                                  className="w-[112px] rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-slate-600 hover:border-slate-200 focus:border-blue-400 focus:outline-none" />
                               </span>
                           : r.projectStartDate
                             ? <span className="flex items-center gap-1">{r.projectStartDate}{overdue && <span className="inline-flex items-center gap-0.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600"><AlertTriangle className="h-3 w-3" />기준1</span>}</span>
