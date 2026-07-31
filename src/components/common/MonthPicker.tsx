@@ -12,11 +12,17 @@ export function MonthPicker({ value, onChange, year, className }: {
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const y = year ?? (value ? Number(value.slice(0, 4)) : new Date().getFullYear());
+  const thisYear = new Date().getFullYear();
+  const valueYear = value ? Number(value.slice(0, 4)) : thisYear;
+  // 연도 고정(year)이 넘어오지 않으면 드롭다운에서 연도도 고를 수 있다.
+  // 기본값은 현재 연도이며, 연말·연초에 다음/이전 연도로 예약하는 경우를 위해 앞뒤 1년을 함께 제공한다.
+  const [pickYear, setPickYear] = useState(year ?? valueYear);
+  useEffect(() => { setPickYear(year ?? valueYear); }, [year, valueYear]);
+  const y = year ?? pickYear;
   const currentMonth = value ? Number(value.slice(5, 7)) : new Date().getMonth() + 1;
 
   const MENU_H = 224; // max-h-56
-  const MENU_W = 64;  // w-16
+  const MENU_W = 96;  // w-24 (연도 전환 줄 포함)
 
   /** 버튼 기준 위치 계산 — 아래 공간이 모자라면 위로 띄우고, 좌우도 화면 안으로 보정한다.
    *  (표 하단 행에서 목록이 화면 밖으로 나가 선택할 수 없던 문제) */
@@ -62,16 +68,25 @@ export function MonthPicker({ value, onChange, year, className }: {
     <>
       <button ref={btnRef} type="button" onClick={(e) => { e.stopPropagation(); open ? setOpen(false) : openMenu(); }}
         className={className ?? 'rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:border-blue-300'}>
-        {currentMonth}월
+        {valueYear !== thisYear ? `${valueYear}. ${currentMonth}월` : `${currentMonth}월`}
       </button>
       {open && createPortal(
         <div ref={menuRef} style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000 }}
-          className="flex max-h-56 w-16 flex-col overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+          className="flex max-h-56 w-24 flex-col overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
           onClick={(e) => e.stopPropagation()}>
+          {year === undefined && (
+            <div className="mb-1 flex items-center justify-between border-b border-slate-100 px-1.5 pb-1">
+              <button type="button" onClick={() => setPickYear((v) => v - 1)}
+                className="rounded px-1.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700">‹</button>
+              <span className="text-[11px] font-bold text-slate-700">{y}년</span>
+              <button type="button" onClick={() => setPickYear((v) => v + 1)}
+                className="rounded px-1.5 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700">›</button>
+            </div>
+          )}
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <button key={m} type="button"
               onClick={() => { onChange(`${y}-${String(m).padStart(2, '0')}`); setOpen(false); }}
-              className={`px-3 py-1.5 text-center text-xs hover:bg-blue-50 ${m === currentMonth ? 'bg-blue-50 font-bold text-blue-600' : 'text-slate-600'}`}>
+              className={`px-3 py-1.5 text-center text-xs hover:bg-blue-50 ${m === currentMonth && y === valueYear ? 'bg-blue-50 font-bold text-blue-600' : 'text-slate-600'}`}>
               {m}월
             </button>
           ))}
