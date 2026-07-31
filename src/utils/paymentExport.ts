@@ -2,7 +2,7 @@
 // 구 그룹웨어(samsotta_management)의 '자금이체양식'/'사업소득지급내역' CSV 양식을 이식하고,
 // 판관비 내역·통합 이체(프로젝트 지급 + 판관비) 양식을 추가했다. 민감정보 포함이므로 관리자 전용 화면에서만 호출할 것.
 import type { PaymentRequest } from '../types';
-import { calcWithholdingFor, calcWithholdingForReport } from './withholding';
+import { calcWithholdingFor } from './withholding';
 import { transferAmountFor, needsVatConfirm, calcVat } from './vat';
 
 const esc = (v: unknown) => {
@@ -61,21 +61,13 @@ export function downloadTransferSheet(requests: PaymentRequest[], label: string)
   downloadCsv(`자금이체양식_${label}.csv`, headers, rows);
 }
 
-/**
- * 사업소득지급내역: 원천세 신고용 — '지급완료' + 지급월 일치 건 대상 (2026-07-31 기준 변경)
- * 대상은 '세금계산서를 받지 않은 지급건' 전부다.
- * 세금계산서를 받았다면 매입(부가세) 거래이므로 사업소득 원천징수 대상이 아니고,
- * 받지 않았다면 개인·프리랜서 인적용역 대가로 보아 신고 대상이 된다.
- * 이전에는 지급처 유형이 '강사'인 건만 뽑아, 업체로 등록된 개인(예: 정우성·김동휘)이나
- * 계산서 미수취 업체 건이 신고 자료에서 누락됐다.
- */
+/** 사업소득지급내역: 강사(개인) 원천세 신고용 — '지급완료' + 지급월 일치 건 대상 */
 export function downloadBusinessIncomeSheet(requests: PaymentRequest[], month: string) {
   const headers = ['귀속년월', '지급월', '소득자명', '주민등록번호', '주소', '지급총액', '세율(%)', '소득세', '지방소득세', '실지급액', '프로젝트'];
   const rows = requests
-    .filter((r) => !r.vendorTaxInvoiceReceived)
+    .filter((r) => r.payeeType === '강사')
     .map((r) => {
-      // 유형이 아닌 세율 설정 기준으로 계산 — 업체로 등록된 개인도 신고 대상이기 때문
-      const w = calcWithholdingForReport(r);
+      const w = calcWithholdingFor(r);
       return [
         month, r.paidMonth ?? month, r.payeeName, r.residentNumber ?? '', r.address ?? '',
         r.amount, w.rate, w.incomeTax, w.residentTax, w.netAmount, r.projectName ?? '',
