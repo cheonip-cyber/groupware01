@@ -56,10 +56,24 @@ export function PaymentsPage() {
   const [busy, setBusy] = useState(false);
 
   // 취소/보류(병합됨) 프로젝트에 남은 지급항목은 지급관리 전 탭에서 제외 — 근원(transferable)에서 한 번만 필터링
-  const transferable = useMemo(
-    () => activePayments(paymentRequests, projects).filter((r) => !r.isCardPayment && r.isPayable !== false),
-    [paymentRequests, projects],
-  );
+  const transferable = useMemo(() => {
+    // 지급요청 목록에는 프로젝트 값이 복제돼 있어(정산 여부·세금계산서 등) 프로젝트를 수정해도
+    // 새로고침 전까지 옛 값이 남는 문제가 있었다. 복제본에 의존하지 않고 현재 프로젝트에서 직접 읽는다.
+    const byId = new Map(projects.map((p) => [p.id, p]));
+    return activePayments(paymentRequests, projects)
+      .filter((r) => !r.isCardPayment && r.isPayable !== false)
+      .map((r) => {
+        const p = byId.get(r.projectId);
+        return p ? {
+          ...r,
+          projectName: p.projectName ?? r.projectName,
+          clientName: p.clientName ?? r.clientName,
+          projectStartDate: p.startDate ?? r.projectStartDate,
+          projectPaymentReceived: p.collectionCompleted,
+          projectTaxInvoiceIssued: p.taxInvoiceIssued,
+        } : r;
+      });
+  }, [paymentRequests, projects]);
   // 지급관리에는 '지급요청'된 항목만 표시 — 요청 전 건은 각 프로젝트의 지급 탭에서 검토·요청한다 (혼재로 복잡해 보이던 문제 해소)
   const pendingAll = useMemo(() => transferable.filter((r) => r.status === '지급요청'), [transferable]);
   const doneAll = useMemo(() => transferable.filter((r) => r.status === '지급완료'), [transferable]);
