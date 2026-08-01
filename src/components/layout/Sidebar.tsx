@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Receipt, Wallet, CreditCard,
-  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink, Zap,
+  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink, Zap, UserPlus,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -36,6 +36,7 @@ const adminItems = [
   { to: '/admin/overview', label: '경영 현황', icon: Landmark },
   { to: '/admin/card', label: '카드사용 관리', icon: CreditCard },
   { to: '/admin/sga', label: '판관비 관리', icon: PiggyBank },
+  { to: '/admin/users', label: '계정 관리', icon: UserPlus },
 ];
 
 // 외부 URL을 별도 팝업 창으로 오픈 (개인 카드사용 등록 등 — 그룹웨어 내부 라우팅이 아닌 외부 앱 연동)

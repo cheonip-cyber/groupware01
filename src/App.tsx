@@ -17,6 +17,7 @@ import { SettingsPage } from './components/pages/SettingsPage';
 import { AdminOverviewPage } from './components/admin/AdminOverviewPage';
 import { AdminCardPage } from './components/admin/AdminCardPage';
 import { AdminSgaPage } from './components/admin/AdminSgaPage';
+import { AdminUsersPage } from './components/admin/AdminUsersPage';
 import { RequireAdmin } from './auth/RequireAdmin';
 import { ToastProvider } from './components/common/toast';
 import { DialogProvider } from './components/common/dialog';
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/admin/overview" element={<RequireAdmin><AdminOverviewPage /></RequireAdmin>} />
           <Route path="/admin/card" element={<RequireAdmin><AdminCardPage /></RequireAdmin>} />
           <Route path="/admin/sga" element={<RequireAdmin><AdminSgaPage /></RequireAdmin>} />
+          <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </AppLayout>
