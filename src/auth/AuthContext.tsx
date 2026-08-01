@@ -83,11 +83,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!trimmed.endsWith(ALLOWED_DOMAIN)) {
       return { error: `회사 이메일(${ALLOWED_DOMAIN})로만 로그인할 수 있습니다.` };
     }
+    // shouldCreateUser: false — 등록되지 않은 주소로는 계정이 새로 만들어지지 않는다.
+    // (도메인 검사만으로는 부족하다. 회사 도메인 형태의 아무 주소나 넣어도 계정이 생기면 안 되며,
+    //  최종 차단은 DB 트리거 handle_new_auth_user 에서도 이중으로 이뤄진다.)
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
     });
-    return { error: error ? error.message : null };
+    if (error) {
+      // 미등록 주소는 Supabase가 'Signups not allowed for otp' 계열 메시지를 반환한다 — 사유를 알기 쉽게 바꿔준다
+      const msg = /signup|not allowed|not found/i.test(error.message)
+        ? '등록되지 않은 계정입니다. 관리자에게 계정 등록을 요청해주세요.'
+        : error.message;
+      return { error: msg };
+    }
+    return { error: null };
   }, []);
 
   const signOut = useCallback(async () => {
