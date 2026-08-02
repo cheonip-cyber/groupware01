@@ -60,11 +60,23 @@ export function AdminCardPage() {
     setLoading(true);
     setError(null);
     try {
+      // 선택한 월을 서버 조회 조건으로 넘긴다.
+      // 예전에는 전체에서 최신 200건만 받아와, 최근 몇 달치에서 잘려 그 이전 월이 아예 표시되지 않았다.
+      let txnQuery = cardSupabase.from('card_transactions').select('*').eq('status', 'active')
+        .order('transaction_date', { ascending: false });
+      if (month) {
+        const [y, m] = month.split('-').map(Number);
+        const from = `${month}-01`;
+        const to = new Date(y, m, 1).toISOString().slice(0, 10); // 다음 달 1일(미포함)
+        txnQuery = txnQuery.gte('transaction_date', from).lt('transaction_date', to);
+      } else {
+        txnQuery = txnQuery.limit(2000); // '전체' 선택 시 상한(현재 778건)
+      }
       const [txnRes, catRes, userRes, meRes, rsRes] = await Promise.all([
-        cardSupabase.from('card_transactions').select('*').eq('status', 'active').order('transaction_date', { ascending: false }).limit(200),
+        txnQuery,
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
-        cardSupabase.from('manual_expenses').select('*').order('transaction_date', { ascending: false }).limit(100),
+        cardSupabase.from('manual_expenses').select('*').order('transaction_date', { ascending: false }).limit(2000),
         cardSupabase.from('recurring_checklist_items').select('id, label, category, payment_day, default_amount, is_active').order('payment_day', { ascending: true }),
       ]);
       if (txnRes.error) throw txnRes.error;
@@ -91,7 +103,9 @@ export function AdminCardPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  // 월을 바꾸면 그 월의 데이터를 다시 불러온다
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [month]);
 
   const categories = useMemo(() => [...new Set(cardTxns.map((t) => t.category_name ?? '미분류'))], [cardTxns]);
   const users = useMemo(() => [...new Set(cardTxns.map((t) => t.user_name ?? '미지정'))], [cardTxns]);
