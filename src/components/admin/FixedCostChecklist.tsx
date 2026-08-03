@@ -60,7 +60,14 @@ function monthRange(offset = 0) {
 
 // 결제일 경고 3단계: D-1(내일 결제) > 지급일(오늘) > 경고(경과) — 등록 전(미완료)일 때만 표시
 type DueStage = null | 'd1' | 'today' | 'overdue';
-function dueStage(paymentDay: number | null, todayDate: number): DueStage {
+/** payment_day 0 = 매월 말일 — 달마다 날짜가 달라 실제 말일로 환산한다 */
+function resolveDay(paymentDay: number | null, ref = new Date()): number | null {
+  if (paymentDay == null) return null;
+  if (paymentDay === 0) return new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+  return paymentDay;
+}
+function dueStage(rawDay: number | null, todayDate: number): DueStage {
+  const paymentDay = resolveDay(rawDay);
   if (paymentDay == null) return null;
   if (todayDate > paymentDay) return 'overdue';
   if (todayDate === paymentDay) return 'today';
@@ -226,7 +233,11 @@ export function FixedCostChecklist() {
                 className="h-4 w-4 shrink-0 cursor-pointer accent-emerald-600"
               />
               <span className={`w-32 shrink-0 font-medium ${allFound ? 'text-slate-500' : 'text-slate-800'}`}>{item.label}</span>
-              {item.payment_day != null && <span className="w-14 shrink-0 text-[11px] text-slate-400">매월 {item.payment_day}일</span>}
+              {item.payment_day != null && (
+                <span className="w-14 shrink-0 text-[11px] text-slate-400">
+                  {item.payment_day === 0 ? '매월 말일' : `매월 ${item.payment_day}일`}
+                </span>
+              )}
 
               {allFound ? (
                 <span className="flex-1 text-xs text-slate-400">

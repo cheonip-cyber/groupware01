@@ -9,7 +9,7 @@ import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
 import { downloadSgaSheet, downloadCombinedTransferSheet } from '../../utils/paymentExport';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X, UploadCloud } from 'lucide-react';
+import { PiggyBank, RefreshCw, Search, Plus, Pencil, Trash2, Download, X, UploadCloud, TrendingUp } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
@@ -86,6 +86,40 @@ export function AdminSgaPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  /**
+   * 전월 대비 분류별 비교 (2026-08-02)
+   * 선택한 조회월과 그 직전월의 지출을 분류별로 맞춰 본다.
+   * 한쪽에만 있는 분류(신규 지출·중단된 지출)도 빠짐없이 나오도록 두 달의 분류를 합집합으로 만든다.
+   */
+  const comparison = useMemo(() => {
+    if (!month) return null;   // '전체' 조회일 때는 비교 기준이 없다
+    const [y, m] = month.split('-').map(Number);
+    const prevDate = new Date(y, m - 2, 1);
+    const prev = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    const sum = (ym: string) => {
+      const map = new Map<string, number>();
+      for (const r of rows) {
+        if (!(r.transaction_date ?? '').startsWith(ym)) continue;
+        const key = r.category || '미분류';
+        map.set(key, (map.get(key) ?? 0) + Number(r.amount ?? 0));
+      }
+      return map;
+    };
+    const cur = sum(month);
+    const pre = sum(prev);
+    const cats = [...new Set([...cur.keys(), ...pre.keys()])];
+    const items = cats.map((c) => {
+      const a = cur.get(c) ?? 0;
+      const b = pre.get(c) ?? 0;
+      return { category: c, cur: a, prev: b, diff: a - b, isNew: b === 0 && a > 0, isGone: a === 0 && b > 0 };
+    }).sort((x, y2) => y2.cur - x.cur || y2.prev - x.prev);
+    return {
+      prevMonth: prev, items,
+      curTotal: items.reduce((t, i) => t + i.cur, 0),
+      prevTotal: items.reduce((t, i) => t + i.prev, 0),
+    };
+  }, [rows, month]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -304,6 +338,67 @@ export function AdminSgaPage() {
           </div>
         )}
       </Card>
+
+      {/* 전월 대비 비교 — 분류별 지출 변화 확인용 */}
+      {comparison && comparison.items.length > 0 && (
+        <Card>
+          <CardHeader title={`전월 대비 비교 (${comparison.prevMonth} → ${month})`}
+            icon={<TrendingUp className="h-4 w-4 text-slate-400" />} />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                <th className="px-5 py-2.5 font-medium">분류</th>
+                <th className="px-3 py-2.5 text-right font-medium">{comparison.prevMonth}</th>
+                <th className="px-3 py-2.5 text-right font-medium">{month}</th>
+                <th className="px-3 py-2.5 text-right font-medium">증감</th>
+                <th className="px-3 py-2.5 text-right font-medium">증감률</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-50">
+                {comparison.items.map((it) => {
+                  const rate = it.prev > 0 ? Math.round((it.diff / it.prev) * 1000) / 10 : null;
+                  return (
+                    <tr key={it.category} className="hover:bg-slate-50">
+                      <td className="px-5 py-2.5">
+                        <span className="font-medium text-slate-700">{it.category}</span>
+                        {/* 비교 대상이 없어도 목록에는 반드시 포함하고, 성격을 뱃지로 알린다 */}
+                        {it.isNew && <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">신규</span>}
+                        {it.isGone && <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">지출없음</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-slate-400">
+                        {it.prev > 0 ? <MoneyText value={it.prev} /> : '-'}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-slate-700">
+                        {it.cur > 0 ? <MoneyText value={it.cur} /> : '-'}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right font-medium ${it.diff > 0 ? 'text-red-500' : it.diff < 0 ? 'text-blue-600' : 'text-slate-300'}`}>
+                        {it.diff === 0 ? '-' : `${it.diff > 0 ? '+' : '−'}${Math.abs(it.diff).toLocaleString('ko-KR')}`}
+                      </td>
+                      <td className={`px-3 py-2.5 text-right text-xs ${it.diff > 0 ? 'text-red-400' : it.diff < 0 ? 'text-blue-400' : 'text-slate-300'}`}>
+                        {rate === null ? (it.isNew ? '신규' : '-') : `${rate > 0 ? '+' : ''}${rate}%`}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="border-t border-slate-200 bg-slate-50/60 font-semibold">
+                  <td className="px-5 py-2.5 text-slate-700">합계</td>
+                  <td className="px-3 py-2.5 text-right text-slate-500"><MoneyText value={comparison.prevTotal} /></td>
+                  <td className="px-3 py-2.5 text-right text-slate-800"><MoneyText value={comparison.curTotal} /></td>
+                  <td className={`px-3 py-2.5 text-right ${comparison.curTotal - comparison.prevTotal > 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                    {(() => { const d = comparison.curTotal - comparison.prevTotal;
+                      return d === 0 ? '-' : `${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('ko-KR')}`; })()}
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-xs text-slate-400">
+                    {comparison.prevTotal > 0
+                      ? `${comparison.curTotal - comparison.prevTotal > 0 ? '+' : ''}${Math.round(((comparison.curTotal - comparison.prevTotal) / comparison.prevTotal) * 1000) / 10}%`
+                      : '-'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
 
       {/* 입력 / 수정 모달 */}
       {form && (
