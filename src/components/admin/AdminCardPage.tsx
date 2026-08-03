@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
@@ -55,6 +55,7 @@ export function AdminCardPage() {
   // 기본 조회 범위는 '지금 이 시점의 월' — 과거 내역까지 한 번에 쌓이면 확인이 어렵다.
   // 상단 월 선택에서 전체나 다른 월을 고르면 그대로 적용된다.
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM ('' = 전체)
+  const initializedRef = useRef(false); // 월 자동 전환은 최초 1회만(사용자가 고른 월을 덮어쓰지 않도록)
 
   const load = async () => {
     setLoading(true);
@@ -89,6 +90,18 @@ export function AdminCardPage() {
       setCardTxns((txnRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류', user_name: userMap.get(t.user_id) ?? '미지정' })));
       setManualExpenses(meRes.data ?? []);
       // 고정비 통합 정의표(recurring_checklist_items) 기준 — 구 recurring_settings 대체(2026-07-27)
+      // 월초에는 이번 달 카드 내역이 아직 없어 화면이 비어 보인다.
+      // 최초 진입 시 선택한 월에 내역이 없으면, 내역이 있는 가장 최근 월로 자동 전환한다.
+      if (!initializedRef.current) {
+        initializedRef.current = true;
+        if ((txnRes.data ?? []).length === 0 && month) {
+          const { data: last } = await cardSupabase.from('card_transactions')
+            .select('transaction_date').eq('status', 'active')
+            .order('transaction_date', { ascending: false }).limit(1);
+          const ym = (last?.[0]?.transaction_date ?? '').slice(0, 7);
+          if (ym && ym !== month) { setMonth(ym); return; } // month 변경으로 load가 다시 실행된다
+        }
+      }
       setRecurring((rsRes.data ?? []).map((r: any) => ({
         id: r.id,
         category: r.category,

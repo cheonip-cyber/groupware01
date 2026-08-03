@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
 import { useAppData } from '../../store/appData';
 import { useToast } from '../common/toast';
@@ -55,11 +55,12 @@ export function AdminSgaPage() {
   const [search, setSearch] = useState('');
   // 기본 조회 범위는 '지금 이 시점의 월' — 과거 내역까지 한 번에 쌓이면 확인이 어렵다.
   // 상단 월 선택에서 전체나 다른 월을 고르면 그대로 적용된다.
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM ('' = 전체)
+  const [month, setMonth] = useState(''); // YYYY-MM ('' = 전체) — 로딩 후 데이터가 있는 최근 월로 맞춘다
   const [categoryFilter, setCategoryFilter] = useState('');
   const [form, setForm] = useState<FormState | null>(null);
   useEscClose(!!form, () => setForm(null)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [saving, setSaving] = useState(false);
+  const initializedRef = useRef(false); // 기본 월은 최초 1회만 정한다(사용자가 고른 월을 덮어쓰지 않도록)
 
   const load = async () => {
     setLoading(true);
@@ -69,7 +70,18 @@ export function AdminSgaPage() {
       .select('*')
       .order('transaction_date', { ascending: false });
     if (err) setError(err.message);
-    else setRows(data ?? []);
+    else {
+      const list = data ?? [];
+      setRows(list);
+      // 기본 조회월: 이번 달에 내역이 있으면 이번 달, 없으면 내역이 있는 가장 최근 월.
+      // (월초에는 이번 달 데이터가 아직 없어 화면이 통째로 비어 보이던 문제)
+      if (!initializedRef.current) {
+        initializedRef.current = true;
+        const now = new Date().toISOString().slice(0, 7);
+        const months = [...new Set(list.map((r: any) => (r.transaction_date ?? '').slice(0, 7)).filter(Boolean))].sort().reverse();
+        setMonth(months.includes(now) ? now : (months[0] ?? ''));
+      }
+    }
     setLoading(false);
   };
 
