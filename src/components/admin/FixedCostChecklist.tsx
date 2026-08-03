@@ -111,6 +111,25 @@ export function FixedCostChecklist() {
 
   const today = new Date().getDate();
 
+  /** 기준금액(default_amount) 수정 — 카드사용 관리의 '정기지출 설정'을 이 화면으로 흡수(2026-08-03).
+   *  예산 대비 실적 비교와 등록 시 기본값에 함께 쓰이므로 확인하는 자리에서 바로 고칠 수 있게 한다. */
+  const [amtEdit, setAmtEdit] = useState<{ id: number; value: string } | null>(null);
+  const saveAmount = async () => {
+    if (!amtEdit) return;
+    const v = amtEdit.value.trim();
+    const num = v === '' ? null : Number(v.replace(/[^0-9]/g, ''));
+    if (num !== null && !Number.isFinite(num)) { toast.error('숫자만 입력해주세요'); return; }
+    try {
+      const { data, error } = await cardSupabase.from('recurring_checklist_items')
+        .update({ default_amount: num }).eq('id', amtEdit.id).select('id');
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('변경이 반영되지 않았습니다(0건)');
+      setItems((prev) => prev.map((it) => (it.id === amtEdit.id ? { ...it, default_amount: num } : it)));
+      setAmtEdit(null);
+      toast.success('기준금액을 저장했습니다');
+    } catch (e) { toast.error(e instanceof Error ? e.message : '저장하지 못했습니다'); }
+  };
+
   const rows = useMemo(() => items.map((item) => {
     const groups = toGroups(item);
     // 표시용 명칭은 각 그룹의 첫 별칭(정식명칭). 나머지 별칭은 은행 표기 흡수용.
@@ -238,6 +257,23 @@ export function FixedCostChecklist() {
                   {item.payment_day === 0 ? '매월 말일' : `매월 ${item.payment_day}일`}
                 </span>
               )}
+              {/* 기준금액 — 클릭하면 그 자리에서 수정 */}
+              <span className="w-24 shrink-0 text-right text-[11px]">
+                {amtEdit?.id === item.id ? (
+                  <input autoFocus value={amtEdit.value}
+                    onChange={(e) => setAmtEdit({ id: item.id, value: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void saveAmount(); if (e.key === 'Escape') setAmtEdit(null); }}
+                    onBlur={() => void saveAmount()}
+                    placeholder="기준금액"
+                    className="w-24 rounded border border-blue-300 px-1 py-0.5 text-right text-[11px] outline-none" />
+                ) : (
+                  <button onClick={() => setAmtEdit({ id: item.id, value: item.default_amount ? String(item.default_amount) : '' })}
+                    title="기준금액 수정 (예산 대비 실적 비교에 사용)"
+                    className="rounded px-1 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600">
+                    {item.default_amount ? item.default_amount.toLocaleString('ko-KR') : '기준금액 —'}
+                  </button>
+                )}
+              </span>
 
               {allFound ? (
                 <span className="flex-1 text-xs text-slate-400">

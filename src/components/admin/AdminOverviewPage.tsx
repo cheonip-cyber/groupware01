@@ -60,10 +60,13 @@ export function AdminOverviewPage() {
     // project_linked 플래그가 실제로는 전혀 세팅되지 않아(전수 false) 필터가 무력했던 버그를 발견 —
     // 실사용 기준인 카테고리 '교육(플젝중복건만)'으로 직접 판별하도록 수정 (2026-07-09)
     const cardGeneral = cardTxns.filter((t) => t.category_id !== eduCategoryId && inYear(t.transaction_date)).reduce((s, t) => s + Number(t.amount), 0);
+    // 교육(플젝중복건) 카드 지출 — 프로젝트 원가에 이미 반영되므로 회사 운영비(총비용)에는 넣지 않는다.
+    // 다만 실제 나간 돈이므로 얼마인지는 별도로 보여준다.
+    const cardEdu = cardTxns.filter((t) => t.category_id === eduCategoryId && inYear(t.transaction_date)).reduce((s, t) => s + Number(t.amount), 0);
     const totalCost = projectCost + sgaTotal + cardGeneral;
     const netProfit = revenue - totalCost;
     const netRate = revenue > 0 ? ((netProfit / revenue) * 100).toFixed(1) : '0';
-    return { revenue, projectCost, sgaTotal, cardGeneral, totalCost, netProfit, netRate };
+    return { revenue, projectCost, sgaTotal, cardGeneral, cardEdu, totalCost, netProfit, netRate };
   }, [projects, sga, cardTxns, eduCategoryId, globalYear]);
 
   // KPI 드릴다운 (설계원전: 숫자 클릭 → 구성 거래 목록)
@@ -102,7 +105,7 @@ export function AdminOverviewPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="회사 총매출 (확정)" value={stats.revenue} tone="text-blue-600" onClick={() => setDrill(drill === 'revenue' ? null : 'revenue')} active={drill === 'revenue'} />
         <Kpi label="총 사용비용" value={stats.totalCost} tone="text-slate-800" onClick={() => setDrill(drill === 'cost' ? null : 'cost')} active={drill === 'cost'}
-          sub={`프로젝트 ${formatCompactKRW(stats.projectCost)} · 판관비 ${formatCompactKRW(stats.sgaTotal)} · 카드 ${formatCompactKRW(stats.cardGeneral)}`} />
+          sub={`프로젝트 ${formatCompactKRW(stats.projectCost)} · 판관비 ${formatCompactKRW(stats.sgaTotal)} · 카드 ${formatCompactKRW(stats.cardGeneral)}${stats.cardEdu > 0 ? ` (교육원가 ${formatCompactKRW(stats.cardEdu)} 별도)` : ''}`} />
         <Kpi label="최종 경영이익" value={stats.netProfit} tone={stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'} />
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs text-slate-500">경영이익률</p>

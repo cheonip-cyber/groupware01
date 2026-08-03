@@ -6,7 +6,7 @@ import { useToast } from '../common/toast';
 import { YearMonthPicker } from '../common/YearMonthPicker';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard, Wallet, RefreshCw, AlertTriangle, Search, Trash2 } from 'lucide-react';
+import { CreditCard, RefreshCw, AlertTriangle, Search, Trash2 } from 'lucide-react';
 import { useDialog } from '../common/dialog';
 
 interface CardTxn {
@@ -20,23 +20,6 @@ interface CardTxn {
   user_name?: string;
   project_linked?: boolean;
 }
-interface ManualExpense {
-  id: number;
-  transaction_date: string;
-  category: string;
-  amount: number;
-  description: string | null;
-  status: string;
-  is_periodic: boolean;
-}
-interface RecurringSetting {
-  id: number;
-  category: string;
-  amount: number;
-  payment_day: number;
-  description: string | null;
-  is_active: boolean;
-}
 
 // 프로젝트 원가와 중복 계상될 수 있는 카테고리(이전 실데이터 분석에서 확인됨)
 const DUPLICATE_RISK_KEYWORD = '플젝중복';
@@ -47,8 +30,6 @@ export function AdminCardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardTxns, setCardTxns] = useState<CardTxn[]>([]);
-  const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
-  const [recurring, setRecurring] = useState<RecurringSetting[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -73,23 +54,19 @@ export function AdminCardPage() {
       } else {
         txnQuery = txnQuery.limit(2000); // '전체' 선택 시 상한(현재 778건)
       }
-      const [txnRes, catRes, userRes, meRes, rsRes] = await Promise.all([
+      // 판관비(manual_expenses)·고정비 정의는 각각 판관비 관리·경영 현황에서 관리한다.
+      // 이 화면은 카드 거래 전용이므로 불필요한 조회를 하지 않는다. (2026-08-03 화면 역할 정리)
+      const [txnRes, catRes, userRes] = await Promise.all([
         txnQuery,
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
-        cardSupabase.from('manual_expenses').select('*').order('transaction_date', { ascending: false }).limit(2000),
-        cardSupabase.from('recurring_checklist_items').select('id, label, category, payment_day, default_amount, is_active').order('payment_day', { ascending: true }),
       ]);
       if (txnRes.error) throw txnRes.error;
       if (userRes.error) throw userRes.error;
-      if (meRes.error) throw meRes.error;
-      if (rsRes.error) throw rsRes.error;
 
       const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
       const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
       setCardTxns((txnRes.data ?? []).map((t: any) => ({ ...t, category_name: catMap.get(t.category_id) ?? '미분류', user_name: userMap.get(t.user_id) ?? '미지정' })));
-      setManualExpenses(meRes.data ?? []);
-      // 고정비 통합 정의표(recurring_checklist_items) 기준 — 구 recurring_settings 대체(2026-07-27)
       // 월초에는 이번 달 카드 내역이 아직 없어 화면이 비어 보인다.
       // 최초 진입 시 선택한 월에 내역이 없으면, 내역이 있는 가장 최근 월로 자동 전환한다.
       if (!initializedRef.current) {
@@ -102,14 +79,6 @@ export function AdminCardPage() {
           if (ym && ym !== month) { setMonth(ym); return; } // month 변경으로 load가 다시 실행된다
         }
       }
-      setRecurring((rsRes.data ?? []).map((r: any) => ({
-        id: r.id,
-        category: r.category,
-        amount: Number(r.default_amount ?? 0),
-        payment_day: r.payment_day ?? 0,
-        description: r.label ?? null,
-        is_active: r.is_active,
-      })));
     } catch (e: any) {
       setError(e.message ?? String(e));
     }
@@ -323,55 +292,6 @@ export function AdminCardPage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title={`현금/수기 지출 (${manualExpenses.length}건)`} icon={<Wallet className="h-4 w-4 text-slate-400" />} />
-          <div className="max-h-72 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                <th className="px-4 py-2 font-medium">일자</th><th className="px-3 py-2 font-medium">분류</th>
-                <th className="px-3 py-2 text-right font-medium">금액</th><th className="px-3 py-2 font-medium">상태</th>
-              </tr></thead>
-              <tbody className="divide-y divide-slate-50">
-                {manualExpenses.map((m) => (
-                  <tr key={m.id}>
-                    <td className="px-4 py-2 text-xs text-slate-500">{formatDate(m.transaction_date)}</td>
-                    <td className="px-3 py-2 text-xs text-slate-600">{m.category}</td>
-                    <td className="px-3 py-2 text-right"><MoneyText value={m.amount} /></td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${m.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                        {m.status === 'paid' ? '지급완료' : '대기'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader title={`정기지출 설정 (${recurring.length}건)`} icon={<Wallet className="h-4 w-4 text-slate-400" />} />
-          <div className="max-h-72 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                <th className="px-4 py-2 font-medium">결제일</th><th className="px-3 py-2 font-medium">분류</th>
-                <th className="px-3 py-2 font-medium">설명</th><th className="px-3 py-2 text-right font-medium">금액</th>
-              </tr></thead>
-              <tbody className="divide-y divide-slate-50">
-                {recurring.map((r) => (
-                  <tr key={r.id} className={!r.is_active ? 'opacity-40' : ''}>
-                    <td className="px-4 py-2 text-xs text-slate-500">매월 {r.payment_day}일</td>
-                    <td className="px-3 py-2 text-xs text-slate-600">{r.category}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{r.description ?? '-'}</td>
-                    <td className="px-3 py-2 text-right">{r.amount > 0 ? <MoneyText value={r.amount} /> : <span className="text-xs text-slate-300">미설정</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
     </div>
   );
 }
