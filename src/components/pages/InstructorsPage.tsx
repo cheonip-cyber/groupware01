@@ -157,7 +157,7 @@ export function InstructorsPage() {
           </tr></thead>
           <tbody className="divide-y divide-slate-50">
             {query.trim() && instructors.filter((i) => `${i.name} ${i.specialty ?? ''} ${i.phone ?? ''}`.toLowerCase().includes(query.trim().toLowerCase())).length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-6 text-center text-xs text-slate-400">'{query}' 검색 결과가 없습니다 — 방금 등록했다면 새로고침 후 다시 검색해 보세요</td></tr>
+              <tr><td colSpan={7} className="px-5 py-6 text-center text-xs text-slate-400">'{query}' 검색 결과가 없습니다 — 방금 등록했다면 새로고침 후 다시 검색해 보세요</td></tr>
             )}
             {instructors
               .filter((i) => !noAccountOnly || !i.bankName || !i.accountNumber)
