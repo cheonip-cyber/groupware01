@@ -9,7 +9,6 @@ import type { SgaRow } from '../../utils/paymentExport';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import type { Project } from '../../types';
 import { activeProjects } from '../../utils/filters';
-import { FixedCostChecklist } from './FixedCostChecklist';
 import { CashFlowThisMonth } from './CashFlowThisMonth';
 import { ExpenseAnalysis } from './ExpenseAnalysis';
 
@@ -119,7 +118,6 @@ export function AdminOverviewPage() {
       </div>
 
       <CashFlowThisMonth />
-      <FixedCostChecklist />
       <ExpenseAnalysis year={globalYear} />
 
       {drill && (

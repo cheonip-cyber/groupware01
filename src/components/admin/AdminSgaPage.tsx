@@ -14,6 +14,7 @@ import { PageSkeleton } from '../common/Skeleton';
 import { SavingLabel } from '../common/SavingLabel';
 import { activePayments } from '../../utils/filters';
 import { BankStatementImport } from './BankStatementImport';
+import { FixedCostChecklist } from './FixedCostChecklist';
 import { useEscClose } from '../../hooks/useEscClose';
 import { useDialog } from '../common/dialog';
 
@@ -399,6 +400,8 @@ export function AdminSgaPage() {
         </Card>
       )}
 
+      {/* 고정비 누락 방지 체크리스트 — 경영현황에서 이곳으로 이동(2026-08-04) */}
+      <FixedCostChecklist />
 
       {/* 입력 / 수정 모달 */}
       {form && (

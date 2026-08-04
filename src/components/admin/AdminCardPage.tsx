@@ -130,6 +130,36 @@ export function AdminCardPage() {
     toast.success(next ? '프로젝트 귀속으로 표시 — 회사비용 합계에서 제외됩니다' : '일반 비용으로 변경되었습니다');
   };
 
+  // 선택 합계 (2026-08-04) — 체크한 내역만 별도로 합산해서 보여준다.
+  // 예: 특정 인원의 특정 기간 지출만 뽑아 합계 확인할 때 사용.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  useEffect(() => { setSelectedIds(new Set()); }, [month]); // 월을 바꾸면 선택도 초기화
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const visibleTxns = filteredTxns.slice(0, 100);
+  const allVisibleSelected = visibleTxns.length > 0 && visibleTxns.every((t) => selectedIds.has(t.id));
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        visibleTxns.forEach((t) => next.delete(t.id));
+        return next;
+      }
+      const next = new Set(prev);
+      visibleTxns.forEach((t) => next.add(t.id));
+      return next;
+    });
+  };
+  const selectedStats = useMemo(() => {
+    const rows = cardTxns.filter((t) => selectedIds.has(t.id));
+    return { count: rows.length, total: rows.reduce((s, t) => s + Number(t.amount), 0) };
+  }, [cardTxns, selectedIds]);
+
   // 카드 거래 인라인 편집 (설계 원칙: 입력 마찰 최소화 — 대시보드에서 바로 수정)
   const [editId, setEditId] = useState<string | number | null>(null);
   const [editTx, setEditTx] = useState({ merchant_name: '', purpose: '', amount: 0, transaction_date: '' });
@@ -203,6 +233,15 @@ export function AdminCardPage() {
       </div>
 
       <Card>
+        {selectedStats.count > 0 && (
+          <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-2">
+            <span className="text-xs font-medium text-blue-700">선택 {selectedStats.count}건</span>
+            <span className="flex items-center gap-3">
+              <span className="text-sm font-bold text-blue-800"><MoneyText value={selectedStats.total} /></span>
+              <button onClick={() => setSelectedIds(new Set())} className="text-[11px] text-blue-500 underline hover:text-blue-700">선택 해제</button>
+            </span>
+          </div>
+        )}
         <CardHeader
           title={`카드 사용내역 (${filteredTxns.length}건)`}
           icon={<CreditCard className="h-4 w-4 text-slate-400" />}
@@ -233,6 +272,10 @@ export function AdminCardPage() {
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
+                <th className="w-8 px-3 py-2.5">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible}
+                    className="h-3.5 w-3.5 cursor-pointer accent-blue-600" title="현재 목록 전체 선택/해제" />
+                </th>
                 <th className="px-5 py-2.5 font-medium">No.</th>
                 <th className="px-3 py-2.5 font-medium">일자</th>
                 <th className="px-3 py-2.5 font-medium">가맹점</th>
@@ -244,8 +287,12 @@ export function AdminCardPage() {
                 <th className="px-3 py-2.5 font-medium">관리</th>
               </tr></thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredTxns.slice(0, 100).map((t, idx) => editId === t.id ? (
+                {visibleTxns.map((t, idx) => editId === t.id ? (
                   <tr key={t.id} className="bg-blue-50/60">
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-blue-600" />
+                    </td>
                     <td className="px-5 py-2 text-xs text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2"><input type="date" value={editTx.transaction_date} onChange={(e) => setEditTx((s) => ({ ...s, transaction_date: e.target.value }))} className="rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
                     <td className="px-3 py-2"><input value={editTx.merchant_name} onChange={(e) => setEditTx((s) => ({ ...s, merchant_name: e.target.value }))} className="w-full rounded border border-blue-200 px-1.5 py-1 text-xs outline-none" /></td>
@@ -262,7 +309,11 @@ export function AdminCardPage() {
                     <td className="px-3 py-2" />
                   </tr>
                 ) : (
-                  <tr key={t.id} className={`group ${t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}`}>
+                  <tr key={t.id} className={`group ${selectedIds.has(t.id) ? 'bg-blue-50/70' : t.project_linked ? 'bg-blue-50/40' : t.category_name?.includes(DUPLICATE_RISK_KEYWORD) ? 'bg-amber-50/50' : ''}`}>
+                    <td className="px-3 py-2">
+                      <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-blue-600" />
+                    </td>
                     <td className="px-5 py-2 text-xs tabular-nums text-slate-400">{idx + 1}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">{formatDate(t.transaction_date)}</td>
                     <td className="cursor-pointer px-3 py-2 font-medium text-slate-800 hover:text-blue-600" title="클릭해서 수정" onClick={() => startEditTx(t)}>{t.merchant_name}</td>
