@@ -23,11 +23,17 @@ const marginBg = (r: number | null) => (r == null ? 'bg-slate-50 text-slate-400'
 export function BusinessInsights({ year }: { year: string }) {
   const { projects, paymentRequests } = useAppData();
 
+  // 연도 필터: 경영현황 KPI(회사 총매출 확정)와 동일 기준 — 선택 연도와 정확히 일치하는 건만.
+  // (2026-08-04 수정: 이전에는 매출월/교육일자 미입력 건을 연도 무관하게 항상 포함시켜
+  //  KPI와 담당자별 운영현황 등 이 화면 집계 사이에 차액이 발생했다.)
   const scoped = useMemo(
-    () => activeProjects(projects).filter((p) => year === '전체' || projectYear(p) === year || projectYear(p) === null),
+    () => activeProjects(projects).filter((p) => year === '전체' || projectYear(p) === year),
     [projects, year],
   );
   const confirmed = useMemo(() => scoped.filter((p) => CONFIRMED.has(p.projectStatus) && eff(p) > 0), [scoped]);
+  // 예산비용이 입력되지 않은 프로젝트는 이익률이 자동으로 100%로 계산되어(0으로 나누는 것을 피하기 위한 기본값)
+  // 실제 마진과 무관하게 값이 부풀려진다. 마진 관련 집계에서는 이런 건을 제외한다.
+  const hasBudget = (p: Project) => (p.expectedCost ?? 0) > 0;
 
   // ── 고객사 매출 집중도 + Health Score ──
   const clientStats = useMemo(() => {
@@ -38,7 +44,7 @@ export function BusinessInsights({ year }: { year: string }) {
       const c = map.get(key)!;
       c.revenue += eff(p);
       c.count += 1;
-      if (p.profitRate != null) c.margins.push(p.profitRate);
+      if (hasBudget(p)) c.margins.push(p.profitRate);
       const d = p.revenueMonth || p.startDate || '';
       if (d > c.lastDate) c.lastDate = d;
     }
@@ -72,17 +78,19 @@ export function BusinessInsights({ year }: { year: string }) {
   const atRisk = [...clientStats].filter((c) => c.healthScore < 40).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
   const topHealthy = [...clientStats].sort((a, b) => b.healthScore - a.healthScore).slice(0, 5);
 
-  // ── 마진 히트맵 (매출 상위 8개 고객사 × 연도) ──
+  // ── 마진율 히트맵 (매출 상위 8개 고객사 × 연도) ──
   const heatmap = useMemo(() => {
     const top = clientStats.slice(0, 8).map((c) => c.name);
-    const years = [...new Set(confirmed.map((p) => projectYear(p)).filter(Boolean))].sort() as string[];
+    const withBudget = confirmed.filter(hasBudget);
+    const years = [...new Set(withBudget.map((p) => projectYear(p)).filter(Boolean))].sort() as string[];
     const cellFor = (client: string, yr: string) => {
-      const rows = confirmed.filter((p) => (p.clientName || '미지정') === client && projectYear(p) === yr && p.profitRate != null);
+      const rows = withBudget.filter((p) => (p.clientName || '미지정') === client && projectYear(p) === yr);
       if (!rows.length) return null;
       return rows.reduce((s, p) => s + p.profitRate, 0) / rows.length;
     };
     return { clients: top, years, cellFor };
   }, [confirmed, clientStats]);
+  const budgetMissingCount = useMemo(() => confirmed.filter((p) => !hasBudget(p)).length, [confirmed]);
 
   // ── 강사·업체 다양성 지수 ──
   const partnerStats = useMemo(() => {
@@ -157,7 +165,7 @@ export function BusinessInsights({ year }: { year: string }) {
       const m = map.get(key)!;
       m.count += 1;
       m.revenue += eff(p);
-      if (p.profitRate != null) m.margins.push(p.profitRate);
+      if (hasBudget(p)) m.margins.push(p.profitRate);
     }
     return [...map.values()]
       .map((m) => ({ ...m, avgMargin: m.margins.length ? m.margins.reduce((s, x) => s + x, 0) / m.margins.length : null }))
@@ -220,6 +228,11 @@ export function BusinessInsights({ year }: { year: string }) {
                 <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded bg-red-100" />10%↓</span>
               </span>
             } />
+          {budgetMissingCount > 0 && (
+            <p className="px-5 pt-2 text-[11px] text-slate-400">
+              예산비용 미입력 {budgetMissingCount}건은 마진 계산에서 제외했습니다 (이익률이 자동 100%로 잡혀 왜곡되는 것을 방지)
+            </p>
+          )}
           <div className="overflow-x-auto p-5 pt-3">
             <table className="text-xs">
               <thead><tr>
