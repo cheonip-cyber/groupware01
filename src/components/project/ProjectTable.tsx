@@ -4,7 +4,7 @@ import type { Project, RevenueDistribution } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, priorityStyle } from '../../utils/statusConfig';
-import { formatDateRange, profitRateLabel } from '../../utils/formatters';
+import { formatDateRange, extraSessionSuffix, profitRateLabel } from '../../utils/formatters';
 import { MonthBadge } from '../common/MonthBadge';
 import { EmptyState } from '../common/EmptyState';
 import { dataSource } from '../../services/dataSource';
@@ -41,7 +41,7 @@ function ChildProjectRow({ c }: { c: Project }) {
           <Link to={`/projects/${c.id}`} className="font-medium text-slate-600 hover:text-indigo-600">{c.projectName}</Link>
         </div>
       </td>
-      <td className="px-3 py-2 text-xs text-slate-400">{formatDateRange(c.startDate, c.endDate)}</td>
+      <td className="px-3 py-2 text-xs text-slate-400">{formatDateRange(c.startDate, c.endDate)}{extraSessionSuffix(c)}</td>
       <td className="px-3 py-2"></td>
       <td className="px-3 py-2"><StatusBadge label={c.projectStatus} style={projectStatusStyle[c.projectStatus]} size="sm" /></td>
       <td className="px-3 py-2"></td>
@@ -135,7 +135,7 @@ function Row({ p, no, matched, expanded, onToggleExpand, children }: {
           </div>
         </div>
       </td>
-      <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}</td>
+      <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}{extraSessionSuffix(p)}</td>
       <td className="px-3 py-3"><StatusBadge label={p.priority} style={priorityStyle[p.priority]} size="sm" /></td>
       <td className="px-3 py-3"><StatusBadge label={p.projectStatus} style={projectStatusStyle[p.projectStatus]} size="sm" /></td>
       <td className="px-3 py-3">

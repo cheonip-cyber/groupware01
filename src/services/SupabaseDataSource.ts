@@ -84,6 +84,9 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     description: row.progress_notes ?? '',
     startDate: row.session_1_date ?? '',
     endDate: row.session_2_date ?? undefined,
+    session3Date: row.session_3_date ?? undefined,
+    session4Date: row.session_4_date ?? undefined,
+    session5Date: row.session_5_date ?? undefined,
     proposalDueDate: row.proposal_due_date ?? undefined,
     proposalSubmittedDate: row.proposal_submitted_date ?? undefined,
     managerName,
@@ -349,6 +352,9 @@ class SupabaseDataSource implements DataSource {
     if ('notionManager' in patch) dbPatch.notion_manager = patch.notionManager || null;
     if ('proposalDueDate' in patch) dbPatch.proposal_due_date = patch.proposalDueDate || null;
     if ('endDate' in patch) dbPatch.session_2_date = patch.endDate || null;
+    if ('session3Date' in patch) dbPatch.session_3_date = patch.session3Date || null;
+    if ('session4Date' in patch) dbPatch.session_4_date = patch.session4Date || null;
+    if ('session5Date' in patch) dbPatch.session_5_date = patch.session5Date || null;
     // 상태 변경 (수기 프로젝트 수명주기 관리 — DB 원본 상태 8종 그대로 저장)
     if (patch.dbStatus !== undefined) dbPatch.status = patch.dbStatus;
     // 그룹 자식(노션 미연동) 금액·시행일 수정 지원 — 금액은 세전(final_estimate) 기준

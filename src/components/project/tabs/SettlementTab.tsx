@@ -106,7 +106,7 @@ export function SettlementTab({ project, requests, onUpdate }:
           <CheckRow
             label="6. 지급 기준월"
             state={dueInfo.isDueMonth ? 'done' : 'pending'}
-            detail={`지급기한 ${dueInfo.dueLabel} · 교육 일정 ${[project.startDate, project.endDate].filter(Boolean).map((d) => formatDate(d)).join(', ') || '-'}`}
+            detail={`지급기한 ${dueInfo.dueLabel} · 교육 일정 ${[project.startDate, project.endDate, project.session3Date, project.session4Date, project.session5Date].filter(Boolean).map((d) => formatDate(d!)).join(', ') || '-'}`}
           />
         )}
         <div className="pt-2">

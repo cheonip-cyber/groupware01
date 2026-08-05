@@ -98,6 +98,10 @@ export interface Project extends NotionSyncFields {
   description: string;
   startDate: string;
   endDate?: string;
+  /** 교육일자 3~5차수 (2026-08-05 추가: 노션에 3차수 이상 필드가 신설되어 대응) */
+  session3Date?: string;
+  session4Date?: string;
+  session5Date?: string;
   proposalDueDate?: string;
   proposalSubmittedDate?: string;
   managerName: string;

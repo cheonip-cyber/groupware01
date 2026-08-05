@@ -4,7 +4,7 @@ import { Card, CardHeader } from '../common/Card';
 import { StatusBadge } from '../common/StatusBadge';
 import { MoneyText } from '../common/MoneyText';
 import { projectStatusStyle, revenueStatusStyle, paymentStatusStyle, settlementStatusStyle } from '../../utils/statusConfig';
-import { formatDateRange } from '../../utils/formatters';
+import { formatDateRange, extraSessionSuffix } from '../../utils/formatters';
 import { Table2, ArrowUpRight } from 'lucide-react';
 
 // projects는 반드시 activeProjects()를 거친 ActiveProject[]여야 한다 (취소/보류 자동 제외 강제 —
@@ -38,7 +38,7 @@ export function ProjectSummaryTable({ projects }: { projects: ActiveProject[] })
                   <Link to={`/projects/${p.id}`} className="font-medium text-slate-800 group-hover:text-blue-600">{p.projectName}</Link>
                   <div className="text-xs text-slate-400">{p.clientName} · {p.managerName}</div>
                 </td>
-                <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}</td>
+                <td className="px-3 py-3 text-xs text-slate-500">{formatDateRange(p.startDate, p.endDate)}{extraSessionSuffix(p)}</td>
                 <td className="px-3 py-3"><StatusBadge label={p.projectStatus} style={projectStatusStyle[p.projectStatus]} size="sm" /></td>
                 <td className="px-3 py-3"><StatusBadge label={p.revenueStatus} style={revenueStatusStyle[p.revenueStatus]} size="sm" /></td>
                 <td className="px-3 py-3"><StatusBadge label={p.paymentStatus} style={paymentStatusStyle[p.paymentStatus]} size="sm" /></td>

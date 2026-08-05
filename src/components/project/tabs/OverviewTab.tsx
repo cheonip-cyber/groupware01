@@ -134,15 +134,28 @@ export function OverviewTab({ project, instructors, clients, onUpdate, onRecover
             display={project.proposalDueDate ? formatDate(project.proposalDueDate) : undefined}
             onSave={(v) => onUpdate({ proposalDueDate: v })} />
         </Field>
-        {/* 교육일자(1차수)(2차수)는 각각의 일정이므로 '~' 기간이 아니라 ','로 병기 */}
+        {/* 교육일자(1~5차수)는 각각의 일정이므로 '~' 기간이 아니라 ','로 병기. 3~5차수는 입력된 것만 노출(2026-08-05 추가) */}
         <Field label="교육 일정">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <EditableField value={project.startDate ?? ''} editable type="date"
-              display={project.startDate ? formatDate(project.startDate) : undefined} placeholder="1차수 미입력"
+              display={project.startDate ? `1차 ${formatDate(project.startDate)}` : undefined} placeholder="1차수 미입력"
               onSave={(v) => onUpdate({ startDate: v })} />
             <EditableField value={project.endDate ?? ''} editable type="date"
-              display={project.endDate ? formatDate(project.endDate) : undefined} placeholder="2차수 미입력"
+              display={project.endDate ? `2차 ${formatDate(project.endDate)}` : undefined} placeholder="2차수 미입력"
               onSave={(v) => onUpdate({ endDate: v })} />
+            <EditableField value={project.session3Date ?? ''} editable type="date"
+              display={project.session3Date ? `3차 ${formatDate(project.session3Date)}` : undefined} placeholder="3차수 미입력"
+              onSave={(v) => onUpdate({ session3Date: v })} />
+            {(project.session3Date || project.session4Date) && (
+              <EditableField value={project.session4Date ?? ''} editable type="date"
+                display={project.session4Date ? `4차 ${formatDate(project.session4Date)}` : undefined} placeholder="4차수 미입력"
+                onSave={(v) => onUpdate({ session4Date: v })} />
+            )}
+            {(project.session4Date || project.session5Date) && (
+              <EditableField value={project.session5Date ?? ''} editable type="date"
+                display={project.session5Date ? `5차 ${formatDate(project.session5Date)}` : undefined} placeholder="5차수 미입력"
+                onSave={(v) => onUpdate({ session5Date: v })} />
+            )}
           </span>
         </Field>
         <Field label="업무 담당자">

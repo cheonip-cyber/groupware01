@@ -33,6 +33,12 @@ export const formatDateRange = (start?: string, end?: string): string => {
   return `${formatDate(start)} ~ ${formatDate(end)}`;
 };
 
+/** 3차수 이상 교육일자가 있으면 "외 N회" 형태로 덧붙인다 (목록 화면은 1·2차수만 요약 표시하므로 누락된 회차가 있음을 알림) */
+export const extraSessionSuffix = (p: { session3Date?: string; session4Date?: string; session5Date?: string }): string => {
+  const n = [p.session3Date, p.session4Date, p.session5Date].filter(Boolean).length;
+  return n > 0 ? ` 외 ${n}회` : '';
+};
+
 export const formatPercent = (rate?: number): string => {
   if (rate === undefined || rate === null || isNaN(rate)) return '-';
   return `${rate.toFixed(1)}%`;
