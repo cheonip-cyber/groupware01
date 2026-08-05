@@ -118,6 +118,13 @@ export function AdminCardPage() {
     const rows = cardTxns.filter((t) => t.project_linked);
     return { count: rows.length, total: rows.reduce((s, t) => s + Number(t.amount), 0) };
   }, [cardTxns]);
+  const grandTotal = useMemo(() => totalByCategory.reduce((s, [, amt]) => s + amt, 0), [totalByCategory]);
+  // 검색/필터 결과 합계 (2026-08-05) — 체크박스로 고른 몇 건이 아니라, 지금 걸린
+  // 검색어·월·사용자·카테고리 조건에 맞는 결과 전체의 합계. 필터를 안 걸면 전체 합계와 같다.
+  const filteredStats = useMemo(
+    () => ({ count: filteredTxns.length, total: filteredTxns.reduce((s, t) => s + Number(t.amount), 0) }),
+    [filteredTxns],
+  );
 
   const toggleProjectLinked = async (t: any) => {
     const next = !t.project_linked;
@@ -217,6 +224,11 @@ export function AdminCardPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-800 bg-slate-800 p-3">
+          <p className="text-xs text-slate-300">전체 합계 (회사비용)</p>
+          <p className="mt-1 text-base font-bold text-white"><MoneyText value={grandTotal} compact className="text-white" /></p>
+          <p className="text-[10px] text-slate-400">프로젝트 귀속분 제외 · {month || '전체 기간'}</p>
+        </div>
         {projectLinkedStats.count > 0 && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-3" title="프로젝트 예산에 반영된 카드 사용분 — 손익 이중 반영 방지를 위해 회사비용 합계에서 제외됨">
             <p className="text-xs text-blue-600">프로젝트 귀속 (합계 제외)</p>
@@ -224,7 +236,7 @@ export function AdminCardPage() {
             <p className="text-[10px] text-blue-500">{projectLinkedStats.count}건</p>
           </div>
         )}
-        {totalByCategory.slice(0, 6).map(([cat, total]) => (
+        {totalByCategory.map(([cat, total]) => (
           <div key={cat} className="rounded-xl border border-slate-200 bg-white p-3">
             <p className="text-xs text-slate-500">{cat}</p>
             <p className="mt-1 text-base font-bold text-slate-800"><MoneyText value={total} compact /></p>
@@ -243,7 +255,7 @@ export function AdminCardPage() {
           </div>
         )}
         <CardHeader
-          title={`카드 사용내역 (${filteredTxns.length}건)`}
+          title={`카드 사용내역 (${filteredStats.count}건 · ${filteredStats.total.toLocaleString('ko-KR')}원)`}
           icon={<CreditCard className="h-4 w-4 text-slate-400" />}
           action={
             <span className="flex flex-wrap items-center gap-1.5">
