@@ -19,7 +19,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header title={title} onMenu={() => setOpen(true)} />
-        <main className="flex-1 overflow-auto p-4 lg:p-7">
+        <main className="flex-1 overflow-auto p-4 pb-28 lg:p-7 lg:pb-40">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>

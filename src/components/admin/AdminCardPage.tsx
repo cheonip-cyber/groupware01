@@ -148,7 +148,8 @@ export function AdminCardPage() {
       return next;
     });
   };
-  const visibleTxns = filteredTxns.slice(0, 100);
+  // 2026-08-05: 100건 하드컷 제거 — 필터링된 결과는 전부 렌더링한다(200건 정도는 성능상 문제 없음)
+  const visibleTxns = filteredTxns;
   const allVisibleSelected = visibleTxns.length > 0 && visibleTxns.every((t) => selectedIds.has(t.id));
   const toggleSelectAllVisible = () => {
     setSelectedIds((prev) => {
@@ -281,7 +282,7 @@ export function AdminCardPage() {
           }
         />
         {filteredTxns.length === 0 ? <EmptyState title="내역이 없습니다" /> : (
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-[70vh] overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white"><tr className="border-b border-slate-100 text-left text-xs text-slate-400">
                 <th className="w-8 px-3 py-2.5">
