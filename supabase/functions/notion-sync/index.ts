@@ -1,5 +1,7 @@
-// notion-sync Edge Function (v3 - multi-entity, mapping-table driven)
-// Supports: project, instructor (companies intentionally NOT synced - no Notion source)
+// notion-sync Edge Function (v14)
+// 변경점(v13→v14): '고객사(Account)' 관계형 필드를 clients 테이블 FK(client_id)로 해석하는 특수 처리 추가.
+// 기존 relation 필드는 관련 페이지 제목을 텍스트로 이어붙여 저장했지만, client_id는 숫자 FK가 필요하므로
+// 관련 페이지(고객사) 제목을 clients.name과 매칭해 find-or-create 후 그 id를 저장한다.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
@@ -9,10 +11,26 @@ const ENTITY_CONFIG: Record<string, { table: string; databaseId: string }> = {
   project: { table: 'projects', databaseId: '2eaa43d0-87d9-81bf-b2ff-cab0c0ee5549' },
   instructor: { table: 'instructors', databaseId: 'a8c32f5f-99cc-4769-a560-f32c83259c9d' },
 };
+const CREATE_IF_MISSING = new Set(['instructor', 'project']);
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE, { db: { schema: 'groupware' } });
+
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === 'object') {
+    const a = e as Record<string, unknown>;
+    if (a.message) {
+      let m = String(a.message);
+      if (a.details) m += ` (${a.details})`;
+      if (a.code) m += ` [${a.code}]`;
+      return m;
+    }
+    try { return JSON.stringify(e); } catch { return String(e); }
+  }
+  return String(e);
+}
 
 async function notionFetch(path: string, init: RequestInit = {}) {
   const res = await fetch(`https://api.notion.com/v1${path}`, {
@@ -26,12 +44,55 @@ async function notionFetch(path: string, init: RequestInit = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Notion API ${res.status}: ${text}`);
+    const err: any = new Error(`Notion API ${res.status}: ${text.slice(0, 500)}`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
 
-type DataType = 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text' | 'multi_select' | 'email' | 'phone_number';
+// 페이지 생존 여부: 404(완전삭제) 또는 archived/in_trash(휴지통) 모두 '삭제됨'으로 판단
+async function checkPageAlive(pageId: string): Promise<boolean> {
+  try {
+    const page = await notionFetch(`/pages/${pageId}`);
+    if (page?.archived === true || page?.in_trash === true) return false;
+    return true;
+  } catch (e: any) {
+    if (e?.status === 404) return false;
+    throw e; // 네트워크/권한 등 다른 오류는 삭제로 판단하지 않음 (오인지 방지)
+  }
+}
+
+async function verifyLinks(limit = 25) {
+  let checked = 0, missingFound = 0, errored = 0;
+  for (const table of ['projects', 'instructors']) {
+    const { data: rows, error } = await supabase
+      .from(table)
+      .select('id, notion_page_id')
+      .not('notion_page_id', 'is', null)
+      .eq('notion_missing', false)
+      .order('notion_missing_checked_at', { ascending: true, nullsFirst: true })
+      .limit(limit);
+    if (error) throw error;
+    for (const row of rows ?? []) {
+      try {
+        const alive = await checkPageAlive(row.notion_page_id);
+        await supabase.from(table).update({
+          notion_missing: !alive,
+          notion_missing_checked_at: new Date().toISOString(),
+        }).eq('id', row.id);
+        checked++;
+        if (!alive) missingFound++;
+      } catch (_e) {
+        errored++;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+  return { checked, missingFound, errored };
+}
+
+type DataType = 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text' | 'multi_select' | 'email' | 'phone_number' | 'people' | 'relation';
 
 interface FieldMapping {
   id: number;
@@ -54,10 +115,27 @@ async function getActiveMappings(entityType: string): Promise<FieldMapping[]> {
 
 const NOTION_TYPE_NAME: Record<DataType, string> = {
   title: 'title', status: 'status', select: 'select', checkbox: 'checkbox', date: 'date', number: 'number',
-  rich_text: 'rich_text', multi_select: 'multi_select', email: 'email', phone_number: 'phone_number',
+  rich_text: 'rich_text', multi_select: 'multi_select', email: 'email', phone_number: 'phone_number', people: 'people', relation: 'relation',
 };
 
-function buildNotionPropertyValue(value: any, dataType: DataType) {
+const NO_WRITE_TYPES = new Set<DataType>(['people', 'relation']);
+
+// 매출월(revenue_month, "YYYY-MM") ↔ 노션의 "교육년도"(예: "2026년") + "매출월"(예: "8월") 두 select 필드 조합/분리.
+// 두 노션 필드가 서로 다른 프로퍼티라 범용 1:1 매핑표로는 처리할 수 없어 여기서 전용 처리한다(2026-08-10 추가).
+const YEAR_PROP = '교육년도';
+const MONTH_PROP = '매출월';
+function monthNumToNotionName(mm: string): string { return `${parseInt(mm, 10)}월`; }
+function monthNameToNum(name: string): string | null {
+  const n = parseInt(name.replace('월', ''), 10);
+  return Number.isFinite(n) && n >= 1 && n <= 12 ? String(n).padStart(2, '0') : null;
+}
+function yearNumToNotionName(yyyy: string): string { return `${yyyy}년`; }
+function yearNameToNum(name: string): string | null {
+  const n = parseInt(name.replace('년', ''), 10);
+  return Number.isFinite(n) ? String(n) : null;
+}
+
+function buildNotionPropertyValue(value: unknown, dataType: DataType) {
   switch (dataType) {
     case 'title': return { title: [{ text: { content: String(value ?? '') } }] };
     case 'status': return { status: { name: value } };
@@ -69,6 +147,7 @@ function buildNotionPropertyValue(value: any, dataType: DataType) {
     case 'multi_select': return { multi_select: (Array.isArray(value) ? value : []).map((v: string) => ({ name: v })) };
     case 'email': return { email: value || null };
     case 'phone_number': return { phone_number: value || null };
+    default: return undefined;
   }
 }
 
@@ -88,6 +167,8 @@ function readNotionPropertyValue(pageProperties: any, mapping: FieldMapping): { 
     case 'multi_select': return { value: (prop.multi_select ?? []).map((o: any) => o.name) };
     case 'email': return { value: prop.email ?? null };
     case 'phone_number': return { value: prop.phone_number ?? null };
+    case 'people': return { value: (prop.people ?? []).map((u: any) => u.name).filter(Boolean).join(', ') || null };
+    case 'relation': return { value: (prop.relation ?? []).map((r: any) => r.id) };
   }
 }
 
@@ -100,24 +181,109 @@ async function logSync(entityType: string, entityId: number | null, direction: '
   await supabase.from('notion_sync_log').insert({ entity_type: entityType, entity_id: entityId, direction, status, message });
 }
 
+async function getSyncState(key: string): Promise<string | null> {
+  const { data } = await supabase.from('sync_state').select('value').eq('key', key).maybeSingle();
+  return data?.value ?? null;
+}
+
+async function setSyncState(key: string, value: string) {
+  await supabase.from('sync_state').upsert({ key, value, updated_at: new Date().toISOString() });
+}
+
+// 노션 관련 페이지의 제목(title) 텍스트를 읽어온다 (고객사/담당자 등 relation 값 해석용)
+async function fetchPageTitle(pageId: string): Promise<string> {
+  const p = await notionFetch(`/pages/${pageId}`);
+  for (const k of Object.keys(p.properties ?? {})) {
+    if (p.properties[k]?.type === 'title') {
+      return (p.properties[k].title ?? []).map((x: any) => x.plain_text).join('');
+    }
+  }
+  return '';
+}
+
+// '고객사(Account)' relation → clients 테이블 FK로 해석 (정확한 이름 일치로 find, 없으면 create)
+async function resolveClientId(pageIds: string[]): Promise<number | null> {
+  if (pageIds.length === 0) return null;
+  try {
+    const name = (await fetchPageTitle(pageIds[0])).trim();
+    if (!name) return null;
+    const { data: existing } = await supabase.from('clients').select('id').eq('name', name).maybeSingle();
+    if (existing) return existing.id;
+    const { data: created, error: insErr } = await supabase.from('clients').insert({ name }).select('id').single();
+    if (insErr) return null;
+    return created?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function createNotionPage(entityType: string, row: any, allMappings: FieldMapping[]) {
+  const cfg = ENTITY_CONFIG[entityType];
+  const properties: Record<string, any> = {};
+  for (const m of allMappings) {
+    if (m.sync_direction === 'disabled' || NO_WRITE_TYPES.has(m.data_type)) continue;
+    const v = row[m.supabase_column];
+    if (v === null || v === undefined || (Array.isArray(v) && v.length === 0) || v === '') continue;
+    const built = buildNotionPropertyValue(v, m.data_type);
+    if (built !== undefined) properties[m.notion_property_name] = built;
+  }
+  // 매출월(YYYY-MM) → 교육년도/매출월 두 select 필드로 분리해 생성 시에도 반영
+  if (entityType === 'project' && row.revenue_month) {
+    const [yyyy, mm] = String(row.revenue_month).split('-');
+    if (yyyy && mm) {
+      properties[YEAR_PROP] = { select: { name: yearNumToNotionName(yyyy) } };
+      properties[MONTH_PROP] = { select: { name: monthNumToNotionName(mm) } };
+    }
+  }
+  const page = await notionFetch('/pages', {
+    method: 'POST',
+    body: JSON.stringify({ parent: { database_id: cfg.databaseId }, properties }),
+  });
+  const backfill: Record<string, unknown> = {
+    notion_page_id: page.id,
+    sync_status: 'synced', sync_error: null, last_synced_at: new Date().toISOString(),
+    notion_missing: false, notion_missing_checked_at: new Date().toISOString(),
+  };
+  if (entityType === 'project') { backfill.notion_url = page.url; }
+  const { error: backErr } = await supabase.from(cfg.table).update(backfill).eq('id', row.id);
+  if (backErr) {
+    throw new Error(`노션 페이지는 생성됐으나 연결 역저장 실패: ${errMsg(backErr)} (page ${page.id})`);
+  }
+  return page;
+}
+
 async function pushEntity(entityType: string, id: number) {
   const cfg = ENTITY_CONFIG[entityType];
   if (!cfg) return { error: `unknown entity_type: ${entityType}` };
 
   const mappings = await getActiveMappings(entityType);
-  const pushMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'to_notion_only');
+  const pushMappings = mappings.filter((m) => (m.sync_direction === 'both' || m.sync_direction === 'to_notion_only') && !NO_WRITE_TYPES.has(m.data_type));
 
   const { data: row, error } = await supabase.from(cfg.table).select('*').eq('id', id).maybeSingle();
   if (error || !row) return { skipped: true, reason: 'row not found' };
-  if (!row.notion_page_id) return { skipped: true, reason: 'no notion_page_id linked' };
+
+  if (!row.notion_page_id) {
+    if (!CREATE_IF_MISSING.has(entityType)) return { skipped: true, reason: 'no notion_page_id linked' };
+    try {
+      const page = await createNotionPage(entityType, row, mappings);
+      await logSync(entityType, id, 'to_notion', 'success', `created notion page ${page.id}`);
+      return { created: true, pageId: page.id };
+    } catch (e) {
+      const msg = errMsg(e);
+      await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: msg }).eq('id', id);
+      await logSync(entityType, id, 'to_notion', 'error', `노션 페이지 생성 실패: ${msg}`);
+      return { error: msg };
+    }
+  }
 
   let page: any;
   try {
     page = await notionFetch(`/pages/${row.notion_page_id}`);
   } catch (e) {
-    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
-    await logSync(entityType, id, 'to_notion', 'error', String(e));
-    return { error: String(e) };
+    const msg = errMsg(e);
+    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: msg }).eq('id', id);
+    await logSync(entityType, id, 'to_notion', 'error', msg);
+    return { error: msg };
   }
 
   const properties: Record<string, any> = {};
@@ -137,8 +303,21 @@ async function pushEntity(entityType: string, id: number) {
       continue;
     }
     if (norm(target) !== norm(current.value)) {
-      properties[m.notion_property_name] = buildNotionPropertyValue(target, m.data_type);
-      anyChanged = true;
+      const built = buildNotionPropertyValue(target, m.data_type);
+      if (built !== undefined) { properties[m.notion_property_name] = built; anyChanged = true; }
+    }
+  }
+
+  // 매출월(YYYY-MM) → 교육년도 + 매출월 두 select 필드로 분리해서 반영 (전용 처리, 2026-08-10 추가)
+  if (entityType === 'project' && row.revenue_month) {
+    const [yyyy, mm] = String(row.revenue_month).split('-');
+    if (yyyy && mm) {
+      const wantYear = yearNumToNotionName(yyyy);
+      const wantMonth = monthNumToNotionName(mm);
+      const curYear = page.properties?.[YEAR_PROP]?.select?.name ?? null;
+      const curMonth = page.properties?.[MONTH_PROP]?.select?.name ?? null;
+      if (curYear !== wantYear) { properties[YEAR_PROP] = { select: { name: wantYear } }; anyChanged = true; }
+      if (curMonth !== wantMonth) { properties[MONTH_PROP] = { select: { name: wantMonth } }; anyChanged = true; }
     }
   }
 
@@ -163,9 +342,10 @@ async function pushEntity(entityType: string, id: number) {
     await logSync(entityType, id, 'to_notion', 'success', `pushed (${Object.keys(properties).join(', ')})`);
     return { pushed: true, fields: Object.keys(properties), fieldErrors };
   } catch (e) {
-    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: String(e) }).eq('id', id);
-    await logSync(entityType, id, 'to_notion', 'error', String(e));
-    return { error: String(e) };
+    const msg = errMsg(e);
+    await supabase.from(cfg.table).update({ sync_status: 'error', sync_error: msg }).eq('id', id);
+    await logSync(entityType, id, 'to_notion', 'error', msg);
+    return { error: msg };
   }
 }
 
@@ -177,63 +357,164 @@ async function pullEntity(entityType: string) {
   const pullMappings = mappings.filter((m) => m.sync_direction === 'both' || m.sync_direction === 'from_notion_only');
   const titleMapping = mappings.find((m) => m.data_type === 'title');
 
-  const since = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-  const result = await notionFetch(`/databases/${cfg.databaseId}/query`, {
-    method: 'POST',
-    body: JSON.stringify({
+  const cursorKey = `pull_cursor_${entityType}`;
+  const stored = await getSyncState(cursorKey);
+  const scanStart = new Date().toISOString();
+  const OVERLAP_MS = 60 * 1000;
+  const sinceMs = stored ? new Date(stored).getTime() - OVERLAP_MS : Date.now() - 10 * 60 * 1000;
+  const since = new Date(sinceMs).toISOString();
+
+  let created = 0, updated = 0, skipped = 0, errored = 0, scanned = 0;
+  let startCursor: string | undefined = undefined;
+
+  for (let batch = 0; batch < 20; batch++) {
+    const body: Record<string, unknown> = {
       filter: { timestamp: 'last_edited_time', last_edited_time: { on_or_after: since } },
-      page_size: 50,
-    }),
-  });
+      page_size: 100,
+    };
+    if (startCursor) body.start_cursor = startCursor;
+    const result = await notionFetch(`/databases/${cfg.databaseId}/query`, { method: 'POST', body: JSON.stringify(body) });
+    scanned += (result.results ?? []).length;
 
-  let created = 0, updated = 0, skipped = 0, errored = 0;
+    for (const page of result.results ?? []) {
+      try {
+        const patch: Record<string, any> = {};
+        const fieldErrors: string[] = [];
 
-  for (const page of result.results ?? []) {
-    try {
-      const patch: Record<string, any> = {};
-      const fieldErrors: string[] = [];
+        for (const m of pullMappings) {
+          const read = readNotionPropertyValue(page.properties, m);
+          if (read.missing) { fieldErrors.push(`속성 없음: "${m.notion_property_name}"`); continue; }
+          if (read.typeMismatch) { fieldErrors.push(`타입 불일치: "${m.notion_property_name}"`); continue; }
+          if (m.data_type === 'relation') {
+            const ids: string[] = read.value ?? [];
+            if (m.supabase_column === 'client_id') {
+              // 고객사 관계형 필드는 clients 테이블 FK로 해석 (제목 정확 일치로 find-or-create)
+              patch[m.supabase_column] = await resolveClientId(ids);
+            } else {
+              const names: string[] = [];
+              for (const rid of ids.slice(0, 5)) {
+                try { const t = await fetchPageTitle(rid); if (t) names.push(t); } catch {}
+              }
+              patch[m.supabase_column] = names.join(', ') || null;
+            }
+          } else {
+            patch[m.supabase_column] = read.value;
+          }
+        }
 
-      for (const m of pullMappings) {
-        const read = readNotionPropertyValue(page.properties, m);
-        if (read.missing) { fieldErrors.push(`속성 없음: "${m.notion_property_name}"`); continue; }
-        if (read.typeMismatch) { fieldErrors.push(`타입 불일치: "${m.notion_property_name}"`); continue; }
-        patch[m.supabase_column] = read.value;
+        // 매출월: 노션 "교육년도"+"매출월" select 두 개를 조합해 DB "YYYY-MM" 하나로 저장 (전용 처리, 2026-08-10 추가)
+        if (entityType === 'project') {
+          const yearName = page.properties?.[YEAR_PROP]?.select?.name ?? null;
+          const monthName = page.properties?.[MONTH_PROP]?.select?.name ?? null;
+          if (yearName && monthName) {
+            const yyyy = yearNameToNum(yearName);
+            const mm = monthNameToNum(monthName);
+            if (yyyy && mm) patch.revenue_month = `${yyyy}-${mm}`;
+          }
+        }
+
+        const { data: existing } = await supabase.from(cfg.table).select('id, *').eq('notion_page_id', page.id).maybeSingle();
+
+        if (existing) {
+          const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
+          if (!changed && fieldErrors.length === 0) { skipped++; continue; }
+
+          const { error: updErr } = await supabase.from(cfg.table).update({
+            ...patch, last_synced_at: new Date().toISOString(),
+            sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+            sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
+          }).eq('id', existing.id);
+          if (updErr) throw updErr;
+          await logSync(entityType, existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
+          updated++;
+        } else {
+          const titleValue = titleMapping ? patch[titleMapping.supabase_column] : null;
+          if (!titleValue) { skipped++; continue; }
+
+          const { data: nameDup } = await supabase.from(cfg.table)
+            .select('id, notion_page_id').eq(titleMapping!.supabase_column, titleValue).limit(1);
+          if (nameDup && nameDup.length > 0) {
+            if (!nameDup[0].notion_page_id) {
+              await supabase.from(cfg.table).update({
+                notion_page_id: page.id, last_synced_at: new Date().toISOString(), sync_status: 'synced', sync_error: null,
+              }).eq('id', nameDup[0].id);
+              await logSync(entityType, nameDup[0].id, 'from_notion', 'success', `기존 행과 자동 연결: "${String(titleValue).slice(0, 60)}"`);
+              updated++;
+              continue;
+            }
+            skipped++;
+            await logSync(entityType, nameDup[0].id, 'from_notion', 'error',
+              `생성 보류(이름 중복 가드): "${String(titleValue).slice(0, 80)}" — 기존 행 존재, notion_page_id 미연결 상태. 필요 시 수동 연결`);
+            continue;
+          }
+
+          const { data: inserted, error: insErr } = await supabase.from(cfg.table).insert({
+            ...patch,
+            notion_page_id: page.id,
+            ...(entityType === 'project' ? { notion_url: page.url, is_master: true, source_type: 'notion' } : {}),
+            sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
+            sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
+            last_synced_at: new Date().toISOString(),
+          }).select('id').single();
+          if (insErr) throw insErr;
+          await logSync(entityType, inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
+          created++;
+        }
+      } catch (e) {
+        errored++;
+        await logSync(entityType, null, 'from_notion', 'error', errMsg(e));
       }
-
-      const { data: existing } = await supabase.from(cfg.table).select('id, *').eq('notion_page_id', page.id).maybeSingle();
-
-      if (existing) {
-        const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
-        if (!changed && fieldErrors.length === 0) { skipped++; continue; }
-
-        await supabase.from(cfg.table).update({
-          ...patch, last_synced_at: new Date().toISOString(),
-          sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
-          sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
-        }).eq('id', existing.id);
-        await logSync(entityType, existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
-        updated++;
-      } else {
-        const titleValue = titleMapping ? patch[titleMapping.supabase_column] : null;
-        if (!titleValue) { skipped++; continue; }
-        const { data: inserted, error: insErr } = await supabase.from(cfg.table).insert({
-          ...patch,
-          notion_page_id: page.id,
-          ...(entityType === 'project' ? { notion_url: page.url, is_master: true } : {}),
-          sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
-          sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
-          last_synced_at: new Date().toISOString(),
-        }).select('id').single();
-        if (insErr) throw insErr;
-        await logSync(entityType, inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
-        created++;
-      }
-    } catch (e) {
-      errored++;
-      await logSync(entityType, null, 'from_notion', 'error', String(e));
     }
+
+    if (!result.has_more) break;
+    startCursor = result.next_cursor;
   }
-  return { entityType, scanned: (result.results ?? []).length, created, updated, skipped, errored };
+
+  await setSyncState(cursorKey, scanStart);
+  return { entityType, scanned, created, updated, skipped, errored };
+}
+
+async function processQueue(limit = 15) {
+  const { data: items } = await supabase
+    .from('notion_push_queue')
+    .select('*')
+    .eq('status', 'pending')
+    .order('id', { ascending: true })
+    .limit(limit);
+
+  let done = 0, failed = 0, rateLimited = false;
+
+  for (const item of items ?? []) {
+    await supabase.from('notion_push_queue').update({ status: 'processing' }).eq('id', item.id);
+    try {
+      const r: any = await pushEntity(item.entity_type, item.entity_id);
+      if (r && r.error) throw new Error(r.error);
+      await supabase.from('notion_push_queue').update({
+        status: 'done', processed_at: new Date().toISOString(), last_error: null,
+      }).eq('id', item.id);
+      done++;
+    } catch (e) {
+      const msg = errMsg(e);
+      const is429 = msg.includes('429');
+      const attempts = (item.attempts ?? 0) + 1;
+      const finalFail = !is429 && attempts >= 5;
+      const { error: upErr } = await supabase.from('notion_push_queue').update({
+        status: finalFail ? 'error' : 'pending',
+        attempts, last_error: msg,
+      }).eq('id', item.id);
+      if (upErr) {
+        await supabase.from('notion_push_queue').update({
+          status: 'done', processed_at: new Date().toISOString(),
+          last_error: `${msg} (신규 대기 항목으로 대체됨)`,
+        }).eq('id', item.id);
+      }
+      failed++;
+      if (is429) { rateLimited = true; break; }
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+
+  return { picked: (items ?? []).length, done, failed, rateLimited };
 }
 
 Deno.serve(async (req: Request) => {
@@ -250,6 +531,10 @@ Deno.serve(async (req: Request) => {
       const result = await pushEntity(entityType, Number(body.entityId ?? body.projectId));
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
     }
+    if (action === 'process_queue') {
+      const result = await processQueue(Number(body.limit ?? 15));
+      return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+    }
     if (action === 'pull') {
       const result = await pullEntity(entityType);
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
@@ -259,8 +544,12 @@ Deno.serve(async (req: Request) => {
       for (const et of Object.keys(ENTITY_CONFIG)) results.push(await pullEntity(et));
       return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
     }
+    if (action === 'verify_links') {
+      const result = await verifyLinks(Number(body.limit ?? 25));
+      return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ error: 'unknown action' }), { status: 400 });
   } catch (e) {
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+    return new Response(JSON.stringify({ error: errMsg(e) }), { status: 500 });
   }
 });
