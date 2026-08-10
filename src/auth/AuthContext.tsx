@@ -57,14 +57,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) {
-        loadProfile(data.session.user.id, data.session.user.email ?? '').finally(() => setLoading(false));
-      } else {
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        if (data.session?.user) {
+          loadProfile(data.session.user.id, data.session.user.email ?? '').finally(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        // 세션 확인 요청이 네트워크 문제로 실패해도(예: 일시적 단절) loading이 영원히 true로
+        // 남지 않도록 한다. 이전에는 .catch()가 없어 이 경우 로그인 화면 진입 전 단계인
+        // 로딩 스피너에서 멈춰버리는(무한로딩) 결함이 있었다(2026-08-10 발견/수정).
+        // eslint-disable-next-line no-console
+        console.error('세션 확인 실패:', err instanceof Error ? err.message : err);
         setLoading(false);
-      }
-    });
+      });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
