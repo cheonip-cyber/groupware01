@@ -1,14 +1,17 @@
-// notion-sync Edge Function (v14)
-// 변경점(v13→v14): '고객사(Account)' 관계형 필드를 clients 테이블 FK(client_id)로 해석하는 특수 처리 추가.
-// 기존 relation 필드는 관련 페이지 제목을 텍스트로 이어붙여 저장했지만, client_id는 숫자 FK가 필요하므로
-// 관련 페이지(고객사) 제목을 clients.name과 매칭해 find-or-create 후 그 id를 저장한다.
+// notion-sync Edge Function (v26 - fix stale error status on skip)
+// 변경점(v17→v18): verify_links가 notion_missing=true인 행을 영구히 재검사 안 하던 결함 수정.
+// 노션 접근이 일시 차단됐다 복구돼도 한 번 '삭제됨'으로 찍힌 건은 자동 회복되지 않았음(2026-08-13).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
 const NOTION_VERSION = '2022-06-28';
 
 const ENTITY_CONFIG: Record<string, { table: string; databaseId: string }> = {
-  project: { table: 'projects', databaseId: '2eaa43d0-87d9-81bf-b2ff-cab0c0ee5549' },
+  // 2026-08-18: 원본 데이터베이스(2eaa43d0-...)의 데이터 소스 권한이 노션 내부에서 손상되어
+  // API 접근이 영구적으로 막힘(같은 통합/같은 토큰으로 강사 DB는 정상 접근되는 것으로 원인이
+  // 이 DB에 국한됨을 확인). 동일 스키마로 새 데이터베이스를 만들어 61건(2026년 실제 등록분)을
+  // 이관하고 여기로 교체함.
+  project: { table: 'projects', databaseId: 'd3bf9b4d-f51c-44ab-8d79-3f97e7967313' },
   instructor: { table: 'instructors', databaseId: 'a8c32f5f-99cc-4769-a560-f32c83259c9d' },
 };
 const CREATE_IF_MISSING = new Set(['instructor', 'project']);
@@ -51,7 +54,6 @@ async function notionFetch(path: string, init: RequestInit = {}) {
   return res.json();
 }
 
-// 페이지 생존 여부: 404(완전삭제) 또는 archived/in_trash(휴지통) 모두 '삭제됨'으로 판단
 async function checkPageAlive(pageId: string): Promise<boolean> {
   try {
     const page = await notionFetch(`/pages/${pageId}`);
@@ -59,18 +61,17 @@ async function checkPageAlive(pageId: string): Promise<boolean> {
     return true;
   } catch (e: any) {
     if (e?.status === 404) return false;
-    throw e; // 네트워크/권한 등 다른 오류는 삭제로 판단하지 않음 (오인지 방지)
+    throw e;
   }
 }
 
 async function verifyLinks(limit = 25) {
-  let checked = 0, missingFound = 0, errored = 0;
+  let checked = 0, missingFound = 0, recovered = 0, errored = 0;
   for (const table of ['projects', 'instructors']) {
     const { data: rows, error } = await supabase
       .from(table)
-      .select('id, notion_page_id')
+      .select('id, notion_page_id, notion_missing')
       .not('notion_page_id', 'is', null)
-      .eq('notion_missing', false)
       .order('notion_missing_checked_at', { ascending: true, nullsFirst: true })
       .limit(limit);
     if (error) throw error;
@@ -83,13 +84,14 @@ async function verifyLinks(limit = 25) {
         }).eq('id', row.id);
         checked++;
         if (!alive) missingFound++;
+        if (alive && row.notion_missing) recovered++;
       } catch (_e) {
         errored++;
       }
       await new Promise((r) => setTimeout(r, 150));
     }
   }
-  return { checked, missingFound, errored };
+  return { checked, missingFound, recovered, errored };
 }
 
 type DataType = 'title' | 'status' | 'select' | 'checkbox' | 'date' | 'number' | 'rich_text' | 'multi_select' | 'email' | 'phone_number' | 'people' | 'relation';
@@ -120,8 +122,6 @@ const NOTION_TYPE_NAME: Record<DataType, string> = {
 
 const NO_WRITE_TYPES = new Set<DataType>(['people', 'relation']);
 
-// 매출월(revenue_month, "YYYY-MM") ↔ 노션의 "교육년도"(예: "2026년") + "매출월"(예: "8월") 두 select 필드 조합/분리.
-// 두 노션 필드가 서로 다른 프로퍼티라 범용 1:1 매핑표로는 처리할 수 없어 여기서 전용 처리한다(2026-08-10 추가).
 const YEAR_PROP = '교육년도';
 const MONTH_PROP = '매출월';
 function monthNumToNotionName(mm: string): string { return `${parseInt(mm, 10)}월`; }
@@ -190,7 +190,6 @@ async function setSyncState(key: string, value: string) {
   await supabase.from('sync_state').upsert({ key, value, updated_at: new Date().toISOString() });
 }
 
-// 노션 관련 페이지의 제목(title) 텍스트를 읽어온다 (고객사/담당자 등 relation 값 해석용)
 async function fetchPageTitle(pageId: string): Promise<string> {
   const p = await notionFetch(`/pages/${pageId}`);
   for (const k of Object.keys(p.properties ?? {})) {
@@ -201,7 +200,6 @@ async function fetchPageTitle(pageId: string): Promise<string> {
   return '';
 }
 
-// '고객사(Account)' relation → clients 테이블 FK로 해석 (정확한 이름 일치로 find, 없으면 create)
 async function resolveClientId(pageIds: string[]): Promise<number | null> {
   if (pageIds.length === 0) return null;
   try {
@@ -227,7 +225,6 @@ async function createNotionPage(entityType: string, row: any, allMappings: Field
     const built = buildNotionPropertyValue(v, m.data_type);
     if (built !== undefined) properties[m.notion_property_name] = built;
   }
-  // 매출월(YYYY-MM) → 교육년도/매출월 두 select 필드로 분리해 생성 시에도 반영
   if (entityType === 'project' && row.revenue_month) {
     const [yyyy, mm] = String(row.revenue_month).split('-');
     if (yyyy && mm) {
@@ -308,7 +305,6 @@ async function pushEntity(entityType: string, id: number) {
     }
   }
 
-  // 매출월(YYYY-MM) → 교육년도 + 매출월 두 select 필드로 분리해서 반영 (전용 처리, 2026-08-10 추가)
   if (entityType === 'project' && row.revenue_month) {
     const [yyyy, mm] = String(row.revenue_month).split('-');
     if (yyyy && mm) {
@@ -388,7 +384,6 @@ async function pullEntity(entityType: string) {
           if (m.data_type === 'relation') {
             const ids: string[] = read.value ?? [];
             if (m.supabase_column === 'client_id') {
-              // 고객사 관계형 필드는 clients 테이블 FK로 해석 (제목 정확 일치로 find-or-create)
               patch[m.supabase_column] = await resolveClientId(ids);
             } else {
               const names: string[] = [];
@@ -402,11 +397,15 @@ async function pullEntity(entityType: string) {
           }
         }
 
-        // 매출월: 노션 "교육년도"+"매출월" select 두 개를 조합해 DB "YYYY-MM" 하나로 저장 (전용 처리, 2026-08-10 추가)
         if (entityType === 'project') {
-          const yearName = page.properties?.[YEAR_PROP]?.select?.name ?? null;
           const monthName = page.properties?.[MONTH_PROP]?.select?.name ?? null;
-          if (yearName && monthName) {
+          if (monthName) {
+            let yearName = page.properties?.[YEAR_PROP]?.select?.name ?? null;
+            if (!yearName) {
+              const sessionDate = ['교육일자(1차수)', '교육일자(2차수)', '교육일자(3차수)', '교육일자(4차수)', '교육일자(5차수)']
+                .map((k) => page.properties?.[k]?.date?.start).find((d: string | undefined) => !!d);
+              yearName = sessionDate ? `${sessionDate.slice(0, 4)}년` : `${new Date().getFullYear()}년`;
+            }
             const yyyy = yearNameToNum(yearName);
             const mm = monthNameToNum(monthName);
             if (yyyy && mm) patch.revenue_month = `${yyyy}-${mm}`;
@@ -417,7 +416,16 @@ async function pullEntity(entityType: string) {
 
         if (existing) {
           const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
-          if (!changed && fieldErrors.length === 0) { skipped++; continue; }
+          // 2026-08-18 수정: 값은 변경 없어도, 예전에 남아있던 sync_status='error'(예: 매핑
+          // 타입 불일치가 나중에 고쳐진 경우)를 그대로 방치하던 결함 수정 — 지금 오류가 없으면
+          // 정리해서 오래된 오류 표시가 계속 남아있지 않게 한다.
+          if (!changed && fieldErrors.length === 0) {
+            if ((existing as any).sync_status === 'error') {
+              await supabase.from(cfg.table).update({ sync_status: 'synced', sync_error: null }).eq('id', existing.id);
+            }
+            skipped++;
+            continue;
+          }
 
           const { error: updErr } = await supabase.from(cfg.table).update({
             ...patch, last_synced_at: new Date().toISOString(),
@@ -527,6 +535,22 @@ Deno.serve(async (req: Request) => {
     const action = body.action ?? 'pull';
     const entityType = body.entityType ?? 'project';
 
+    if (action === 'whoami') {
+      try {
+        const me = await notionFetch('/users/me');
+        const testId = body.checkDbId ?? ENTITY_CONFIG.project.databaseId;
+        let dbAccess: any = null;
+        try {
+          const db = await notionFetch(`/databases/${testId}`);
+          dbAccess = { ok: true, title: db?.title?.[0]?.plain_text ?? null };
+        } catch (e: any) {
+          dbAccess = { error: errMsg(e), status: e?.status };
+        }
+        return new Response(JSON.stringify({ tokenValid: true, bot: me, checkedDbId: testId, dbAccess }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        return new Response(JSON.stringify({ tokenValid: false, error: errMsg(e) }), { headers: { 'Content-Type': 'application/json' } });
+      }
+    }
     if (action === 'push') {
       const result = await pushEntity(entityType, Number(body.entityId ?? body.projectId));
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
