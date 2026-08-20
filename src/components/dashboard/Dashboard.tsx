@@ -12,6 +12,7 @@ import { ProjectSummaryTable } from './ProjectSummaryTable';
 import { FolderKanban, CalendarClock, CheckCircle2, Play, FileBarChart, CreditCard, AlertCircle, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PageSkeleton } from '../common/Skeleton';
+import { InstructorEngagementStatus } from '../admin/InstructorEngagementStatus';
 import type { ActiveProject } from '../../utils/filters';
 
 export function Dashboard() {
@@ -158,6 +159,9 @@ export function Dashboard() {
 
       {/* 요약 테이블 */}
       <ProjectSummaryTable projects={active} />
+
+      {/* 강사 섭외 현황 (2026-08-19 경영 인사이트에서 이동) */}
+      <InstructorEngagementStatus />
     </div>
   );
 }

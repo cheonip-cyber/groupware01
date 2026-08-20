@@ -5,7 +5,6 @@ import { MoneyText } from '../common/MoneyText';
 import { activeProjects, projectYear } from '../../utils/filters';
 import type { Project } from '../../types';
 import { Building2, Users, BookOpen, Flame, Minus, Snowflake, AlertTriangle, Award, TrendingUp } from 'lucide-react';
-import { InstructorEngagementStatus } from './InstructorEngagementStatus';
 
 // 경영현황 신규 인사이트 (2026-08-04)
 // — 과거 레거시 그룹웨어의 '영업 인텔리전스' 메뉴(Health Score/다양성 지수/프로그램 트렌드/마진 히트맵)를
@@ -331,8 +330,6 @@ export function BusinessInsights({ year }: { year: string }) {
           </table>
         </div>
       </Card>
-
-      <InstructorEngagementStatus />
     </div>
   );
 }
