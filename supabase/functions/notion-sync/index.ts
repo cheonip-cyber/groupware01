@@ -1,6 +1,8 @@
-// notion-sync Edge Function (v26 - fix stale error status on skip)
+// notion-sync Edge Function (v27 - add 강사섭외 -> project_instructors sync)
 // 변경점(v17→v18): verify_links가 notion_missing=true인 행을 영구히 재검사 안 하던 결함 수정.
 // 노션 접근이 일시 차단됐다 복구돼도 한 번 '삭제됨'으로 찍힌 건은 자동 회복되지 않았음(2026-08-13).
+// 변경점(v26→v27): 프로젝트의 "강사섭외" 관계형 필드를 groupware.project_instructors 정션
+// 테이블로 동기화하는 로직 추가(2026-08-19). 강사별 섭외 현황 대시보드용.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
@@ -124,6 +126,7 @@ const NO_WRITE_TYPES = new Set<DataType>(['people', 'relation']);
 
 const YEAR_PROP = '교육년도';
 const MONTH_PROP = '매출월';
+const INSTRUCTOR_RELATION_PROP = '강사섭외';
 function monthNumToNotionName(mm: string): string { return `${parseInt(mm, 10)}월`; }
 function monthNameToNum(name: string): string | null {
   const n = parseInt(name.replace('월', ''), 10);
@@ -212,6 +215,30 @@ async function resolveClientId(pageIds: string[]): Promise<number | null> {
     return created?.id ?? null;
   } catch {
     return null;
+  }
+}
+
+// 강사섭외 관계형(노션 페이지ID 목록)을 groupware.instructors.notion_page_id로 직접 매칭해
+// project_instructors 정션 테이블을 현재 상태로 맞춘다(삭제 후 재삽입). 강사는 이미 자체
+// 동기화로 notion_page_id를 갖고 있으므로 이름매칭 없이 정확히 매칭 가능하다(2026-08-19 추가).
+async function syncProjectInstructors(projectRowId: number, instructorPageIds: string[]) {
+  try {
+    let instructorIds: number[] = [];
+    if (instructorPageIds.length > 0) {
+      const { data: rows } = await supabase
+        .from('instructors')
+        .select('id')
+        .in('notion_page_id', instructorPageIds);
+      instructorIds = (rows ?? []).map((r: any) => r.id);
+    }
+    await supabase.from('project_instructors').delete().eq('project_id', projectRowId);
+    if (instructorIds.length > 0) {
+      await supabase.from('project_instructors').insert(
+        instructorIds.map((instructor_id) => ({ project_id: projectRowId, instructor_id }))
+      );
+    }
+  } catch (_e) {
+    // 정션 테이블 동기화 실패는 본 동기화 흐름을 막지 않음(부가 기능)
   }
 }
 
@@ -414,15 +441,22 @@ async function pullEntity(entityType: string) {
 
         const { data: existing } = await supabase.from(cfg.table).select('id, *').eq('notion_page_id', page.id).maybeSingle();
 
+        // 강사섭외 관계형 값(노션 페이지ID 목록)은 컬럼 patch가 아니라 project_instructors
+        // 정션 테이블 동기화 대상이라 미리 읽어둔다(entityType==='project'인 경우만).
+        const instructorPageIds: string[] = entityType === 'project'
+          ? (page.properties?.[INSTRUCTOR_RELATION_PROP]?.relation ?? []).map((r: any) => r.id)
+          : [];
+
         if (existing) {
           const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
           // 2026-08-18 수정: 값은 변경 없어도, 예전에 남아있던 sync_status='error'(예: 매핑
-          // 타입 불일치가 나중에 고쳐진 경우)를 그대로 방치하던 결함 수정 — 지금 오류가 없으면
+          // 타입 불일치가 나중에 고쳤진 경우)를 그대로 방치하던 결함 수정 — 지금 오류가 없으면
           // 정리해서 오래된 오류 표시가 계속 남아있지 않게 한다.
           if (!changed && fieldErrors.length === 0) {
             if ((existing as any).sync_status === 'error') {
               await supabase.from(cfg.table).update({ sync_status: 'synced', sync_error: null }).eq('id', existing.id);
             }
+            if (entityType === 'project') await syncProjectInstructors(existing.id, instructorPageIds);
             skipped++;
             continue;
           }
@@ -433,6 +467,7 @@ async function pullEntity(entityType: string) {
             sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
           }).eq('id', existing.id);
           if (updErr) throw updErr;
+          if (entityType === 'project') await syncProjectInstructors(existing.id, instructorPageIds);
           await logSync(entityType, existing.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'updated from notion');
           updated++;
         } else {
@@ -446,6 +481,7 @@ async function pullEntity(entityType: string) {
               await supabase.from(cfg.table).update({
                 notion_page_id: page.id, last_synced_at: new Date().toISOString(), sync_status: 'synced', sync_error: null,
               }).eq('id', nameDup[0].id);
+              if (entityType === 'project') await syncProjectInstructors(nameDup[0].id, instructorPageIds);
               await logSync(entityType, nameDup[0].id, 'from_notion', 'success', `기존 행과 자동 연결: "${String(titleValue).slice(0, 60)}"`);
               updated++;
               continue;
@@ -465,6 +501,7 @@ async function pullEntity(entityType: string) {
             last_synced_at: new Date().toISOString(),
           }).select('id').single();
           if (insErr) throw insErr;
+          if (entityType === 'project') await syncProjectInstructors(inserted!.id, instructorPageIds);
           await logSync(entityType, inserted!.id, 'from_notion', fieldErrors.length > 0 ? 'error' : 'success', fieldErrors.join(' / ') || 'created from notion');
           created++;
         }
