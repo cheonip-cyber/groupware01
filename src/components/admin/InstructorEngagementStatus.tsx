@@ -32,7 +32,7 @@ const STATUS_COLOR: Record<string, string> = {
   '운영/모니터링': 'bg-pink-100 text-pink-800',
   '보고/정산': 'bg-green-100 text-green-800',
   '종료(수익화 완료)': 'bg-emerald-100 text-emerald-800',
-  '취소/보류': 'bg-red-100 text-red-800',
+  '취소/보류': 'bg-slate-200 text-slate-500',
 };
 
 function formatSessionDates(dates: string[] | null): string | null {
@@ -82,14 +82,14 @@ export function InstructorEngagementStatus() {
       ) : grouped.length === 0 ? (
         <div className="px-5 pb-4 text-sm text-slate-400">표시할 항목이 없습니다.</div>
       ) : (
-        <div className="divide-y divide-slate-50 px-5 pb-3">
+        <div className="space-y-2 px-5 pb-3 pt-1">
           {grouped.map((g) => (
-            <div key={g.instructorName} className="py-2.5">
+            <div key={g.instructorName} className="rounded-lg border-l-[3px] border-blue-400 bg-slate-50/80 py-2 pl-3 pr-2">
               <Link to={`/instructors?highlight=${g.instructorId}`}
-                className="text-sm font-medium text-slate-700 hover:text-blue-600 hover:underline mb-1.5 inline-block">
+                className="text-[15px] font-semibold text-slate-800 hover:text-blue-600 hover:underline mb-1.5 inline-block">
                 {g.instructorName}
               </Link>
-              <div className="space-y-1 pl-1">
+              <div className="space-y-1">
                 {g.items.map((it) => {
                   const sessionLabel = formatSessionDates(it.session_dates);
                   return (
