@@ -115,8 +115,8 @@ export function Dashboard() {
           hint="제안 단계 (취소/보류 미반영)" />
         <KpiCard label="이익률" value={`${kpi.profitRate}%`} tone="emerald" icon={<TrendingUp className="h-4 w-4" />}
           hint={kpi.profitRateDeviation > 0
-            ? `±${kpi.profitRateDeviation}%p 편차 (예산 미입력 매출 반영 시) · 이익 ${formatCompactKRW(kpi.expectedProfit)}`
-            : `매출 - 예산비용 · 이익 ${formatCompactKRW(kpi.expectedProfit)}`} />
+            ? `±${kpi.profitRateDeviation}%p 편차 (예산 미입력 매출 반영 시) · 경영지출 미반영`
+            : `매출 - 예산비용 · 경영지출 미반영`} />
       </div>
 
       {/* KPI — 진행 현황 */}
