@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../auth/AuthContext';
 import { Card, CardHeader } from '../common/Card';
-import { Mic } from 'lucide-react';
+import { Mic, MessageSquare, MessageSquareText } from 'lucide-react';
 
 // 강사 섭외 현황 (2026-08-19 신설, 2026-08-21 표 형태로 전면 재구성)
 // — 노션 "강사섭외" 관계형 필드를 groupware.project_instructors 정션 테이블로 동기화한 결과를
@@ -18,6 +18,9 @@ import { Mic } from 'lucide-react';
 //   구분이 안 되는 문제로) "프로젝트 × 강사" 단위로 재설계(2026-08-21). 화면은 표 형태로
 //   바꿔서 상단에 항목명을 스크롤해도 고정으로 보이게 하고(sticky), 각 행에는 체크박스만
 //   두어(라벨 반복 없음) 프로젝트가 많은 강사도 목록이 옆으로/세로로 불어나지 않게 했다.
+// — 메모(2026-08-21 추가): 체크리스트와 동일하게 "프로젝트 × 강사" 단위. 표가 넓어지지
+//   않도록 마지막 열에 아이콘만 두고, 클릭하면 그 행 아래에 텍스트 입력 줄이 펼쳐지는 방식.
+//   메모가 있으면 아이콘이 채워진 모양으로 바뀌어 한눈에 구분된다.
 
 interface EngagementRow {
   instructor_id: number;
@@ -60,6 +63,10 @@ export function InstructorEngagementStatus() {
   const { profile } = useAuth();
   const [rows, setRows] = useState<EngagementRow[]>([]);
   const [checkState, setCheckState] = useState<Record<string, boolean>>({}); // key = `${project_id}:${instructor_id}:${item_key}`
+  const [memoState, setMemoState] = useState<Record<string, string>>({}); // key = `${project_id}:${instructor_id}`
+  const [openMemoKey, setOpenMemoKey] = useState<string | null>(null);
+  const [memoDraft, setMemoDraft] = useState('');
+  const [memoSaving, setMemoSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,14 +84,17 @@ export function InstructorEngagementStatus() {
 
       const projectIds = [...new Set(engagementRows.map((r) => r.project_id))];
       if (projectIds.length > 0) {
-        const { data: stateRows } = await supabase
-          .from('ops_checklist_state')
-          .select('project_id, instructor_id, item_key, checked')
-          .in('project_id', projectIds);
+        const [{ data: stateRows }, { data: memoRows }] = await Promise.all([
+          supabase.from('ops_checklist_state').select('project_id, instructor_id, item_key, checked').in('project_id', projectIds),
+          supabase.from('instructor_engagement_memo').select('project_id, instructor_id, memo').in('project_id', projectIds),
+        ]);
         if (cancelled) return;
         const map: Record<string, boolean> = {};
         (stateRows ?? []).forEach((r: any) => { map[`${r.project_id}:${r.instructor_id}:${r.item_key}`] = r.checked; });
         setCheckState(map);
+        const memoMap: Record<string, string> = {};
+        (memoRows ?? []).forEach((r: any) => { if (r.memo) memoMap[`${r.project_id}:${r.instructor_id}`] = r.memo; });
+        setMemoState(memoMap);
       }
       setLoading(false);
     })();
@@ -103,6 +113,33 @@ export function InstructorEngagementStatus() {
       checked_at: next ? new Date().toISOString() : null,
       checked_by: next ? (profile?.name || profile?.email || null) : null,
     }, { onConflict: 'project_id,instructor_id,item_key' });
+  };
+
+  const openMemo = (projectId: number, instructorId: number) => {
+    const key = `${projectId}:${instructorId}`;
+    if (openMemoKey === key) { setOpenMemoKey(null); return; }
+    setOpenMemoKey(key);
+    setMemoDraft(memoState[key] ?? '');
+  };
+
+  const saveMemo = async (projectId: number, instructorId: number) => {
+    const key = `${projectId}:${instructorId}`;
+    setMemoSaving(true);
+    const text = memoDraft.trim();
+    await supabase.from('instructor_engagement_memo').upsert({
+      project_id: projectId,
+      instructor_id: instructorId,
+      memo: text,
+      updated_at: new Date().toISOString(),
+      updated_by: profile?.name || profile?.email || null,
+    }, { onConflict: 'project_id,instructor_id' });
+    setMemoState((prev) => {
+      const next = { ...prev };
+      if (text) next[key] = text; else delete next[key];
+      return next;
+    });
+    setMemoSaving(false);
+    setOpenMemoKey(null);
   };
 
   // 강사별 그룹핑 (뷰가 이미 강사명순 정렬되어 있어 순서만 보존) — rowSpan에 사용
@@ -137,44 +174,76 @@ export function InstructorEngagementStatus() {
                     {item.label}
                   </th>
                 ))}
+                <th className="w-10 px-1.5 py-2 text-center text-xs font-semibold text-slate-500">메모</th>
               </tr>
             </thead>
             <tbody>
               {grouped.map((g) => (
                 g.items.map((it, idx) => {
                   const sessionLabel = formatSessionDates(it.session_dates);
+                  const memoKey = `${it.project_id}:${g.instructorId}`;
+                  const hasMemo = !!memoState[memoKey];
+                  const memoOpen = openMemoKey === memoKey;
                   return (
-                    <tr key={it.project_id} className="border-t border-slate-50 hover:bg-slate-50/60">
-                      {idx === 0 && (
-                        <td rowSpan={g.items.length} className="w-24 align-top px-2 py-2">
-                          <Link to={`/instructors?highlight=${g.instructorId}`}
-                            className="font-semibold text-slate-800 hover:text-blue-600 hover:underline">
-                            {g.instructorName}
+                    <React.Fragment key={it.project_id}>
+                      <tr className="border-t border-slate-50 hover:bg-slate-50/60">
+                        {idx === 0 && (
+                          <td rowSpan={g.items.length} className="w-24 align-top px-2 py-2">
+                            <Link to={`/instructors?highlight=${g.instructorId}`}
+                              className="font-semibold text-slate-800 hover:text-blue-600 hover:underline">
+                              {g.instructorName}
+                            </Link>
+                          </td>
+                        )}
+                        <td className="px-2 py-2">
+                          <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR[it.project_status ?? ''] ?? 'bg-slate-100 text-slate-600'}`}>
+                            {it.project_status ?? '-'}
+                          </span>
+                        </td>
+                        <td className="max-w-0 px-2 py-2">
+                          <Link to={`/projects/${it.project_id}`} className="block truncate text-slate-600 hover:text-blue-600 hover:underline">
+                            {it.project_name}
                           </Link>
                         </td>
-                      )}
-                      <td className="px-2 py-2">
-                        <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_COLOR[it.project_status ?? ''] ?? 'bg-slate-100 text-slate-600'}`}>
-                          {it.project_status ?? '-'}
-                        </span>
-                      </td>
-                      <td className="max-w-0 px-2 py-2">
-                        <Link to={`/projects/${it.project_id}`} className="block truncate text-slate-600 hover:text-blue-600 hover:underline">
-                          {it.project_name}
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-2 text-[11px] text-slate-400">{sessionLabel ?? ''}</td>
-                      {CHECKLIST_ITEMS.map((item) => {
-                        const checked = checkState[`${it.project_id}:${g.instructorId}:${item.key}`] ?? false;
-                        return (
-                          <td key={item.key} className="px-1.5 py-2 text-center">
-                            <input type="checkbox" checked={checked}
-                              onChange={() => toggleCheck(it.project_id, g.instructorId, item.key)}
-                              className="h-3.5 w-3.5 cursor-pointer accent-emerald-600" />
+                        <td className="whitespace-nowrap px-2 py-2 text-[11px] text-slate-400">{sessionLabel ?? ''}</td>
+                        {CHECKLIST_ITEMS.map((item) => {
+                          const checked = checkState[`${it.project_id}:${g.instructorId}:${item.key}`] ?? false;
+                          return (
+                            <td key={item.key} className="px-1.5 py-2 text-center">
+                              <input type="checkbox" checked={checked}
+                                onChange={() => toggleCheck(it.project_id, g.instructorId, item.key)}
+                                className="h-3.5 w-3.5 cursor-pointer accent-emerald-600" />
+                            </td>
+                          );
+                        })}
+                        <td className="px-1.5 py-2 text-center">
+                          <button onClick={() => openMemo(it.project_id, g.instructorId)}
+                            title={hasMemo ? '메모 보기/수정' : '메모 추가'}
+                            className={`rounded p-1 hover:bg-slate-100 ${hasMemo ? 'text-blue-500' : 'text-slate-300'}`}>
+                            {hasMemo ? <MessageSquareText className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+                          </button>
+                        </td>
+                      </tr>
+                      {memoOpen && (
+                        <tr className="border-t border-slate-50 bg-blue-50/40">
+                          <td colSpan={5 + CHECKLIST_ITEMS.length} className="px-2 py-2">
+                            <div className="flex items-start gap-2">
+                              <textarea autoFocus value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)}
+                                placeholder="이 강사·프로젝트 건에 대한 메모를 입력하세요"
+                                rows={2}
+                                className="flex-1 resize-none rounded-md border border-slate-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400" />
+                              <div className="flex shrink-0 flex-col gap-1">
+                                <button disabled={memoSaving} onClick={() => saveMemo(it.project_id, g.instructorId)}
+                                  className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                                  저장
+                                </button>
+                                <button onClick={() => setOpenMemoKey(null)} className="text-xs text-slate-400 hover:text-slate-600">닫기</button>
+                              </div>
+                            </div>
                           </td>
-                        );
-                      })}
-                    </tr>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               ))}
