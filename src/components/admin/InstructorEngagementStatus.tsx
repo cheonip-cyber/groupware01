@@ -154,8 +154,8 @@ export function InstructorEngagementStatus() {
                 </div>
               </div>
               {/* 우: 강사별 업무 체크리스트 */}
-              <div className="shrink-0 border-l border-slate-200 pl-4">
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              <div className="w-[300px] shrink-0 border-l border-slate-200 pl-4">
+                <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
                   {CHECKLIST_ITEMS.map((item) => {
                     const checked = checkState[`${g.instructorId}:${item.key}`] ?? false;
                     return (
