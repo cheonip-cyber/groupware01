@@ -57,7 +57,8 @@ export interface DashboardKpis {
   confirmedRevenue: number;   // 확정 매출: 확정/준비·운영중·보고/정산·완료
   expectedRevenue: number;    // 예상 매출: 제안 단계(제안중)
   expectedProfit: number;     // 이익 = 매출 − 예산비용 (구 그룹웨어 방식)
-  profitRate: number;         // 이익률 = 이익/총매출 ×100
+  profitRate: number;         // 이익률 = 이익/총매출 ×100 (예산 미입력 프로젝트 제외 베이스)
+  profitRateDeviation: number; // ±편차: 예산 미입력 프로젝트의 매출을 포함시켰을 때 최선/최악 가정 사이의 흔들림 폭(%p)
 }
 
 // projects/paymentRequests는 반드시 activeProjects()/activePayments()를 거친 결과여야 한다
@@ -80,6 +81,17 @@ export const buildDashboardKpis = (
   const rateRevenue = rateBase.reduce((s, p) => s + eff(p), 0);
   const rateProfit = rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0);
   const profitRate = rateRevenue > 0 ? Number(((rateProfit / rateRevenue) * 100).toFixed(1)) : 0;
+  // 편차: 예산비용이 비어있어 rateBase에서 제외된 매출(excludedRevenue)이 있으면, 그 프로젝트들이
+  // "이익률 0%(비용=매출)"였을 때와 "이익률 100%(비용=0)"였을 때 사이에서 전체 이익률이 얼마나
+  // 흔들릴 수 있는지를 ±로 표시한다. 제외된 매출이 없으면 편차 0(화면에서는 편차 자체를 숨김).
+  const totalActiveRevenue = active.reduce((s, p) => s + eff(p), 0);
+  const excludedRevenue = totalActiveRevenue - rateRevenue;
+  let profitRateDeviation = 0;
+  if (totalActiveRevenue > 0 && excludedRevenue > 0) {
+    const worstRate = (rateProfit / totalActiveRevenue) * 100; // 미입력 매출 전부가 이익 0원이라 가정
+    const bestRate = ((rateProfit + excludedRevenue) / totalActiveRevenue) * 100; // 미입력 매출 전부가 비용 0원(이익률 100%)이라 가정
+    profitRateDeviation = Number(((bestRate - worstRate) / 2).toFixed(1));
+  }
   return {
     total: active.length,
     thisMonth: getThisMonthProjects(active).length,
@@ -97,5 +109,6 @@ export const buildDashboardKpis = (
     expectedRevenue,
     expectedProfit,
     profitRate,
+    profitRateDeviation,
   };
 };

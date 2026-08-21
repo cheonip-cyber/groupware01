@@ -2,13 +2,14 @@ import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, FolderKanban, Receipt, Wallet, CreditCard,
-  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink, Zap, UserPlus,
+  ClipboardCheck, Users, Building2, BarChart3, Settings, X, PiggyBank, ShieldCheck, Landmark, ExternalLink, Zap, UserPlus, ListChecks,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 
 // 업무 — 프로젝트 파이프라인 관련 메뉴
 const workItems = [
   { to: '/projects', label: '프로젝트', icon: FolderKanban },
+  { to: '/task-hub', label: '업무관리', icon: ListChecks },
   { to: '/revenue', label: '매출/계약', icon: Receipt },
   { to: '/budget', label: '예산/비용', icon: Wallet },
   { to: '/payments', label: '지급관리', icon: CreditCard },

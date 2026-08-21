@@ -4,6 +4,7 @@ import { Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { ProjectListPage } from './components/project/ProjectListPage';
+import { TaskHubPage } from './components/task/TaskHubPage';
 import { ProjectDetail } from './components/project/ProjectDetail';
 import { RevenuePage } from './components/pages/RevenuePage';
 import { BudgetPage } from './components/pages/BudgetPage';
@@ -62,6 +63,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/projects" element={<ProjectListPage />} />
+          <Route path="/task-hub" element={<TaskHubPage />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/budget" element={<BudgetPage />} />

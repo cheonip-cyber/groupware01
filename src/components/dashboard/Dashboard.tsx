@@ -8,11 +8,9 @@ import { KpiCard } from './KpiCard';
 import { StatusChart } from './StatusChart';
 import { TodoList } from './TodoList';
 import { RiskProjectList } from './RiskProjectList';
-import { ProjectSummaryTable } from './ProjectSummaryTable';
 import { FolderKanban, CalendarClock, CheckCircle2, Play, FileBarChart, CreditCard, AlertCircle, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { PageSkeleton } from '../common/Skeleton';
-import { InstructorEngagementStatus } from '../admin/InstructorEngagementStatus';
 import type { ActiveProject } from '../../utils/filters';
 
 export function Dashboard() {
@@ -115,8 +113,10 @@ export function Dashboard() {
           hint="확정/준비·운영·정산·종료 프로젝트" />
         <KpiCard label="예상 매출" value={formatCompactKRW(kpi.expectedRevenue)} tone="amber" icon={<TrendingUp className="h-4 w-4" />}
           hint="제안 단계 (취소/보류 미반영)" />
-        <KpiCard label="이익" value={formatCompactKRW(kpi.expectedProfit)} tone="emerald" icon={<TrendingUp className="h-4 w-4" />}
-          hint={`매출 - 예산비용 · 이익률 ${kpi.profitRate}%`} />
+        <KpiCard label="이익률" value={`${kpi.profitRate}%`} tone="emerald" icon={<TrendingUp className="h-4 w-4" />}
+          hint={kpi.profitRateDeviation > 0
+            ? `±${kpi.profitRateDeviation}%p 편차 (예산 미입력 매출 반영 시) · 이익 ${formatCompactKRW(kpi.expectedProfit)}`
+            : `매출 - 예산비용 · 이익 ${formatCompactKRW(kpi.expectedProfit)}`} />
       </div>
 
       {/* KPI — 진행 현황 */}
@@ -131,7 +131,7 @@ export function Dashboard() {
         <KpiCard label="보고/정산 대기" value={kpi.reportSettlement} unit="건" tone="emerald" icon={<FileBarChart className="h-4 w-4" />}
           onClick={() => goProjects({ status: '보고/정산' })} />
         <KpiCard label="이번 달 교육" value={kpi.thisMonth} unit="건" icon={<CalendarClock className="h-4 w-4" />}
-          onClick={() => goProjects({ month: new Date().toISOString().slice(0, 7) })} />
+          onClick={() => goProjects({ month: String(new Date().getMonth() + 1).padStart(2, '0') })} />
       </div>
 
       {/* KPI — 리스크·업무 */}
@@ -156,12 +156,6 @@ export function Dashboard() {
         <RiskProjectList projects={active} />
         <TodoList projects={active} />
       </div>
-
-      {/* 요약 테이블 */}
-      <ProjectSummaryTable projects={active} />
-
-      {/* 강사 섭외 현황 (2026-08-19 경영 인사이트에서 이동) */}
-      <InstructorEngagementStatus />
     </div>
   );
 }
