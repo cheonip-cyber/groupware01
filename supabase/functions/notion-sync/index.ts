@@ -1,18 +1,10 @@
-// notion-sync Edge Function (v27 - add 강사섭외 -> project_instructors sync)
-// 변경점(v17→v18): verify_links가 notion_missing=true인 행을 영구히 재검사 안 하던 결함 수정.
-// 노션 접근이 일시 차단됐다 복구돼도 한 번 '삭제됨'으로 찍힌 건은 자동 회복되지 않았음(2026-08-13).
-// 변경점(v26→v27): 프로젝트의 "강사섭외" 관계형 필드를 groupware.project_instructors 정션
-// 테이블로 동기화하는 로직 추가(2026-08-19). 강사별 섭외 현황 대시보드용.
+// notion-sync Edge Function (v28 - fix notion_url missing on auto-relink)
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
 const NOTION_VERSION = '2022-06-28';
 
 const ENTITY_CONFIG: Record<string, { table: string; databaseId: string }> = {
-  // 2026-08-18: 원본 데이터베이스(2eaa43d0-...)의 데이터 소스 권한이 노션 내부에서 손상되어
-  // API 접근이 영구적으로 막힘(같은 통합/같은 토큰으로 강사 DB는 정상 접근되는 것으로 원인이
-  // 이 DB에 국한됨을 확인). 동일 스키마로 새 데이터베이스를 만들어 61건(2026년 실제 등록분)을
-  // 이관하고 여기로 교체함.
   project: { table: 'projects', databaseId: 'd3bf9b4d-f51c-44ab-8d79-3f97e7967313' },
   instructor: { table: 'instructors', databaseId: 'a8c32f5f-99cc-4769-a560-f32c83259c9d' },
 };
@@ -218,9 +210,6 @@ async function resolveClientId(pageIds: string[]): Promise<number | null> {
   }
 }
 
-// 강사섭외 관계형(노션 페이지ID 목록)을 groupware.instructors.notion_page_id로 직접 매칭해
-// project_instructors 정션 테이블을 현재 상태로 맞춘다(삭제 후 재삽입). 강사는 이미 자체
-// 동기화로 notion_page_id를 갖고 있으므로 이름매칭 없이 정확히 매칭 가능하다(2026-08-19 추가).
 async function syncProjectInstructors(projectRowId: number, instructorPageIds: string[]) {
   try {
     let instructorIds: number[] = [];
@@ -238,7 +227,7 @@ async function syncProjectInstructors(projectRowId: number, instructorPageIds: s
       );
     }
   } catch (_e) {
-    // 정션 테이블 동기화 실패는 본 동기화 흐름을 막지 않음(부가 기능)
+    // no-op
   }
 }
 
@@ -441,18 +430,15 @@ async function pullEntity(entityType: string) {
 
         const { data: existing } = await supabase.from(cfg.table).select('id, *').eq('notion_page_id', page.id).maybeSingle();
 
-        // 강사섭외 관계형 값(노션 페이지ID 목록)은 컬럼 patch가 아니라 project_instructors
-        // 정션 테이블 동기화 대상이라 미리 읽어둔다(entityType==='project'인 경우만).
         const instructorPageIds: string[] = entityType === 'project'
           ? (page.properties?.[INSTRUCTOR_RELATION_PROP]?.relation ?? []).map((r: any) => r.id)
           : [];
 
         if (existing) {
           const changed = Object.keys(patch).some((k) => norm(patch[k]) !== norm((existing as any)[k]));
-          // 2026-08-18 수정: 값은 변경 없어도, 예전에 남아있던 sync_status='error'(예: 매핑
-          // 타입 불일치가 나중에 고쳤진 경우)를 그대로 방치하던 결함 수정 — 지금 오류가 없으면
-          // 정리해서 오래된 오류 표시가 계속 남아있지 않게 한다.
-          if (!changed && fieldErrors.length === 0) {
+          const needsUrlBackfill = entityType === 'project' && !(existing as any).notion_url;
+
+          if (!changed && fieldErrors.length === 0 && !needsUrlBackfill) {
             if ((existing as any).sync_status === 'error') {
               await supabase.from(cfg.table).update({ sync_status: 'synced', sync_error: null }).eq('id', existing.id);
             }
@@ -463,6 +449,7 @@ async function pullEntity(entityType: string) {
 
           const { error: updErr } = await supabase.from(cfg.table).update({
             ...patch, last_synced_at: new Date().toISOString(),
+            ...(entityType === 'project' ? { notion_url: page.url } : {}),
             sync_status: fieldErrors.length > 0 ? 'error' : 'synced',
             sync_error: fieldErrors.length > 0 ? fieldErrors.join(' / ') : null,
           }).eq('id', existing.id);
@@ -480,6 +467,7 @@ async function pullEntity(entityType: string) {
             if (!nameDup[0].notion_page_id) {
               await supabase.from(cfg.table).update({
                 notion_page_id: page.id, last_synced_at: new Date().toISOString(), sync_status: 'synced', sync_error: null,
+                ...(entityType === 'project' ? { notion_url: page.url } : {}),
               }).eq('id', nameDup[0].id);
               if (entityType === 'project') await syncProjectInstructors(nameDup[0].id, instructorPageIds);
               await logSync(entityType, nameDup[0].id, 'from_notion', 'success', `기존 행과 자동 연결: "${String(titleValue).slice(0, 60)}"`);
