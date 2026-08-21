@@ -124,7 +124,7 @@ export function InstructorEngagementStatus() {
       ) : grouped.length === 0 ? (
         <div className="px-5 pb-4 text-sm text-slate-400">표시할 항목이 없습니다.</div>
       ) : (
-        <div className="max-h-[560px] overflow-y-auto px-2 pb-2">
+        <div className="px-2 pb-2">
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
               <tr>
