@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useEscClose } from '../../hooks/useEscClose';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
@@ -37,6 +38,21 @@ export function InstructorsPage() {
       bankName: i.bankName ?? '', accountNumber: i.accountNumber ?? '',
     });
   };
+  // 다른 화면(업무관리>강사 섭외 현황 등)에서 강사명을 눌러 들어온 경우 ?highlight=ID로
+  // 해당 강사 상세 패널을 자동으로 연다(2026-08-21 추가).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (!highlightId || loading) return;
+    const target = instructors.find((i) => String(i.id) === highlightId);
+    if (target) {
+      openPanel(target);
+      const next = new URLSearchParams(searchParams);
+      next.delete('highlight');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, instructors, loading]);
   /** 패널 저장 — 값이 바뀐 항목만 보낸다. 지급 이력 등 연결 데이터는 id로 이어져 있어 영향받지 않는다. */
   const savePanel = async () => {
     if (!panel) return;

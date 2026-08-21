@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { Mic } from 'lucide-react';
 
-// 강사 섭외 현황 (2026-08-19 신설)
+// 강사 섭외 현황 (2026-08-19 신설, 2026-08-21 클릭 이동/교육일정 추가)
 // — 노션 "강사섭외" 관계형 필드를 groupware.project_instructors 정션 테이블로 동기화한 결과를
 //   groupware.instructor_engagement_status 뷰로 그대로 노출한다.
 // — 정산(instructor_payments)이 이미 끝난 강사-프로젝트 조합은 뷰 단계에서 이미 제외되어 있음
 //   (지급완료 = instructor_payments 기록 존재 여부 기준, 2026-08-19 확정).
 // — 강사 기준 정렬, 한 강사가 여러 프로젝트에 걸려있으면 전부 표시.
+// — 강사명 클릭 → 강사관리 화면의 해당 강사 상세 패널 자동 오픈(?highlight=ID).
+// — 프로젝트명 클릭 → 프로젝트 상세로 이동.
+// — 교육일정(session_1~5_date 중 값이 있는 것만) 있는 경우에만 표시.
 
 interface EngagementRow {
   instructor_id: number;
@@ -17,6 +21,7 @@ interface EngagementRow {
   project_name: string;
   project_status: string | null;
   revenue_month: string | null;
+  session_dates: string[] | null;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -29,6 +34,14 @@ const STATUS_COLOR: Record<string, string> = {
   '종료(수익화 완료)': 'bg-emerald-100 text-emerald-800',
   '취소/보류': 'bg-red-100 text-red-800',
 };
+
+function formatSessionDates(dates: string[] | null): string | null {
+  if (!dates || dates.length === 0) return null;
+  return dates.map((d) => {
+    const [, m, day] = d.split('-');
+    return `${Number(m)}/${Number(day)}`;
+  }).join(', ');
+}
 
 export function InstructorEngagementStatus() {
   const [rows, setRows] = useState<EngagementRow[]>([]);
@@ -51,11 +64,11 @@ export function InstructorEngagementStatus() {
   }, []);
 
   // 강사별 그룹핑 (뷰가 이미 강사명순 정렬되어 있어 순서만 보존)
-  const grouped: { instructorName: string; items: EngagementRow[] }[] = [];
+  const grouped: { instructorId: number; instructorName: string; items: EngagementRow[] }[] = [];
   for (const row of rows) {
     const last = grouped[grouped.length - 1];
     if (last && last.instructorName === row.instructor_name) last.items.push(row);
-    else grouped.push({ instructorName: row.instructor_name, items: [row] });
+    else grouped.push({ instructorId: row.instructor_id, instructorName: row.instructor_name, items: [row] });
   }
 
   return (
@@ -72,20 +85,31 @@ export function InstructorEngagementStatus() {
         <div className="divide-y divide-slate-50 px-5 pb-3">
           {grouped.map((g) => (
             <div key={g.instructorName} className="py-2.5">
-              <div className="text-sm font-medium text-slate-700 mb-1.5">{g.instructorName}</div>
+              <Link to={`/instructors?highlight=${g.instructorId}`}
+                className="text-sm font-medium text-slate-700 hover:text-blue-600 hover:underline mb-1.5 inline-block">
+                {g.instructorName}
+              </Link>
               <div className="space-y-1 pl-1">
-                {g.items.map((it) => (
-                  <div key={it.project_id} className="flex items-center gap-2 text-sm">
-                    <span
-                      className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                        STATUS_COLOR[it.project_status ?? ''] ?? 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {it.project_status ?? '-'}
-                    </span>
-                    <span className="text-slate-600 truncate">{it.project_name}</span>
-                  </div>
-                ))}
+                {g.items.map((it) => {
+                  const sessionLabel = formatSessionDates(it.session_dates);
+                  return (
+                    <div key={it.project_id} className="flex items-center gap-2 text-sm">
+                      <span
+                        className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          STATUS_COLOR[it.project_status ?? ''] ?? 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {it.project_status ?? '-'}
+                      </span>
+                      <Link to={`/projects/${it.project_id}`} className="text-slate-600 hover:text-blue-600 hover:underline truncate">
+                        {it.project_name}
+                      </Link>
+                      {sessionLabel && (
+                        <span className="shrink-0 text-[11px] text-slate-400">{sessionLabel}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
