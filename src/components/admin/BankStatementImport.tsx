@@ -45,6 +45,11 @@ const KEYWORD_CATEGORY: [RegExp, string][] = [
   [/급여|상여|퇴직/, '급여/상여'],
   [/이자|수수료|대출/, '대출/수수료'],
 ];
+// 급여/상여 성격 적요는 '같은 날 같은 적요로 3명 이상에게 지급 = 프로젝트성 지급(강사료 등)'
+// 추정 규칙에서 제외한다. 직원 여러 명에게 같은 날 같은 적요("급여" 등)로 지급하는 게
+// 정상적인 급여 지급 패턴인데, 이 규칙에 걸려 카테고리는 맞게 잡히면서도 자동선택 목록에서만
+// 빠져 등록 누락으로 이어지고 있었음(2026-08-21 수정).
+const SALARY_RE = /급여|상여|퇴직/;
 
 function normalize(s: string): string {
   return s.replace(/\([^)]*\)/g, '').replace(/[0-9./\-\s]/g, '');
@@ -213,7 +218,7 @@ export function BankStatementImport({ onImported }: { onImported: () => void }) 
 
       const out: Candidate[] = raws.map((r) => {
         const gk = `${r.date}_${normalize(r.desc)}`;
-        const likelyProject = (descDayGroups.get(gk)?.size ?? 0) >= 3;
+        const likelyProject = !SALARY_RE.test(r.desc) && (descDayGroups.get(gk)?.size ?? 0) >= 3;
 
         let best: RecurringTemplate | null = null, bestScore = 0;
         for (const t of tpls) {

@@ -36,8 +36,7 @@ export function InstructorsPage() {
       name: i.name ?? '', phone: i.phone ?? '', email: i.email ?? '',
       residentNumber: i.residentNumber ?? '', address: i.address ?? '',
       bankName: i.bankName ?? '', accountNumber: i.accountNumber ?? '',
-      specialty: i.specialty ?? '', level: i.level ?? '', career: i.career ?? '',
-      education: i.education ?? '', honorific: i.honorific ?? '',
+      specialty: i.specialty ?? '', level: i.level ?? '',
       remarks: i.remarks ?? '', specialNotes: i.specialNotes ?? '',
     });
   };
@@ -66,8 +65,7 @@ export function InstructorsPage() {
         name: panel.name ?? '', phone: panel.phone ?? '', email: panel.email ?? '',
         residentNumber: panel.residentNumber ?? '', address: panel.address ?? '',
         bankName: panel.bankName ?? '', accountNumber: panel.accountNumber ?? '',
-        specialty: panel.specialty ?? '', level: panel.level ?? '', career: panel.career ?? '',
-        education: panel.education ?? '', honorific: panel.honorific ?? '',
+        specialty: panel.specialty ?? '', level: panel.level ?? '',
         remarks: panel.remarks ?? '', specialNotes: panel.specialNotes ?? '',
       };
       for (const k of Object.keys(cur)) {
@@ -236,19 +234,19 @@ export function InstructorsPage() {
             </p>
 
             <div className="space-y-3">
-              {/* 2026-08-21: 전문분야·등급·경력 등은 예전엔 "노션이 원본"이라 읽기전용이었으나,
+              {/* 2026-08-21: 전문분야·등급 등은 예전엔 "노션이 원본"이라 읽기전용이었으나,
                   해당 노션 매핑이 전부 비활성화(또는 애초에 매핑 없음)된 상태임을 확인하고
                   편집 가능으로 전환. 노션과는 연락처/성명만 동기화되므로 여기서 고쳐도
-                  동기화로 되돌아가지 않는다. */}
+                  동기화로 되돌아가지 않는다.
+                  같은 날: 호칭/경력/학력 항목 삭제(요청), 등급은 자유 입력 → 5단계
+                  드롭다운(S/A/B/C/F)으로 전환. */}
               {([
                 ['이름', 'name', 'text'],
-                ['호칭', 'honorific', 'text'],
                 ['연락처', 'phone', 'text'], ['이메일', 'email', 'text'],
                 ['주민등록번호', 'residentNumber', 'text'],
                 ['주소', 'address', 'text'],
                 ['은행', 'bankName', 'text'], ['계좌번호', 'accountNumber', 'text'],
-                ['전문분야', 'specialty', 'text'], ['등급', 'level', 'text'],
-                ['경력', 'career', 'area'], ['학력', 'education', 'area'],
+                ['전문분야', 'specialty', 'text'],
                 ['비고', 'remarks', 'area'], ['특이사항', 'specialNotes', 'area'],
               ] as [string, string, string][]).map(([label, key, kind]) => (
                 <label key={key} className="block">
@@ -262,6 +260,19 @@ export function InstructorsPage() {
                         className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />}
                 </label>
               ))}
+              {/* 등급: 자유 입력 → 5단계 고정 드롭다운(2026-08-21) */}
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-slate-400">등급</span>
+                <select value={panelForm.level ?? ''} onChange={(e) => setPanelForm((f) => ({ ...f, level: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400">
+                  <option value="">미지정</option>
+                  <option value="S">S (보장)</option>
+                  <option value="A">A (신뢰)</option>
+                  <option value="B">B (가성비)</option>
+                  <option value="C">C (최후수단)</option>
+                  <option value="F">F (폐기)</option>
+                </select>
+              </label>
               {!panelForm.bankName && (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">계좌가 등록되지 않았습니다 — 위 은행·계좌번호를 입력해주세요.</p>
               )}
