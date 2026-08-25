@@ -433,6 +433,15 @@ class SupabaseDataSource implements DataSource {
     if (patch.address !== undefined) dbPatch.address = patch.address || null;
     if (patch.bankName !== undefined) dbPatch.bank_name = patch.bankName || null;
     if (patch.accountNumber !== undefined) dbPatch.account_number = patch.accountNumber || null;
+    // 2026-08-21: 전문분야/등급/경력/학력/호칭/비고/특이사항 — 노션 매핑이 전부 비활성화(또는
+    // 애초에 매핑 자체가 없음)되어 있어 동기화로 덮어써질 위험이 없음을 확인하고 편집 가능으로 전환.
+    if (patch.specialty !== undefined) dbPatch.specialty = patch.specialty || null;
+    if (patch.level !== undefined) dbPatch.level = patch.level || null;
+    if (patch.career !== undefined) dbPatch.career = patch.career || null;
+    if (patch.education !== undefined) dbPatch.education = patch.education || null;
+    if (patch.honorific !== undefined) dbPatch.honorific = patch.honorific || null;
+    if (patch.remarks !== undefined) dbPatch.remarks = patch.remarks || null;
+    if (patch.specialNotes !== undefined) dbPatch.special_notes = patch.specialNotes || null;
     await SupabaseDataSource.updateChecked('instructors', dbPatch, { column: 'id', value: Number(id) }, '강사 정보 수정');
   }
 

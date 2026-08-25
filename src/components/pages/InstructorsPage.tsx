@@ -36,6 +36,9 @@ export function InstructorsPage() {
       name: i.name ?? '', phone: i.phone ?? '', email: i.email ?? '',
       residentNumber: i.residentNumber ?? '', address: i.address ?? '',
       bankName: i.bankName ?? '', accountNumber: i.accountNumber ?? '',
+      specialty: i.specialty ?? '', level: i.level ?? '', career: i.career ?? '',
+      education: i.education ?? '', honorific: i.honorific ?? '',
+      remarks: i.remarks ?? '', specialNotes: i.specialNotes ?? '',
     });
   };
   // 다른 화면(업무관리>강사 섭외 현황 등)에서 강사명을 눌러 들어온 경우 ?highlight=ID로
@@ -63,6 +66,9 @@ export function InstructorsPage() {
         name: panel.name ?? '', phone: panel.phone ?? '', email: panel.email ?? '',
         residentNumber: panel.residentNumber ?? '', address: panel.address ?? '',
         bankName: panel.bankName ?? '', accountNumber: panel.accountNumber ?? '',
+        specialty: panel.specialty ?? '', level: panel.level ?? '', career: panel.career ?? '',
+        education: panel.education ?? '', honorific: panel.honorific ?? '',
+        remarks: panel.remarks ?? '', specialNotes: panel.specialNotes ?? '',
       };
       for (const k of Object.keys(cur)) {
         if ((panelForm[k] ?? '') !== cur[k]) patch[k] = panelForm[k] || undefined;
@@ -225,19 +231,25 @@ export function InstructorsPage() {
             </div>
             {/* 노션 동기화 범위 안내 — 개인정보는 그룹웨어에서만 관리한다 */}
             <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-800">
-              노션과 동기화되는 항목은 <b>성명·연락처</b>뿐입니다. 개인정보 보호를 위해
+              노션과 동기화되는 항목은 <b>성명·연락처·이메일·강의주제</b>뿐입니다. 개인정보 보호를 위해
               주민등록번호·주소·계좌 등은 노션으로 전송되지 않으며, 이 화면에서만 관리됩니다.
             </p>
 
             <div className="space-y-3">
-              {/* 저장 가능한 항목만 노출한다 — 전문분야·등급·경력 등은 노션이 원본이라
-                  여기서 고쳐도 다음 동기화 때 되돌아간다(아래 읽기 전용으로 표시). */}
+              {/* 2026-08-21: 전문분야·등급·경력 등은 예전엔 "노션이 원본"이라 읽기전용이었으나,
+                  해당 노션 매핑이 전부 비활성화(또는 애초에 매핑 없음)된 상태임을 확인하고
+                  편집 가능으로 전환. 노션과는 연락처/성명만 동기화되므로 여기서 고쳐도
+                  동기화로 되돌아가지 않는다. */}
               {([
                 ['이름', 'name', 'text'],
+                ['호칭', 'honorific', 'text'],
                 ['연락처', 'phone', 'text'], ['이메일', 'email', 'text'],
                 ['주민등록번호', 'residentNumber', 'text'],
                 ['주소', 'address', 'text'],
                 ['은행', 'bankName', 'text'], ['계좌번호', 'accountNumber', 'text'],
+                ['전문분야', 'specialty', 'text'], ['등급', 'level', 'text'],
+                ['경력', 'career', 'area'], ['학력', 'education', 'area'],
+                ['비고', 'remarks', 'area'], ['특이사항', 'specialNotes', 'area'],
               ] as [string, string, string][]).map(([label, key, kind]) => (
                 <label key={key} className="block">
                   <span className="mb-1 block text-[11px] font-medium text-slate-400">{label}</span>
@@ -250,24 +262,6 @@ export function InstructorsPage() {
                         className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />}
                 </label>
               ))}
-              {/* 노션이 원본인 항목 — 참고용 표시 */}
-              {[['전문분야', panel.specialty], ['등급', panel.level], ['경력', panel.career],
-                ['학력', panel.education], ['비고', panel.remarks], ['특이사항', panel.specialNotes]]
-                .filter(([, v]) => v).length > 0 && (
-                <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
-                  <p className="mb-2 text-[11px] font-semibold text-slate-500">노션에서 관리되는 항목 (읽기 전용)</p>
-                  <dl className="space-y-1.5 text-xs">
-                    {[['전문분야', panel.specialty], ['등급', panel.level], ['경력', panel.career],
-                      ['학력', panel.education], ['비고', panel.remarks], ['특이사항', panel.specialNotes]]
-                      .filter(([, v]) => v).map(([k, v]) => (
-                        <div key={k as string} className="flex gap-2">
-                          <dt className="w-16 shrink-0 text-slate-400">{k}</dt>
-                          <dd className="whitespace-pre-wrap text-slate-600">{v}</dd>
-                        </div>
-                      ))}
-                  </dl>
-                </div>
-              )}
               {!panelForm.bankName && (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">계좌가 등록되지 않았습니다 — 위 은행·계좌번호를 입력해주세요.</p>
               )}
