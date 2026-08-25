@@ -22,6 +22,12 @@ type SensitiveForm = {
 
 const emptyForm: SensitiveForm = { name: '', phone: '', residentNumber: '', address: '', bankName: '', accountNumber: '' };
 
+// 등급 전체 표기(2026-08-21): 목록/뱃지 등에서 알파벳만 보이면 뜻을 알기 어려워
+// "S(보장)"처럼 항상 괄호로 뜻을 함께 표기한다. 드롭다운 옵션과 동일한 표기 유지.
+const LEVEL_LABEL: Record<string, string> = {
+  S: 'S(보장)', A: 'A(신뢰)', B: 'B(가성비)', C: 'C(최후수단)', F: 'F(폐기)',
+};
+
 export function InstructorsPage() {
   const { instructors, paymentRequests, projects, loading, addInstructor, updateInstructor, deleteInstructor } = useAppData();
   const toast = useToast();
@@ -197,7 +203,7 @@ export function InstructorsPage() {
                     {i.notionMissing && <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600" title="노션에서 원본이 삭제되었습니다 — 필요 없으면 여기서 삭제하세요">⚠ 노션삭제</span>}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600" title={[i.career, i.education].filter(Boolean).join(' · ') || undefined}>
-                    {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{i.level}</span> : null}
+                    {i.specialty || '-'}{i.level ? <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{LEVEL_LABEL[i.level] ?? i.level}</span> : null}
                   </td>
                   <td className="px-3 py-2 text-slate-500">{i.phone || '-'}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-500">{maskResidentNumber(i.residentNumber)}</td>
