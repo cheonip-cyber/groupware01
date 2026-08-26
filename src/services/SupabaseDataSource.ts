@@ -39,7 +39,8 @@ interface CostRow {
 }
 
 function buildProject(row: any, clientName: string, managerName: string, costs: CostRow[],
-  instructorNameMap?: Map<number, string>, companyNameMap?: Map<number, { name: string; ceo: string | null }>): Project {
+  instructorNameMap?: Map<number, string>, companyNameMap?: Map<number, { name: string; ceo: string | null }>,
+  notionTrainerNames?: string[]): Project {
   const expectedCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.budget_amount ?? 0) : 0), 0);
   const actualCost = costs.reduce((s, c) => s + (c.is_cost_recognized ? (c.actual_payment_amount ?? 0) : 0), 0);
   const finalEstimate = Number(row.final_estimate ?? 0);
@@ -65,6 +66,19 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
   }));
 
   const paymentStatus = derivePaymentStatus(costs.map((c) => ({ status: c.status, is_payable: c.is_payable })));
+
+  // 강사비 카테고리는 지급유형이 company로 저장돼 있어도(업체 명의 세금계산서 등) 개요에는 실제 강사 개인명이 보여야 한다 —
+  // instructor면 강사DB 이름, company면 대표자명(없으면 업체명)을 우선하고, 매핑이 없으면 저장된 텍스트로 폴백한다.
+  const costTrainerNames = [...new Set(
+    costs.filter((c) => budgetBucket(c.category) === 'trainer').map((c) => {
+      if (c.payee_instructor_id) return instructorNameMap?.get(c.payee_instructor_id) ?? c.payee_name ?? '';
+      if (c.payee_company_id) {
+        const co = companyNameMap?.get(c.payee_company_id);
+        return co ? (co.ceo || co.name) : (c.payee_name ?? '');
+      }
+      return c.payee_name ?? '';
+    }).filter(Boolean),
+  )];
 
   const riskFlags: string[] = [];
   if (!row.is_tax_invoice_issued && row.status === '보고/정산') riskFlags.push('세금계산서 미발행');
@@ -134,18 +148,9 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
 
     trainerIds: [...new Set(costs.filter((c) => c.payee_instructor_id).map((c) => String(c.payee_instructor_id)))],
     vendorIds: [...new Set(costs.filter((c) => c.payee_company_id).map((c) => String(c.payee_company_id)))],
-    // 강사비 카테고리는 지급유형이 company로 저장돼 있어도(업체 명의 세금계산서 등) 개요에는 실제 강사 개인명이 보여야 한다 —
-    // instructor면 강사DB 이름, company면 대표자명(없으면 업체명)을 우선하고, 매핑이 없으면 저장된 텍스트로 폴백한다.
-    trainerNames: [...new Set(
-      costs.filter((c) => budgetBucket(c.category) === 'trainer').map((c) => {
-        if (c.payee_instructor_id) return instructorNameMap?.get(c.payee_instructor_id) ?? c.payee_name ?? '';
-        if (c.payee_company_id) {
-          const co = companyNameMap?.get(c.payee_company_id);
-          return co ? (co.ceo || co.name) : (c.payee_name ?? '');
-        }
-        return c.payee_name ?? '';
-      }).filter(Boolean),
-    )],
+    // 2026-08-26: 강사료 지급 항목(예산/비용 탭)이 아직 없어도, 노션 "강사섭외"에 값이 있으면
+    // 그걸 대신 보여준다 — 진행/배정 탭에서 "미확정"으로 나오던 문제 수정.
+    trainerNames: costTrainerNames.length > 0 ? costTrainerNames : (notionTrainerNames ?? []),
     prepItems,
     prepChecklist: (row.prep_checklist ?? {}) as Record<string, boolean>,
     clientRequest: undefined,
@@ -184,6 +189,24 @@ async function fetchCostsByProjectIds(ids: number[]): Promise<Map<number, CostRo
 
 // 강사비 항목의 실제 표시명 계산용 — 강사DB 이름, 업체DB(대표자명 포함) 전체를 한 번에 조회해 맵으로 반환.
 // project_costs.payee_name은 등록 시점 텍스트 스냅샷이라 갱신되지 않으므로(개요 강사명 표시 정확도를 위해) 항상 최신 원본을 조회한다.
+// 2026-08-26 신설: 노션 "강사섭외" 관계형 필드가 동기화되어 있는 project_instructors 테이블에서
+// 프로젝트별 강사명 목록을 조회한다. project_costs 기반 trainerNames(=실제 강사료 지급 대상)와는
+// 별개의 소스로, 진행/배정 탭의 "강사" 표시에서 지급 대상이 아직 없을 때 폴백으로 사용한다.
+async function fetchNotionTrainerNamesByProjectId(): Promise<Map<number, string[]>> {
+  const { data, error } = await supabase
+    .from('project_instructors')
+    .select('project_id, instructors(name)');
+  const map = new Map<number, string[]>();
+  if (error || !data) return map;
+  for (const row of data as any[]) {
+    const name = row.instructors?.name;
+    if (!name) continue;
+    if (!map.has(row.project_id)) map.set(row.project_id, []);
+    map.get(row.project_id)!.push(name);
+  }
+  return map;
+}
+
 async function fetchNameMaps(): Promise<{ instructorNameMap: Map<number, string>; companyNameMap: Map<number, { name: string; ceo: string | null }> }> {
   const [{ data: instructors, error: iErr }, { data: companies, error: cErr }] = await Promise.all([
     supabase.from('instructors').select('id, name'),
@@ -208,6 +231,7 @@ class SupabaseDataSource implements DataSource {
     const ids = (rows ?? []).map((r: any) => r.id);
     const costMap = await fetchCostsByProjectIds(ids);
     const { instructorNameMap, companyNameMap } = await fetchNameMaps();
+    const notionTrainerMap = await fetchNotionTrainerNamesByProjectId();
 
     const projects = (rows ?? []).map((r: any) =>
       buildProject(
@@ -217,6 +241,7 @@ class SupabaseDataSource implements DataSource {
         costMap.get(r.id) ?? [],
         instructorNameMap,
         companyNameMap,
+        notionTrainerMap.get(r.id),
       ),
     );
     const enriched = SupabaseDataSource.enrichGroups(projects);
@@ -283,7 +308,8 @@ class SupabaseDataSource implements DataSource {
     if (!r) return undefined;
     const costMap = await fetchCostsByProjectIds([r.id]);
     const { instructorNameMap, companyNameMap } = await fetchNameMaps();
-    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap);
+    const notionTrainerMap = await fetchNotionTrainerNamesByProjectId();
+    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap, notionTrainerMap.get(r.id));
   }
 
   // 수기 프로젝트 신규 생성 (기존에는 노션 pull·그룹 회차 생성만 가능해 화면에서 프로젝트를 만들 수 없었음)
