@@ -9,6 +9,7 @@ import { formatCompactKRW } from '../../utils/formatters';
 import { projectYear, activeProjects } from '../../utils/filters';
 import { BarChart3, TrendingUp } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
+import { ClientPaymentLagSection } from './ClientPaymentLagSection';
 import type { Project } from '../../types';
 
 // 매출 규칙(구 그룹웨어 방식): 확정군=확정 매출, 제안중=예상 매출, 취소/보류=미반영, 유효매출(그룹 이중계상 제거) 기준
@@ -149,6 +150,8 @@ export function ReportsPage() {
           </div>
         </Card>
       </div>
+
+      <ClientPaymentLagSection />
     </div>
   );
 }
