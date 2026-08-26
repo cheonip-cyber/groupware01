@@ -86,11 +86,21 @@ export function RevenueTab({ project, onUpdate }:
       <Section title="세금계산서 / 수금">
         <Field label="매출 상태"><StatusBadge label={project.revenueStatus} style={revenueStatusStyle[project.revenueStatus]} /></Field>
 
+        {/* 2026-08-25: '매출분배(distribution)' 유형만 마스터의 세금계산서/수금 입력을 숨기고
+            있었는데, '회차 추가(recurring)' 유형도 회차별로 각자 처리하는 게 맞아서 같은 이유로
+            숨겨야 했음. 이게 빠져있어서 담당자가 마스터에도 직접 입력할 수 있었고, 실제로 회차별
+            값과 무관한 잔재 데이터가 마스터에 남아있던 사례가 발견되어 함께 정리함(4건). */}
         {project.groupType === 'distribution' ? (
           <Field label="세금계산서 · 수금">
             <p className="text-xs text-slate-500">
               계열사별로 관리됩니다. 아래 <b>매출분배(계열사)</b> 섹션에서 확인·처리하세요.
               전 계열사가 완료되면 이 값이 자동으로 채워지고 노션에도 반영됩니다.
+            </p>
+          </Field>
+        ) : project.groupType === 'recurring' ? (
+          <Field label="세금계산서 · 수금">
+            <p className="text-xs text-slate-500">
+              회차별로 관리됩니다. 아래 <b>회차별 프로젝트</b> 목록에서 각 회차를 열어 확인·처리하세요.
             </p>
           </Field>
         ) : (
