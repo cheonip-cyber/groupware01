@@ -73,7 +73,9 @@ export function CashFlowThisMonth() {
     // ── 매출 입금 예정 ──
     // ①수금예정일 명시값 우선 ②세금계산서 발행 후: 고객사별 실측 리드타임(2건 이상 이력) 또는 기본값(발행일+익월)
     // ③세금계산서 미발행: 교육종료일+1개월로 잠정 추정(신뢰도 낮음)
-    const incoming = active.filter((p) => !p.collectionCompleted).map((p) => {
+    // 2026-08-25: 회차형(recurring) 마스터는 effectiveAmount가 0으로 잡혀 금액 집계엔 영향 없지만,
+    // 목록 자체에는 0원짜리 항목으로 계속 끼어들어 혼란을 줄 수 있어 애초에 제외한다.
+    const incoming = active.filter((p) => !p.collectionCompleted && !(p.groupType === 'recurring' && !p.parentId)).map((p) => {
       let due: string | null = null;
       let provisional = false;
       if (p.collectionDueDate) {

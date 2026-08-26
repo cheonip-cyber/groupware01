@@ -61,6 +61,11 @@ export interface DashboardKpis {
   profitRateDeviation: number; // ±편차: 예산 미입력 프로젝트의 매출을 포함시켰을 때 최선/최악 가정 사이의 흔들림 폭(%p)
 }
 
+// 회차형(recurring) 그룹의 마스터인지 판별. 마스터 자신은 세금계산서/수금/정산을 직접
+// 처리하지 않고(하위 회차별로 각자 처리, RevenueTab에서도 UI 숨김) 마스터 필드값은 참고용으로
+// 남아있을 뿐이라 카운트 집계에서는 제외해야 한다(2026-08-25).
+const isRecurringMaster = (p: Project) => p.groupType === 'recurring' && !p.parentId;
+
 // projects/paymentRequests는 반드시 activeProjects()/activePayments()를 거친 결과여야 한다
 // (파라미터 타입이 ActiveProject[]/ActivePaymentRequest[]라 그냥 원본 배열을 넘기면 빌드 에러가 난다).
 export const buildDashboardKpis = (
@@ -100,10 +105,15 @@ export const buildDashboardKpis = (
     reportSettlement: counts['보고/정산'],
     paymentPending: getRequestedPayments(activePayments).length,
     paymentTarget: getUnrequestedPayments(activePayments).length,
-    taxInvoicePending: active.filter((p) => !p.taxInvoiceIssued && p.revenueStatus !== '견적작성').length,
-    unpaidCollection: active.filter((p) => !p.collectionCompleted && p.taxInvoiceIssued).length,
+    // 2026-08-25: 세금계산서/수금/정산은 매출 금액(effectiveAmount)과 달리 이중계상 방지 장치가
+    // 없었음 — 회차형(recurring) 마스터는 실제 처리를 전부 하위 회차에서 하므로(마스터 자체
+    // 항목은 UI에서도 숨김 처리됨), 이 세 카운트에서 마스터는 제외해야 회차 건과 중복 집계되지
+    // 않는다. (매출분배(distribution) 마스터는 전 계열사 완료 시 자동으로 필드가 채워지는
+    // 별도 메커니즘이 있어 정상 집계 대상으로 남겨둠.)
+    taxInvoicePending: active.filter((p) => !isRecurringMaster(p) && !p.taxInvoiceIssued && p.revenueStatus !== '견적작성').length,
+    unpaidCollection: active.filter((p) => !isRecurringMaster(p) && !p.collectionCompleted && p.taxInvoiceIssued).length,
     settlementPending: active.filter(
-      (p) => p.settlementStatus !== '결산완료' && p.settlementStatus !== '제외',
+      (p) => !isRecurringMaster(p) && p.settlementStatus !== '결산완료' && p.settlementStatus !== '제외',
     ).length,
     confirmedRevenue,
     expectedRevenue,

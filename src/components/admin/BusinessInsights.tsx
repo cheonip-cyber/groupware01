@@ -142,8 +142,11 @@ export function BusinessInsights({ year }: { year: string }) {
     () => scoped.filter((p) => p.riskFlags && p.riskFlags.length > 0).sort((a, b) => eff(b) - eff(a)).slice(0, 6),
     [scoped],
   );
+  // 2026-08-25: 회차형(recurring) 마스터는 세금계산서를 마스터가 아니라 하위 회차별로 처리하므로
+  // (RevenueTab에서도 마스터 입력 UI 자체를 숨김), 이 리스크 알림에서도 제외해야 실제로 확인할
+  // 필요가 없는 항목이 "미발행"으로 잘못 뜨지 않는다.
   const taxPending = useMemo(
-    () => scoped.filter((p) => CONFIRMED.has(p.projectStatus) && !p.taxInvoiceIssued)
+    () => scoped.filter((p) => CONFIRMED.has(p.projectStatus) && !p.taxInvoiceIssued && !(p.groupType === 'recurring' && !p.parentId))
       .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || '')).slice(0, 6),
     [scoped],
   );
