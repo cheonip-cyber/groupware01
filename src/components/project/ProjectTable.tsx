@@ -45,7 +45,10 @@ function ChildProjectRow({ c }: { c: Project }) {
       <td className="px-3 py-2"></td>
       <td className="px-3 py-2"><StatusBadge label={c.projectStatus} style={projectStatusStyle[c.projectStatus]} size="sm" /></td>
       <td className="px-3 py-2"></td>
-      <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={c.finalEstimate ?? c.contractAmount} /></td>
+      {/* 2026-08-26: 예전엔 finalEstimate(VAT 제외 원본)를 우선 표시해 마스터/일반 행(VAT 포함
+          contractAmount 표시)과 값이 안 맞았음 — 대시보드 계약금액은 전부 VAT 포함 기준으로
+          통일해야 실입금액과 대조 가능하므로 순서를 뒤집음(contractAmount 우선). */}
+      <td className="px-3 py-2 text-right text-sm text-slate-600"><MoneyText value={c.contractAmount ?? c.finalEstimate} /></td>
       <td className="px-3 py-2"></td>
     </tr>
   );
