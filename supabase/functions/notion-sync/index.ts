@@ -1,4 +1,10 @@
-// notion-sync Edge Function (v28 - fix notion_url missing on auto-relink)
+// notion-sync Edge Function (v29 - auto-relink dead notion links on title collision)
+// 변경점(v28→v29): "이름 중복 가드"에서 기존 행의 notion_page_id가 채워져 있으면 무조건
+// 생성을 보류하던 결함 수정. 노션에서 페이지를 만들었다가 삭제하고 다시 같은 이름으로
+// 만들면, 옛 페이지는 트래시로 가서 일반 pull 쿼리 결과에 아예 안 잡히고(그래서 옛 DB
+// 행이 방치됨), 새 페이지는 이름이 같아서 생성이 보류되어 조용히 무시되던 문제
+// (2026-08-27). 이제 이름이 겹치면 기존 행의 링크가 실제로 죽었는지 그 자리에서 확인해,
+// 죽어있으면 새 페이지로 자동 재연결한다.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
@@ -464,19 +470,30 @@ async function pullEntity(entityType: string) {
           const { data: nameDup } = await supabase.from(cfg.table)
             .select('id, notion_page_id').eq(titleMapping!.supabase_column, titleValue).limit(1);
           if (nameDup && nameDup.length > 0) {
-            if (!nameDup[0].notion_page_id) {
+            const dupRow = nameDup[0];
+            let dupLinkAlive: boolean | null = null;
+            if (dupRow.notion_page_id) {
+              try { dupLinkAlive = await checkPageAlive(dupRow.notion_page_id); } catch { dupLinkAlive = null; }
+            }
+            // 기존 행이 링크가 없거나(예전부터 미연결), 링크는 있지만 실제로 죽어있으면(휴지통/삭제됨)
+            // — 노션에서 지웠다 같은 이름으로 다시 만든 전형적인 케이스 — 새 페이지로 재연결한다.
+            if (!dupRow.notion_page_id || dupLinkAlive === false) {
+              const reason = !dupRow.notion_page_id ? '미연결 상태' : '기존 링크가 삭제(휴지통)된 상태로 확인됨';
               await supabase.from(cfg.table).update({
+                ...patch,
                 notion_page_id: page.id, last_synced_at: new Date().toISOString(), sync_status: 'synced', sync_error: null,
+                notion_missing: false, notion_missing_checked_at: new Date().toISOString(),
                 ...(entityType === 'project' ? { notion_url: page.url } : {}),
-              }).eq('id', nameDup[0].id);
-              if (entityType === 'project') await syncProjectInstructors(nameDup[0].id, instructorPageIds);
-              await logSync(entityType, nameDup[0].id, 'from_notion', 'success', `기존 행과 자동 연결: "${String(titleValue).slice(0, 60)}"`);
+              }).eq('id', dupRow.id);
+              if (entityType === 'project') await syncProjectInstructors(dupRow.id, instructorPageIds);
+              await logSync(entityType, dupRow.id, 'from_notion', 'success', `기존 행과 자동 재연결(${reason}): "${String(titleValue).slice(0, 60)}"`);
               updated++;
               continue;
             }
+            // 링크가 살아있는데 이름이 겹치면 진짜 별개 항목일 수 있으니 생성 보류(안전)
             skipped++;
-            await logSync(entityType, nameDup[0].id, 'from_notion', 'error',
-              `생성 보류(이름 중복 가드): "${String(titleValue).slice(0, 80)}" — 기존 행 존재, notion_page_id 미연결 상태. 필요 시 수동 연결`);
+            await logSync(entityType, dupRow.id, 'from_notion', 'error',
+              `생성 보류(이름 중복 가드): "${String(titleValue).slice(0, 80)}" — 기존 행이 이미 살아있는 다른 노션 페이지와 연결되어 있음. 필요 시 수동 확인`);
             continue;
           }
 
