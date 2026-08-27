@@ -5,6 +5,10 @@ import { Search } from 'lucide-react';
 
 // 전역 통합 검색 (인텔리전스 1차): 프로젝트/강사/업체/고객사를 한 검색창에서 찾아 바로 점프
 // — "어떤 데이터든 클릭하면 그 데이터로 연결"되는 연계성의 진입점
+// — 2026-08-27: 드롭다운에서 항목 하나를 반드시 골라야만 이동할 수 있었던 문제 개선.
+//   Enter 키 또는 하단 "전체 결과 보기" 버튼으로 프로젝트 목록 화면에 검색어 그대로 넘겨
+//   관련 프로젝트를 한 번에 전부 볼 수 있게 함. (겸사겸사 고객사 결과가 ?q=로 이동해
+//   목록 화면이 실제로는 못 읽던 파라미터명 오류(?search= 이어야 함)도 함께 수정.)
 export function GlobalSearch() {
   const { projects, instructors, companies, clients } = useAppData();
   const [q, setQ] = useState('');
@@ -30,7 +34,7 @@ export function GlobalSearch() {
     for (const c of clients) {
       if (out.length >= 14) break;
       if (c.name.toLowerCase().includes(query))
-        out.push({ kind: '고객사', label: c.name, sub: `프로젝트 ${projects.filter((p) => p.clientName === c.name).length}건`, go: () => navigate(`/projects?q=${encodeURIComponent(c.name)}`) });
+        out.push({ kind: '고객사', label: c.name, sub: `프로젝트 ${projects.filter((p) => p.clientName === c.name).length}건`, go: () => navigate(`/projects?search=${encodeURIComponent(c.name)}`) });
     }
     for (const i of instructors) {
       if (out.length >= 17) break;
@@ -45,6 +49,18 @@ export function GlobalSearch() {
     return out;
   }, [q, projects, instructors, companies, clients, navigate]);
 
+  const projectMatchCount = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (query.length < 2) return 0;
+    return projects.filter((p) => `${p.projectName} ${p.clientName ?? ''}`.toLowerCase().includes(query)).length;
+  }, [q, projects]);
+
+  const goToAllResults = () => {
+    if (q.trim().length < 2) return;
+    navigate(`/projects?search=${encodeURIComponent(q.trim())}`);
+    setOpen(false);
+  };
+
   const KIND_CLS: Record<string, string> = {
     '프로젝트': 'bg-blue-50 text-blue-600', '고객사': 'bg-emerald-50 text-emerald-600',
     '강사': 'bg-indigo-50 text-indigo-600', '업체': 'bg-violet-50 text-violet-600',
@@ -57,6 +73,7 @@ export function GlobalSearch() {
         value={q}
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter') goToAllResults(); }}
         placeholder="통합 검색 (프로젝트·고객사·강사·업체)"
         className="w-64 rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-sm outline-none transition-all focus:w-80 focus:border-blue-400 focus:bg-white"
       />
@@ -72,6 +89,13 @@ export function GlobalSearch() {
               <span className="max-w-[40%] truncate text-xs text-slate-400">{r.sub}</span>
             </button>
           ))}
+          {projectMatchCount > 0 && (
+            <button onClick={goToAllResults}
+              className="flex w-full items-center justify-center gap-1.5 border-t border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50">
+              <Search className="h-3.5 w-3.5" />
+              "{q.trim()}" 프로젝트 전체 {projectMatchCount}건 보기
+            </button>
+          )}
         </div>
       )}
     </div>
