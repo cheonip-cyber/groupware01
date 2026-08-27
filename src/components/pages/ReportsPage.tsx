@@ -2,18 +2,23 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { countProjectsByStatus } from '../../utils/calculations';
-import { projectStatusChartColor } from '../../utils/statusConfig';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCompactKRW } from '../../utils/formatters';
 import { projectYear, activeProjects } from '../../utils/filters';
-import { BarChart3, TrendingUp } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import { ClientPaymentLagSection } from './ClientPaymentLagSection';
+import { RiskEarlyWarning } from '../insights/RiskEarlyWarning';
+import { ProgramDemandTrend } from '../insights/ProgramDemandTrend';
+import { MarginHeatmap } from '../insights/MarginHeatmap';
 import type { Project } from '../../types';
 
-// 매출 규칙(구 그룹웨어 방식): 확정군=확정 매출, 제안중=예상 매출, 취소/보류=미반영, 유효매출(그룹 이중계상 제거) 기준
-const CONFIRMED_SET = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
+// 리포트 (2026-08-27 매출 중심 → 고객사/강사/업체 인사이트 중심으로 재편)
+// — 확정/예상 매출 요약카드, 월별 매출 현황 차트, 프로젝트 상태 분포 파이차트는 홈 Dashboard와
+//   완전히 중복되는 내용이라 제거(같은 숫자를 두 화면에서 각자 계산해 이원화되는 문제도 있었음).
+// — 대신 경영현황(관리자 전용)에 있던 리스크조기경보/프로그램수요트렌드/마진율히트맵을 공용
+//   컴포넌트(src/components/insights/)로 분리해 여기서도 씀 — 코드 중복 없이 재사용.
+// — "고객사별 매출 랭킹"은 Dashboard에 없는 이 페이지만의 고유 콘텐츠라 유지.
 const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 export function ReportsPage() {
@@ -33,49 +38,17 @@ export function ReportsPage() {
     return base.filter((p) => projectYear(p) === year);
   }, [projects, year]);
 
-  // 월별 확정/예상 매출 추이 (매출월 기준)
-  const monthly = useMemo(() => {
-    const map = new Map<string, { month: string; confirmed: number; expected: number }>();
-    for (const p of filtered) {
-      const mon = p.revenueMonth;
-      if (!mon) continue;
-      if (!map.has(mon)) map.set(mon, { month: mon, confirmed: 0, expected: 0 });
-      const row = map.get(mon)!;
-      if (CONFIRMED_SET.has(p.projectStatus)) row.confirmed += eff(p);
-      else if (p.projectStatus === '제안중') row.expected += eff(p);
-    }
-    return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
-  }, [filtered]);
-
   // 고객사별 매출 (유효매출 + 매출분배 자식은 마스터 고객사로 귀속)
   const clientRevenue = useMemo(() => {
     const map: Record<string, number> = {};
     filtered.forEach((p) => {
       const amount = eff(p);
       if (amount <= 0) return;
-      // 매출분배(계열사) 정산은 revenue_distributions로 분리되어 별도 자식 프로젝트가 없으므로
-      // 마스터 자신의 고객사로만 집계하면 된다 (2026-07-08 구조 개편 이후 단순화됨)
       const key = p.clientName || '(미지정)';
       map[key] = (map[key] ?? 0) + amount;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10)
       .map(([name, value]) => ({ name, value }));
-  }, [filtered, projects]);
-
-  const statusData = useMemo(() => {
-    const counts = countProjectsByStatus(filtered);
-    return Object.entries(counts).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
-  }, [filtered]);
-
-  const totals = useMemo(() => {
-    const rateBase = filtered.filter((p) => (p.expectedCost || 0) > 0); // 예산 미입력 제외 (이익률 왜곡 방지)
-    const rateRev = rateBase.reduce((s, p) => s + eff(p), 0);
-    return {
-      confirmed: filtered.filter((p) => CONFIRMED_SET.has(p.projectStatus)).reduce((s, p) => s + eff(p), 0),
-      expected: filtered.filter((p) => p.projectStatus === '제안중').reduce((s, p) => s + eff(p), 0),
-      profit: filtered.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0),
-      rate: rateRev > 0 ? ((rateBase.reduce((s, p) => s + (eff(p) - (p.expectedCost || 0)), 0) / rateRev) * 100).toFixed(1) : '0',
-    };
   }, [filtered]);
 
   if (loading) return <PageSkeleton />;
@@ -89,78 +62,33 @@ export function ReportsPage() {
           <option value="전체">전체 연도</option>
         </select>
         <span className="text-xs text-slate-400">
-          조회 기준: 매출월 귀속 · 확정(확정/준비·운영·정산·종료) / 예상(제안) / 취소·보류 미반영 · 그룹 이중계상 제거
+          고객사·강사·업체 기반 인사이트 · 매출 현황은 홈 대시보드에서 확인하세요
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="확정 매출" value={formatCompactKRW(totals.confirmed)} tone="text-blue-600" />
-        <SummaryCard label="예상 매출 (제안)" value={formatCompactKRW(totals.expected)} tone="text-amber-600" />
-        <SummaryCard label="이익 (매출-예산비용)" value={formatCompactKRW(totals.profit)} tone="text-emerald-600" />
-        <SummaryCard label="이익률 (예산입력 건 기준)" value={`${totals.rate}%`} tone="text-slate-800" />
-      </div>
-
       <Card>
-        <CardHeader title="월별 매출 현황 (확정 / 예상)" icon={<TrendingUp className="h-4 w-4 text-slate-400" />} />
+        <CardHeader title="고객사별 매출 랭킹 (매출분배는 메인 고객사 귀속)" icon={<BarChart3 className="h-4 w-4 text-slate-400" />} />
         <div className="h-72 p-4">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthly}>
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => formatCompactKRW(v)} tick={{ fontSize: 11 }} width={70} />
-              <Tooltip formatter={(v: number, name: string) => [formatCompactKRW(v) + '원', name === 'confirmed' ? '확정 매출' : '예상 매출']} />
-              <Legend formatter={(v) => (v === 'confirmed' ? '확정 매출' : '예상 매출')} wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="confirmed" stackId="rev" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="expected" stackId="rev" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+            <BarChart data={clientRevenue} layout="vertical" margin={{ left: 60 }}>
+              <XAxis type="number" tickFormatter={(v) => formatCompactKRW(v)} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
+              <Tooltip formatter={(v: number) => [formatCompactKRW(v) + '원', '유효매출']} />
+              <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} className="cursor-pointer"
+                onClick={(d: any) => d?.name && navigate(`/projects?year=${year}&search=${encodeURIComponent(d.name)}`)} />
             </BarChart>
           </ResponsiveContainer>
+          <p className="px-1 pb-1 text-[11px] text-slate-400">막대를 클릭하면 해당 고객사 프로젝트 목록으로 이동합니다</p>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="고객사별 매출 랭킹 (매출분배는 메인 고객사 귀속)" icon={<BarChart3 className="h-4 w-4 text-slate-400" />} />
-          <div className="h-72 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={clientRevenue} layout="vertical" margin={{ left: 60 }}>
-                <XAxis type="number" tickFormatter={(v) => formatCompactKRW(v)} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
-                <Tooltip formatter={(v: number) => [formatCompactKRW(v) + '원', '유효매출']} />
-                <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} className="cursor-pointer"
-                  onClick={(d: any) => d?.name && navigate(`/projects?year=${year}&search=${encodeURIComponent(d.name)}`)} />
-              </BarChart>
-            </ResponsiveContainer>
-            <p className="px-1 pb-1 text-[11px] text-slate-400">막대를 클릭하면 해당 고객사 프로젝트 목록으로 이동합니다</p>
-          </div>
-        </Card>
+      <MarginHeatmap year={year} />
 
-        <Card>
-          <CardHeader title="프로젝트 상태 분포" icon={<BarChart3 className="h-4 w-4 text-slate-400" />} />
-          <div className="h-72 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} paddingAngle={2}>
-                  {statusData.map((d) => (
-                    <Cell key={d.name} fill={projectStatusChartColor[d.name as keyof typeof projectStatusChartColor]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => [`${v}건`, '']} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
+      <ProgramDemandTrend year={year} />
+
+      <RiskEarlyWarning year={year} />
 
       <ClientPaymentLagSection />
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`mt-1 text-xl font-bold ${tone}`}>{value}</p>
     </div>
   );
 }
