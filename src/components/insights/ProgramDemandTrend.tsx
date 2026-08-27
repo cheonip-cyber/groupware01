@@ -4,12 +4,10 @@ import { Card, CardHeader } from '../common/Card';
 import { activeProjects, projectYear } from '../../utils/filters';
 import type { Project } from '../../types';
 import { BookOpen, Flame, Minus, Snowflake } from 'lucide-react';
+import { eff, CONFIRMED_STATUSES as CONFIRMED } from '../../utils/calculations';
 
 // 프로그램(주제) 수요 트렌드 (2026-08-04 최초 작성, 2026-08-27 공용 컴포넌트로 분리)
 // — 경영현황(관리자 전용)에만 있던 걸 리포트 메뉴에서도 쓸 수 있도록 독립 컴포넌트로 추출.
-
-const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 export function ProgramDemandTrend({ year }: { year: string }) {
   const { projects } = useAppData();

@@ -3,6 +3,7 @@ import { useAppData } from '../../store/appData';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { activeProjects, projectYear } from '../../utils/filters';
+import { eff, CONFIRMED_STATUSES as CONFIRMED } from '../../utils/calculations';
 import type { Project } from '../../types';
 import { Building2, Users, AlertTriangle, Award } from 'lucide-react';
 import { RiskEarlyWarning } from '../insights/RiskEarlyWarning';
@@ -16,9 +17,6 @@ import { MarginHeatmap } from '../insights/MarginHeatmap';
 // — 알림/메모 기능은 요청에 따라 제외.
 // — 2026-08-27: 리스크조기경보/프로그램수요트렌드/마진율히트맵 3개 섹션은 리포트 메뉴에서도
 //   똑같이 필요해져서 공용 컴포넌트(src/components/insights/)로 분리, 여기서는 그걸 가져다 씀.
-
-const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 const healthColor = (s: number) => (s >= 80 ? 'text-emerald-600' : s >= 60 ? 'text-blue-600' : s >= 40 ? 'text-amber-600' : 'text-red-600');
 const healthBg = (s: number) => (s >= 80 ? 'bg-emerald-50 border-emerald-200' : s >= 60 ? 'bg-blue-50 border-blue-200' : s >= 40 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200');

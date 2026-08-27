@@ -151,8 +151,9 @@ function Row({ label, value, sensitive }: { label: string; value?: string; sensi
   );
 }
 
-export function BudgetTab({ project, requests, instructors, companies, onAddCost, onUpdateCost, onDeleteCost, addInstructor, addCompany }: {
+export function BudgetTab({ project, allProjects, requests, instructors, companies, onAddCost, onUpdateCost, onDeleteCost, addInstructor, addCompany }: {
   project: Project;
+  allProjects?: Project[];
   requests: PaymentRequest[];
   instructors: Instructor[];
   companies: Company[];
@@ -164,6 +165,17 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
 }) {
   const dialog = useDialog();
   const profitTone = project.expectedProfit >= 0 ? 'text-emerald-600' : 'text-red-600';
+
+  // 2026-08-27 신설: 예산/비용은 매출과 달리 그룹(마스터+회차) 이중계상 방지 장치가 없다 —
+  // "입력한 곳에서 그대로 집계"가 의도된 설계라 자동으로 0 처리하지 않기 때문. 대신 마스터와
+  // 회차 양쪽에 동시에 비용이 입력된 경우를 감지해서 경고만 표시(자동 수정은 안 함 — 어느 쪽이
+  // 실제 지출인지는 사람이 판단해야 함).
+  const isGroupMaster = !project.parentId && !!project.groupType;
+  const childrenCostSum = isGroupMaster && allProjects
+    ? allProjects.filter((p) => p.parentId === project.id).reduce((s, p) => s + (p.expectedCost || 0), 0)
+    : 0;
+  const doubleEntryRisk = isGroupMaster && (project.expectedCost || 0) > 0 && childrenCostSum > 0;
+
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('강사비');
   const [payeeType, setPayeeType] = useState<'instructor' | 'company' | 'etc'>('instructor');
@@ -211,6 +223,19 @@ export function BudgetTab({ project, requests, instructors, companies, onAddCost
 
   return (
     <div className="space-y-4">
+      {doubleEntryRisk && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">마스터와 회차 양쪽에 예산/비용이 입력되어 있습니다</p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              이 프로젝트(마스터) 자체에 {new Intl.NumberFormat('ko-KR').format(project.expectedCost || 0)}원,
+              하위 회차 전체에 {new Intl.NumberFormat('ko-KR').format(childrenCostSum)}원이 각각 입력되어 있어
+              합계 집계 시 중복 계상될 수 있습니다. 실제 지출이 어느 쪽인지 확인해서 한쪽만 남겨주세요.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Section title="예산 구성 (원가 항목 합계)">
           <Field label="강사료 예산"><MoneyText value={project.trainerFeeBudget} /></Field>

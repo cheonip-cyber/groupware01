@@ -72,7 +72,14 @@ export function RevenuePage() {
                   <td className="px-3 py-3 text-slate-500">
                     {p.clientName}
                   </td>
-                  <td className="px-3 py-3 text-right"><MoneyText value={p.contractAmount} /></td>
+                  <td className="px-3 py-3 text-right">
+                    {p.groupTotalAmount != null && p.groupTotalAmount !== p.contractAmount ? (
+                      <span title="그룹 합계 (이중계상 없이 자식 금액 기준)">
+                        <MoneyText value={p.groupTotalAmount} />
+                        <span className="ml-1 text-[10px] text-indigo-400">합계</span>
+                      </span>
+                    ) : <MoneyText value={p.contractAmount} />}
+                  </td>
                   <td className="px-3 py-3 text-right"><MoneyText value={p.supplyAmount} /></td>
                   <td className="px-3 py-3"><StatusBadge label={p.revenueStatus} style={revenueStatusStyle[p.revenueStatus]} size="sm" /></td>
                   <td className="px-3 py-3">

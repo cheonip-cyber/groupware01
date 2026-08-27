@@ -5,13 +5,11 @@ import { MoneyText } from '../common/MoneyText';
 import { activeProjects, projectYear } from '../../utils/filters';
 import type { Project } from '../../types';
 import { AlertTriangle } from 'lucide-react';
+import { eff, CONFIRMED_STATUSES as CONFIRMED } from '../../utils/calculations';
 
 // 리스크 조기경보 (2026-08-04 최초 작성, 2026-08-27 공용 컴포넌트로 분리)
 // — 경영현황(관리자 전용)에만 있던 걸 리포트 메뉴에서도 쓸 수 있도록 독립 컴포넌트로 추출.
 //   year를 prop으로 받아 각자 자기 컨텍스트(useAppData)에서 스스로 계산한다(중복 코드 대신 재사용).
-
-const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 export function RiskEarlyWarning({ year }: { year: string }) {
   const { projects } = useAppData();

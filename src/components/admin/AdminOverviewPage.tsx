@@ -8,6 +8,7 @@ import { PageSkeleton } from '../common/Skeleton';
 import type { SgaRow } from '../../utils/paymentExport';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import type { Project } from '../../types';
+import { eff, CONFIRMED_STATUSES as CONFIRMED } from '../../utils/calculations';
 import { activeProjects } from '../../utils/filters';
 import { CashFlowThisMonth } from './CashFlowThisMonth';
 import { ExpenseAnalysis } from './ExpenseAnalysis';
@@ -15,8 +16,6 @@ import { BusinessInsights } from './BusinessInsights';
 
 // 관리자 전용 경영 현황: 회사 총매출 · 총사용비용(프로젝트+판관비+카드 일반) · 최종 경영이익
 // 프로젝트 이익률(대시보드, 직원 공용)과 별도로, 판관비·카드까지 포함한 회사 단위 손익을 본다
-const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 interface CardTx { amount: number; transaction_date: string; project_linked?: boolean; category_id?: number; }
 

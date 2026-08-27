@@ -123,12 +123,16 @@ export function Dashboard() {
       <SectionLabel text="진행 현황" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard label="전체 프로젝트" value={kpi.total} unit="건" icon={<FolderKanban className="h-4 w-4" />}
+          hint={kpi.totalWithSessions !== kpi.total ? `회차 포함 ${kpi.totalWithSessions}건` : undefined}
           onClick={() => goProjects()} />
         <KpiCard label="확정/준비" value={kpi.confirmedReady} unit="건" tone="blue" icon={<CheckCircle2 className="h-4 w-4" />}
+          hint={kpi.confirmedReadyWithSessions !== kpi.confirmedReady ? `회차 포함 ${kpi.confirmedReadyWithSessions}건` : undefined}
           onClick={() => goProjects({ status: '확정/준비' })} />
         <KpiCard label="운영 중" value={kpi.inProgress} unit="건" tone="amber" icon={<Play className="h-4 w-4" />}
+          hint={kpi.inProgressWithSessions !== kpi.inProgress ? `회차 포함 ${kpi.inProgressWithSessions}건` : undefined}
           onClick={() => goProjects({ status: '운영중' })} />
         <KpiCard label="보고/정산 대기" value={kpi.reportSettlement} unit="건" tone="emerald" icon={<FileBarChart className="h-4 w-4" />}
+          hint={kpi.reportSettlementWithSessions !== kpi.reportSettlement ? `회차 포함 ${kpi.reportSettlementWithSessions}건` : undefined}
           onClick={() => goProjects({ status: '보고/정산' })} />
         <KpiCard label="이번 달 교육" value={kpi.thisMonth} unit="건" icon={<CalendarClock className="h-4 w-4" />}
           onClick={() => goProjects({ month: String(new Date().getMonth() + 1).padStart(2, '0') })} />

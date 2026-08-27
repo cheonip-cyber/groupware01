@@ -1,12 +1,14 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import type { Project } from '../../types';
-import { countProjectsByStatus } from '../../utils/calculations';
+import { countProjectsByStatusDeduped } from '../../utils/calculations';
 import { projectStatusChartColor } from '../../utils/statusConfig';
 import { Card, CardHeader } from '../common/Card';
 import { PieChart as PieIcon } from 'lucide-react';
 
+// 2026-08-27: 회차(그룹 자식)를 마스터와 별개 건으로 세면 실제 프로젝트 개수보다 부풀려짐 —
+// countProjectsByStatusDeduped로 그룹은 1건(마스터 기준)만 세도록 변경.
 export function StatusChart({ projects }: { projects: Project[] }) {
-  const counts = countProjectsByStatus(projects);
+  const counts = countProjectsByStatusDeduped(projects);
   const data = Object.entries(counts)
     .filter(([, v]) => v > 0)
     .map(([name, value]) => ({ name, value }));

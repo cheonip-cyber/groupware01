@@ -18,11 +18,34 @@ const ALL_STATUSES: ProjectStatus[] = [
   '제안중', '제안완료', '확정/준비', '운영중', '보고/정산', '완료', '취소/보류',
 ];
 
+// 2026-08-27: 여러 파일(BusinessInsights/ReportsPage/AdminOverviewPage/인사이트 컴포넌트 등)에
+// eff()·CONFIRMED가 각자 따로 정의되어 있어(내용은 우연히 동일했지만) 한 곳만 고치면 조용히
+// 어긋날 위험이 있었음 — 공용 버전을 여기서 export하고 각 파일은 이걸 import해서 쓰도록 통합.
+export const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
+export const CONFIRMED_STATUSES = new Set<ProjectStatus>(['확정/준비', '운영중', '보고/정산', '완료']);
+
 export const countProjectsByStatus = (projects: Project[]): Record<ProjectStatus, number> => {
   const acc = Object.fromEntries(ALL_STATUSES.map((s) => [s, 0])) as Record<ProjectStatus, number>;
   for (const p of projects) acc[p.projectStatus] = (acc[p.projectStatus] ?? 0) + 1;
   return acc;
 };
+
+// 2026-08-27 신설: "프로젝트 건수"는 회차/자식을 마스터와 별개 건으로 세면 안 된다는 지적으로
+// 도입 — 그룹(마스터+회차)은 1건으로만 세고, 회차 수는 별도로 붙여서 "1건(5회)" 형태로 표시할
+// 수 있게 한다. 최상위(parentId 없는) 프로젝트만 대상으로 하고, 상태는 마스터 자신의 상태를 쓴다.
+export const dedupedForCounting = (projects: Project[]): Project[] => projects.filter((p) => !p.parentId);
+
+export const childCountMap = (projects: Project[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const p of projects) {
+    if (!p.parentId) continue;
+    map.set(p.parentId, (map.get(p.parentId) ?? 0) + 1);
+  }
+  return map;
+};
+
+export const countProjectsByStatusDeduped = (projects: Project[]): Record<ProjectStatus, number> =>
+  countProjectsByStatus(dedupedForCounting(projects));
 
 // 주의 필요 프로젝트 (사양서 6.1 D) — riskFlags 기반. ActiveProject만 받으므로 호출부에서
 // activeProjects()를 거치지 않으면 타입 에러 — 취소/보류 제외를 빠뜨릴 수 없다.
@@ -45,10 +68,14 @@ export const getUnrequestedPayments = (paymentRequests: ActivePaymentRequest[]):
 // 대시보드 KPI 집계
 export interface DashboardKpis {
   total: number;
+  totalWithSessions: number;  // 회차 포함 원본 건수(그룹 안 회차까지 각각 센 값) — "N건(M회)" 표기용
   thisMonth: number;
   confirmedReady: number;
+  confirmedReadyWithSessions: number;
   inProgress: number;
+  inProgressWithSessions: number;
   reportSettlement: number;
+  reportSettlementWithSessions: number;
   paymentPending: number;      // 지급요청 완료 후 이체 대기 중인 건 (지급요청 상태)
   paymentTarget: number;       // 아직 요청 전(지급대상) 건 — 요청 여부 검토 필요
   taxInvoicePending: number;
@@ -72,7 +99,13 @@ export const buildDashboardKpis = (
   active: ActiveProject[],
   activePayments: ActivePaymentRequest[],
 ): DashboardKpis => {
-  const counts = countProjectsByStatus(active);
+  const counts = countProjectsByStatus(active); // 회차 포함 원본 건수(괄호 표기용)
+  // 2026-08-27 수정: "프로젝트 건수"는 그룹(마스터+회차)을 각각 별도 건으로 세면 실제 프로젝트
+  // 개수보다 부풀려짐 — 최상위(그룹이면 마스터, 아니면 자기 자신)만 1건으로 세고, 회차가 있는
+  // 건은 화면에서 "N건(M회)" 형태로 회차 수를 별도 표기한다(dedupedCounts=건수, counts=회차 포함
+  // 원본 총계, 화면에서 두 값을 비교해 회차가 있는지 판단).
+  const dedupedActive = dedupedForCounting(active);
+  const dedupedCounts = countProjectsByStatus(dedupedActive);
   // 매출 규칙(구 그룹웨어 방식): 확정군(확정/준비·운영중·보고/정산·완료)=확정 매출, 제안중=예상 매출, 취소/보류=미반영
   // 금액은 유효매출(effectiveAmount) 기준 — 그룹 마스터는 자식이 금액을 가지면 0 (이중계상 제거)
   const CONFIRMED_SET = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
@@ -98,11 +131,15 @@ export const buildDashboardKpis = (
     profitRateDeviation = Number(((bestRate - worstRate) / 2).toFixed(1));
   }
   return {
-    total: active.length,
+    total: dedupedActive.length,
+    totalWithSessions: active.length,
     thisMonth: getThisMonthProjects(active).length,
-    confirmedReady: counts['확정/준비'],
-    inProgress: counts['운영중'],
-    reportSettlement: counts['보고/정산'],
+    confirmedReady: dedupedCounts['확정/준비'],
+    confirmedReadyWithSessions: counts['확정/준비'],
+    inProgress: dedupedCounts['운영중'],
+    inProgressWithSessions: counts['운영중'],
+    reportSettlement: dedupedCounts['보고/정산'],
+    reportSettlementWithSessions: counts['보고/정산'],
     paymentPending: getRequestedPayments(activePayments).length,
     paymentTarget: getUnrequestedPayments(activePayments).length,
     // 2026-08-25: 세금계산서/수금/정산은 매출 금액(effectiveAmount)과 달리 이중계상 방지 장치가

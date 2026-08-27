@@ -4,14 +4,13 @@ import { Card, CardHeader } from '../common/Card';
 import { activeProjects, projectYear } from '../../utils/filters';
 import type { Project } from '../../types';
 import { TrendingUp } from 'lucide-react';
+import { eff, CONFIRMED_STATUSES as CONFIRMED } from '../../utils/calculations';
 
 // 마진율 히트맵 (고객사 × 연도) (2026-08-04 최초 작성, 2026-08-27 공용 컴포넌트로 분리)
 // — 경영현황(관리자 전용)에만 있던 걸 리포트 메뉴에서도 쓸 수 있도록 독립 컴포넌트로 추출.
 // — 매출 상위 8개 고객사 × 연도별 평균 이익률. 예산비용 미입력 건은 이익률이 자동 100%로
 //   잡혀 왜곡되므로 계산에서 제외.
 
-const CONFIRMED = new Set(['확정/준비', '운영중', '보고/정산', '완료']);
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 const marginBg = (r: number | null) => (r == null ? 'bg-slate-50 text-slate-400' : r >= 50 ? 'bg-amber-100 text-amber-700' : r >= 30 ? 'bg-emerald-100 text-emerald-700' : r >= 10 ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600');
 
 export function MarginHeatmap({ year }: { year: string }) {

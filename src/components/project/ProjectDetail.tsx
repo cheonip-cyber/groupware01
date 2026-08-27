@@ -162,6 +162,7 @@ export function ProjectDetail() {
           {activeTab === '예산/비용' && (
             <BudgetTab
               project={project}
+              allProjects={projects}
               requests={projectRequests}
               instructors={instructors}
               companies={companies}

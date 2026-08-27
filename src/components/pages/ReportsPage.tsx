@@ -12,6 +12,7 @@ import { RiskEarlyWarning } from '../insights/RiskEarlyWarning';
 import { ProgramDemandTrend } from '../insights/ProgramDemandTrend';
 import { MarginHeatmap } from '../insights/MarginHeatmap';
 import type { Project } from '../../types';
+import { eff } from '../../utils/calculations';
 
 // 리포트 (2026-08-27 매출 중심 → 고객사/강사/업체 인사이트 중심으로 재편)
 // — 확정/예상 매출 요약카드, 월별 매출 현황 차트, 프로젝트 상태 분포 파이차트는 홈 Dashboard와
@@ -19,7 +20,6 @@ import type { Project } from '../../types';
 // — 대신 경영현황(관리자 전용)에 있던 리스크조기경보/프로그램수요트렌드/마진율히트맵을 공용
 //   컴포넌트(src/components/insights/)로 분리해 여기서도 씀 — 코드 중복 없이 재사용.
 // — "고객사별 매출 랭킹"은 Dashboard에 없는 이 페이지만의 고유 콘텐츠라 유지.
-const eff = (p: Project) => p.effectiveAmount ?? p.contractAmount ?? 0;
 
 export function ReportsPage() {
   const { projects, loading, globalYear, setGlobalYear } = useAppData();
