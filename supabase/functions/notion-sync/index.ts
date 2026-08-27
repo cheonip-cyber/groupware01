@@ -1,11 +1,19 @@
-// notion-sync Edge Function (v29 - auto-relink dead notion links on title collision)
+// notion-sync Edge Function (v30 - restrict auto-relink to recently-created rows only)
 // 변경점(v28→v29): "이름 중복 가드"에서 기존 행의 notion_page_id가 채워져 있으면 무조건
 // 생성을 보류하던 결함 수정. 노션에서 페이지를 만들었다가 삭제하고 다시 같은 이름으로
 // 만들면, 옛 페이지는 트래시로 가서 일반 pull 쿼리 결과에 아예 안 잡히고(그래서 옛 DB
 // 행이 방치됨), 새 페이지는 이름이 같아서 생성이 보류되어 조용히 무시되던 문제
-// (2026-08-27). 이제 이름이 겹치면 기존 행의 링크가 실제로 죽었는지 그 자리에서 확인해,
-// 죽어있으면 새 페이지로 자동 재연결한다.
+// (2026-08-27). 이름이 겹치면 기존 행의 링크가 실제로 죽었는지 확인해 죽어있으면 자동
+// 재연결하도록 했음.
+// 변경점(v29→v30): 위 자동 재연결이 위험할 수 있다는 지적 반영 — 매년 유사한 이름의
+// 프로젝트가 반복 진행되는데(예: "행복한 인문학당" 매년), 작년에 완료된 프로젝트의
+// 노션 페이지를 정리 차원에서 나중에 지우면, 그 "죽은 링크"를 올해 신규 프로젝트가
+// 이름만 같다는 이유로 자동 재연결해서 작년 완료 실적을 올해 데이터로 덮어써버릴
+// 위험이 있었음. 이제 "기존 행이 최근(30일 이내)에 생성된 경우"에만 자동 재연결하고,
+// 오래된 행이면(과거 연도 반복 프로젝트일 가능성) 절대 건드리지 않고 새 행을 생성한다.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const RECENT_RELINK_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30일
 
 const NOTION_TOKEN = Deno.env.get('NOTION_TOKEN')!;
 const NOTION_VERSION = '2022-06-28';
@@ -468,16 +476,21 @@ async function pullEntity(entityType: string) {
           if (!titleValue) { skipped++; continue; }
 
           const { data: nameDup } = await supabase.from(cfg.table)
-            .select('id, notion_page_id').eq(titleMapping!.supabase_column, titleValue).limit(1);
+            .select('id, notion_page_id, created_at').eq(titleMapping!.supabase_column, titleValue).limit(1);
           if (nameDup && nameDup.length > 0) {
             const dupRow = nameDup[0];
             let dupLinkAlive: boolean | null = null;
             if (dupRow.notion_page_id) {
               try { dupLinkAlive = await checkPageAlive(dupRow.notion_page_id); } catch { dupLinkAlive = null; }
             }
-            // 기존 행이 링크가 없거나(예전부터 미연결), 링크는 있지만 실제로 죽어있으면(휴지통/삭제됨)
-            // — 노션에서 지웠다 같은 이름으로 다시 만든 전형적인 케이스 — 새 페이지로 재연결한다.
-            if (!dupRow.notion_page_id || dupLinkAlive === false) {
+            const dupIsRecent = dupRow.created_at
+              ? (Date.now() - new Date(dupRow.created_at).getTime()) < RECENT_RELINK_WINDOW_MS
+              : false;
+            // 자동 재연결 조건: 링크가 죽어있고(또는 애초에 미연결), 그 행이 최근(30일 이내)에
+            // 생성된 경우만. 매년 반복되는 프로젝트는 작년 완료건이 이름만 같고 훨씬 오래전에
+            // 생성됐을 것이므로, 이 조건이 그 케이스를 자연히 걸러낸다 — 오래된 행은 링크가
+            // 죽어있어도 절대 건드리지 않고 새 행을 생성해 과거 실적을 보존한다.
+            if ((!dupRow.notion_page_id || dupLinkAlive === false) && dupIsRecent) {
               const reason = !dupRow.notion_page_id ? '미연결 상태' : '기존 링크가 삭제(휴지통)된 상태로 확인됨';
               await supabase.from(cfg.table).update({
                 ...patch,
@@ -486,15 +499,21 @@ async function pullEntity(entityType: string) {
                 ...(entityType === 'project' ? { notion_url: page.url } : {}),
               }).eq('id', dupRow.id);
               if (entityType === 'project') await syncProjectInstructors(dupRow.id, instructorPageIds);
-              await logSync(entityType, dupRow.id, 'from_notion', 'success', `기존 행과 자동 재연결(${reason}): "${String(titleValue).slice(0, 60)}"`);
+              await logSync(entityType, dupRow.id, 'from_notion', 'success', `기존 행과 자동 재연결(최근 생성분, ${reason}): "${String(titleValue).slice(0, 60)}"`);
               updated++;
               continue;
             }
-            // 링크가 살아있는데 이름이 겹치면 진짜 별개 항목일 수 있으니 생성 보류(안전)
-            skipped++;
+            if (dupLinkAlive === true) {
+              // 링크가 살아있는데 이름이 겹치면 진짜 별개 항목일 수 있으니 생성 보류(안전)
+              skipped++;
+              await logSync(entityType, dupRow.id, 'from_notion', 'error',
+                `생성 보류(이름 중복 가드): "${String(titleValue).slice(0, 80)}" — 기존 행이 이미 살아있는 다른 노션 페이지와 연결되어 있음. 필요 시 수동 확인`);
+              continue;
+            }
+            // 링크는 죽어있지만(또는 미연결) 기존 행이 오래됐음 — 매년 반복되는 프로젝트의
+            // 과거 완료 기록일 가능성이 높아 건드리지 않고 새 행으로 생성(아래로 진행).
             await logSync(entityType, dupRow.id, 'from_notion', 'error',
-              `생성 보류(이름 중복 가드): "${String(titleValue).slice(0, 80)}" — 기존 행이 이미 살아있는 다른 노션 페이지와 연결되어 있음. 필요 시 수동 확인`);
-            continue;
+              `이름 중복이지만 기존 행이 오래되어(반복 프로젝트 가능성) 재연결하지 않고 신규 생성: "${String(titleValue).slice(0, 80)}"`);
           }
 
           const { data: inserted, error: insErr } = await supabase.from(cfg.table).insert({
