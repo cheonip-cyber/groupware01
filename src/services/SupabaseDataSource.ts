@@ -66,6 +66,12 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
   }));
 
   const paymentStatus = derivePaymentStatus(costs.map((c) => ({ status: c.status, is_payable: c.is_payable })));
+  // 2026-08-27: 개요탭 '강사' 필드의 상태뱃지용 — 프로젝트 전체 지급상태(paymentStatus)는
+  // 강사비 외 다른 비용까지 섞여 있어서, 강사비 항목만 따로 지급상태를 계산한다.
+  const trainerCosts = costs.filter((c) => budgetBucket(c.category) === 'trainer');
+  const trainerPaymentStatus = trainerCosts.length > 0
+    ? derivePaymentStatus(trainerCosts.map((c) => ({ status: c.status, is_payable: c.is_payable })))
+    : undefined;
 
   // 강사비 카테고리는 지급유형이 company로 저장돼 있어도(업체 명의 세금계산서 등) 개요에는 실제 강사 개인명이 보여야 한다 —
   // instructor면 강사DB 이름, company면 대표자명(없으면 업체명)을 우선하고, 매핑이 없으면 저장된 텍스트로 폴백한다.
@@ -152,6 +158,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     // 그걸 대신 보여준다 — 진행/배정 탭에서 "미확정"으로 나오던 문제 수정.
     trainerNames: costTrainerNames.length > 0 ? costTrainerNames : (notionTrainerNames ?? []),
     trainerNamesSource: costTrainerNames.length > 0 ? 'cost' : ((notionTrainerNames?.length ?? 0) > 0 ? 'notion' : undefined),
+    trainerPaymentStatus: costTrainerNames.length > 0 ? trainerPaymentStatus : undefined,
     prepItems,
     prepChecklist: (row.prep_checklist ?? {}) as Record<string, boolean>,
     clientRequest: undefined,

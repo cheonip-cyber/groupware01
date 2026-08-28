@@ -165,6 +165,9 @@ export interface Project extends NotionSyncFields {
       지급 등록 전이라 노션 "강사섭외" 정보를 대신 보여주는 것(2026-08-27). 화면 안내 문구
       분기용. */
   trainerNamesSource?: 'cost' | 'notion';
+  /** trainerNamesSource==='cost'일 때만 유효 — 강사비 항목만의 지급상태(프로젝트 전체
+      paymentStatus는 다른 비용까지 섞여있어 부적합). 개요탭 강사 필드 상태뱃지용(2026-08-27). */
+  trainerPaymentStatus?: PaymentStatus;
   prepItems: PrepItem[];
   /** 준비 체크 상태 (그룹웨어 전용 저장, 노션 미연동) */
   prepChecklist?: Record<string, boolean>;

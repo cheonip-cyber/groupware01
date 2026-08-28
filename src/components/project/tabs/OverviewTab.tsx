@@ -173,18 +173,39 @@ export function OverviewTab({ project, instructors, clients, onUpdate, onRecover
         </Field>
         <Field label="강사">
           <span className="flex flex-wrap items-center gap-2">
-            <span>{trainerNames.length ? trainerNames.join(', ') : <span className="text-red-500">미확정</span>}</span>
-            {/* 2026-08-27: 강사명이 노션 섭외 정보로 대신 표시되는 경우("지급 등록 전")에도
-                '예산/비용 탭에서 배정' 문구가 그대로 나와 헷갈렸음 — 실제로는 지급 미등록
-                상태라는 걸 명확히 하고, 버튼은 그 등록을 하러 가는 액션으로 통일. */}
-            {onGoBudgetTab && project.trainerNamesSource === 'notion' && (
-              <span className="flex items-center gap-1 text-xs">
-                <span className="text-slate-400">(노션 섭외 정보 · 지급 미등록)</span>
-                <button type="button" onClick={onGoBudgetTab} className="text-blue-500 hover:underline">예산/비용 탭에서 지급 등록</button>
-              </span>
-            )}
-            {onGoBudgetTab && project.trainerNamesSource !== 'notion' && (
-              <button type="button" onClick={onGoBudgetTab} className="text-xs text-blue-500 hover:underline">예산/비용 탭에서 배정</button>
+            {/* 2026-08-27: 강사 필드를 4가지 상태로 분리
+                1) 미확정 → 노션에서 등록 안내 (섭외 자체는 노션이 원본이라 여기서 배정 유도하지 않음)
+                2) 노션엔 있는데 지급 미등록 → 예산/비용 탭으로 유도
+                3) 지급 등록됐지만 강사비 요청이 아직 '미지급' 단계 → 지급요청 유도
+                4) 지급요청 이상 진행됨(지급요청 중/지급완료) → 안내 문구 대신 작은 상태뱃지만 표시 */}
+            {trainerNames.length === 0 ? (
+              <>
+                <span className="text-red-500">미확정</span>
+                <span className="text-xs text-slate-400">(노션에서 등록)</span>
+              </>
+            ) : project.trainerNamesSource === 'notion' ? (
+              <>
+                <span>{trainerNames.join(', ')}</span>
+                {onGoBudgetTab && (
+                  <button type="button" onClick={onGoBudgetTab} className="text-xs text-blue-500 hover:underline">(예산/비용 미입력 · 바로가기)</button>
+                )}
+              </>
+            ) : project.trainerPaymentStatus === '지급대상' ? (
+              <>
+                <span>{trainerNames.join(', ')}</span>
+                {onGoBudgetTab && (
+                  <button type="button" onClick={onGoBudgetTab} className="text-xs text-amber-600 hover:underline">(지급요청 미완료 · 바로가기)</button>
+                )}
+              </>
+            ) : (
+              <>
+                <span>{trainerNames.join(', ')}</span>
+                {project.trainerPaymentStatus === '지급완료' ? (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600">지급완료</span>
+                ) : project.trainerPaymentStatus === '지급요청' ? (
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">지급요청 중</span>
+                ) : null}
+              </>
             )}
           </span>
         </Field>
