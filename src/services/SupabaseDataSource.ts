@@ -299,6 +299,17 @@ class SupabaseDataSource implements DataSource {
         const mergedIndependent = p.groupType === 'merged' && Math.abs((p.contractAmount || 0) - kidsSum) >= 2;
         p.groupTotalAmount = (kidsSum > 0 ? kidsSum : 0) + (mergedIndependent || kidsSum === 0 ? (p.contractAmount || 0) : 0);
         p.effectiveAmount = kidsSum > 0 ? (mergedIndependent ? (p.contractAmount || 0) : 0) : (p.contractAmount || 0);
+
+        // 2026-08-27 수정: 이익률/이익도 그룹 전체(마스터 자신 + 회차 전부) 비용 기준으로
+        // 재계산한다. 예산/비용이 마스터가 아니라 회차에만 입력되는 게 일반적인데, 기존엔
+        // 마스터 자신의 expectedCost(대개 0)만 보고 계산해 이익률이 실제보다 훨씬 높게(종종
+        // 100%로) 잘못 표시되고 있었음(예: 회차 실제 이익률 37%인데 마스터는 100% 표시).
+        const groupCost = (p.expectedCost || 0) + kids.reduce((s, c) => s + (c.expectedCost || 0), 0);
+        const groupRevenueForRate = p.groupTotalAmount || 0;
+        p.expectedProfit = groupRevenueForRate - groupCost;
+        p.profitRate = groupRevenueForRate > 0
+          ? Number(((p.expectedProfit / groupRevenueForRate) * 100).toFixed(1))
+          : (p.expectedProfit < 0 ? -100 : 0);
       } else {
         p.effectiveAmount = p.contractAmount;
       }
