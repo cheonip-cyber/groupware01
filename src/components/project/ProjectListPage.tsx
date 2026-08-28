@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import { applyProjectFilters, defaultFilterState, projectYear, sortProjects, STATUSES } from '../../utils/filters';
@@ -16,16 +16,21 @@ const PAGE_SIZE = 50;
 
 export function ProjectListPage() {
   const { projects, clients, loading, globalYear, createProject } = useAppData();
-  const [params] = useSearchParams();
-  // 초기 필터: URL 파라미터(드릴다운) > 전역 연도 컨텍스트 > 기본값
+  const [params, setSearchParams] = useSearchParams();
+  // 초기 필터: URL 파라미터(드릴다운/뒤로가기 복원) > 전역 연도 컨텍스트 > 기본값
   const [f, setF] = useState<ProjectFilterState>(() => ({
     ...defaultFilterState,
     search: params.get('search') ?? defaultFilterState.search,
-    statuses: params.get('status') ? [params.get('status')!] : defaultFilterState.statuses,
+    statuses: params.get('status') ? params.get('status')!.split(',') : defaultFilterState.statuses,
+    clientId: params.get('client') ?? defaultFilterState.clientId,
+    manager: params.get('manager') ?? defaultFilterState.manager,
     year: params.get('year') ?? globalYear ?? defaultFilterState.year,
     month: params.get('month') ?? defaultFilterState.month,
+    priority: params.get('priority') ?? defaultFilterState.priority,
+    sort: (params.get('sort') as ProjectFilterState['sort']) ?? defaultFilterState.sort,
+    sortDir: (params.get('sortDir') as 'asc' | 'desc') ?? defaultFilterState.sortDir,
   }));
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Number(params.get('page')) || 1);
   // 2026-08-27 수정: 위 useState는 최초 마운트 시에만 URL 파라미터를 읽어서, 이미 /projects
   // 페이지에 있는 상태에서 통합검색으로 재검색하면(같은 경로 + 다른 쿼리) 컴포넌트가
   // 리마운트되지 않아 필터가 갱신되지 않는 결함이 있었음 — search 파라미터가 바뀔 때마다
@@ -38,6 +43,28 @@ export function ProjectListPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
+
+  // 2026-08-28 신설: 위와 반대 방향(필터 상태 → URL) 동기화. 목록 화면 안의 검색창/상태
+  // 필터/정렬 등을 직접 조작할 때는 URL이 전혀 안 바뀌고 있어서, 검색된 목록을 보다가
+  // 프로젝트를 클릭해 상세로 이동한 뒤 뒤로가기를 누르면 검색이 초기화된 "전체 프로젝트"
+  // 화면으로 돌아오는 문제가 있었음. f/page가 바뀔 때마다 URL 전체를 다시 써서, 뒤로가기 시
+  // 그 URL 그대로 복원되게 한다. 위 useEffect와 서로의 변경을 다시 트리거하지만 값이 같으면
+  // 각자 no-op 가드가 있어 무한루프로 이어지지 않는다.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (f.search) next.set('search', f.search);
+    if (f.statuses.join(',') !== defaultFilterState.statuses.join(',')) next.set('status', f.statuses.join(','));
+    if (f.clientId) next.set('client', f.clientId);
+    if (f.manager) next.set('manager', f.manager);
+    if (f.year && f.year !== defaultFilterState.year) next.set('year', f.year);
+    if (f.month) next.set('month', f.month);
+    if (f.priority) next.set('priority', f.priority);
+    if (f.sort !== defaultFilterState.sort) next.set('sort', f.sort);
+    if (f.sortDir !== defaultFilterState.sortDir) next.set('sortDir', f.sortDir);
+    if (page > 1) next.set('page', String(page));
+    if (next.toString() !== params.toString()) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f, page]);
   const [createOpen, setCreateOpen] = useState(false);
   useEscClose(createOpen, () => setCreateOpen(false)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
@@ -106,8 +133,14 @@ export function ProjectListPage() {
 
   const set = (patch: Partial<ProjectFilterState>) => setF((prev) => ({ ...prev, ...patch }));
 
-  // 필터 변경 시 1페이지로 이동
-  useEffect(() => { setPage(1); }, [f]);
+  // 필터 변경 시 1페이지로 이동 — 단, 최초 마운트(=URL에서 page를 막 복원한 직후)는
+  // 건너뛴다. 안 그러면 뒤로가기로 3페이지를 보던 상태로 돌아와도 이 effect가 곧바로
+  // 1페이지로 되돌려버려 페이지 번호 복원이 무의미해진다(2026-08-28).
+  const skippedFirstPageReset = useRef(false);
+  useEffect(() => {
+    if (!skippedFirstPageReset.current) { skippedFirstPageReset.current = true; return; }
+    setPage(1);
+  }, [f]);
 
   const totalPages = Math.max(1, Math.ceil(topLevel.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
