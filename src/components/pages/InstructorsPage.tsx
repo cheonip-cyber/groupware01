@@ -44,6 +44,7 @@ export function InstructorsPage() {
       bankName: i.bankName ?? '', accountNumber: i.accountNumber ?? '',
       specialty: i.specialty ?? '', level: i.level ?? '',
       remarks: i.remarks ?? '', specialNotes: i.specialNotes ?? '',
+      defaultFee: i.defaultFee ? String(i.defaultFee) : '',
     });
   };
   // 다른 화면(업무관리>강사 섭외 현황 등)에서 강사명을 눌러 들어온 경우 ?highlight=ID로
@@ -66,16 +67,20 @@ export function InstructorsPage() {
     if (!panel) return;
     setPanelSaving(true);
     try {
-      const patch: Record<string, string | undefined> = {};
+      const patch: Record<string, string | number | undefined> = {};
       const cur: Record<string, string> = {
         name: panel.name ?? '', phone: panel.phone ?? '', email: panel.email ?? '',
         residentNumber: panel.residentNumber ?? '', address: panel.address ?? '',
         bankName: panel.bankName ?? '', accountNumber: panel.accountNumber ?? '',
         specialty: panel.specialty ?? '', level: panel.level ?? '',
         remarks: panel.remarks ?? '', specialNotes: panel.specialNotes ?? '',
+        defaultFee: panel.defaultFee ? String(panel.defaultFee) : '',
       };
       for (const k of Object.keys(cur)) {
-        if ((panelForm[k] ?? '') !== cur[k]) patch[k] = panelForm[k] || undefined;
+        if ((panelForm[k] ?? '') !== cur[k]) {
+          // 2026-08-27: 기준금액(defaultFee)은 숫자 컬럼이라 문자열이 아니라 Number로 변환해서 보낸다.
+          patch[k] = k === 'defaultFee' ? (Number(panelForm[k]) || 0) : (panelForm[k] || undefined);
+        }
       }
       if (Object.keys(patch).length === 0) { toast.error('변경된 내용이 없습니다'); return; }
       if (patch.name !== undefined && !panelForm.name.trim()) { toast.error('이름은 비울 수 없습니다'); return; }
@@ -252,6 +257,32 @@ export function InstructorsPage() {
                 ['주민등록번호', 'residentNumber', 'text'],
                 ['주소', 'address', 'text'],
                 ['은행', 'bankName', 'text'], ['계좌번호', 'accountNumber', 'text'],
+              ] as [string, string, string][]).map(([label, key, kind]) => (
+                <label key={key} className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-slate-400">{label}</span>
+                  {kind === 'area'
+                    ? <textarea rows={2} value={panelForm[key] ?? ''}
+                        onChange={(e) => setPanelForm((f) => ({ ...f, [key]: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />
+                    : <input value={panelForm[key] ?? ''}
+                        onChange={(e) => setPanelForm((f) => ({ ...f, [key]: e.target.value }))}
+                        className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-blue-400" />}
+                </label>
+              ))}
+              {/* 기준금액: 원 단위 숫자만 저장하고, 화면엔 천단위 콤마로 보여준다(2026-08-27 신설) */}
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-medium text-slate-400">기준금액</span>
+                <div className="relative">
+                  <input
+                    inputMode="numeric"
+                    value={panelForm.defaultFee ? Number(panelForm.defaultFee).toLocaleString('ko-KR') : ''}
+                    onChange={(e) => setPanelForm((f) => ({ ...f, defaultFee: e.target.value.replace(/[^0-9]/g, '') }))}
+                    placeholder="0"
+                    className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 pr-8 text-sm outline-none focus:border-blue-400" />
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                </div>
+              </label>
+              {([
                 ['전문분야', 'specialty', 'text'],
                 ['비고', 'remarks', 'area'], ['특이사항', 'specialNotes', 'area'],
               ] as [string, string, string][]).map(([label, key, kind]) => (

@@ -487,6 +487,9 @@ class SupabaseDataSource implements DataSource {
     if (patch.honorific !== undefined) dbPatch.honorific = patch.honorific || null;
     if (patch.remarks !== undefined) dbPatch.remarks = patch.remarks || null;
     if (patch.specialNotes !== undefined) dbPatch.special_notes = patch.specialNotes || null;
+    // 2026-08-27: 기준금액(default_fee, DB 컬럼명 fee_basis) — 이미 조회 로직에는 있었지만
+    // 편집 화면·저장 로직에는 빠져있던 필드 추가.
+    if (patch.defaultFee !== undefined) dbPatch.fee_basis = patch.defaultFee ?? null;
     await SupabaseDataSource.updateChecked('instructors', dbPatch, { column: 'id', value: Number(id) }, '강사 정보 수정');
   }
 
