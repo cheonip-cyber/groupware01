@@ -26,6 +26,18 @@ export function ProjectListPage() {
     month: params.get('month') ?? defaultFilterState.month,
   }));
   const [page, setPage] = useState(1);
+  // 2026-08-27 수정: 위 useState는 최초 마운트 시에만 URL 파라미터를 읽어서, 이미 /projects
+  // 페이지에 있는 상태에서 통합검색으로 재검색하면(같은 경로 + 다른 쿼리) 컴포넌트가
+  // 리마운트되지 않아 필터가 갱신되지 않는 결함이 있었음 — search 파라미터가 바뀔 때마다
+  // 필터에 반영되도록 별도 동기화.
+  useEffect(() => {
+    const next = params.get('search');
+    if (next !== null) {
+      setF((prev) => (prev.search === next ? prev : { ...prev, search: next }));
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.toString()]);
   const [createOpen, setCreateOpen] = useState(false);
   useEscClose(createOpen, () => setCreateOpen(false)); // 모든 팝업 ESC 닫기 (과거 확정 요청)
   const [cForm, setCForm] = useState({ projectName: '', clientName: '', finalEstimate: '', revenueMonth: '', startDate: '' });
