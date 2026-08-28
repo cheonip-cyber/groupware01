@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
 import type { Project, PaymentRequest } from '../../types';
 import type { NewProjectCostInput } from '../../services/dataSource';
@@ -30,8 +30,25 @@ export function ProjectDetail() {
     refresh, updateProject, updatePaymentRequest, addProjectCost, updateProjectCost, deleteProjectCost, recoverNotionLink, deleteProject,
     addInstructor, addCompany,
   } = useAppData();
-  const [activeTab, setActiveTab] = useState<Tab>('개요');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() => (searchParams.get('tab') as Tab) || '개요');
   const [saving, setSaving] = useState(false);
+
+  // 2026-08-28 신설: React Router는 /projects/:id에서 id만 바뀌면(예: 그룹 구성에서 다른
+  // 회차로 이동) 컴포넌트를 리마운트하지 않고 재사용한다 — 그러면 activeTab이 이전
+  // 프로젝트에서 보던 탭 그대로 남아, 다른 프로젝트를 열었는데 엉뚱한 탭이 보이는 문제가
+  // 생긴다. id가 바뀔 때마다 그 프로젝트 고유의 URL(?tab=)에서 탭을 다시 읽어온다.
+  useEffect(() => {
+    setActiveTab((searchParams.get('tab') as Tab) || '개요');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  // 탭 변경 시 URL에 반영 — 뒤로가기로 이 프로젝트에 다시 돌아왔을 때 보던 탭 그대로 복원.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (activeTab === '개요') next.delete('tab'); else next.set('tab', activeTab);
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const project = projects.find((p) => p.id === id);
   const projectRequests = paymentRequests.filter((r) => r.projectId === id);
