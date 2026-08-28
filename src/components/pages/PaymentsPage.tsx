@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEscClose } from '../../hooks/useEscClose';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
@@ -32,15 +32,31 @@ export function PaymentsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const nextMonth = (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().slice(0, 7); })();
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState<'pending' | 'done' | 'target'>(
     initialTab === 'done' || initialTab === 'target' ? initialTab : 'pending',
   );
-  const [search, setSearch] = useState('');
-  const [year, setYear] = useState('전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
-  const [month, setMonth] = useState('전체');
-  const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>('전체');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [year, setYear] = useState(() => searchParams.get('year') ?? '전체');            // 대기: 예정일 기준 / 완료: 지급월 기준
+  const [month, setMonth] = useState(() => searchParams.get('month') ?? '전체');
+  const [typeFilter, setTypeFilter] = useState<'전체' | '강사' | '업체' | '기타'>(
+    (searchParams.get('type') as '전체' | '강사' | '업체' | '기타' | null) ?? '전체',
+  );
+  // 2026-08-28 신설: 위 필터들을 URL에 반영해서, 다른 화면(예: 프로젝트 상세)으로 갔다가
+  // 뒤로가기를 눌렀을 때 지급관리가 초기화되지 않고 직전에 보던 탭/연도/월 그대로 복원되게
+  // 한다. replace:true라 필터를 여러 번 바꿔도 브라우저 히스토리에는 한 항목만 남음 —
+  // 뒤로가기 한 번이면 바로 이 화면(필터 유지 상태)으로 돌아온다.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    if (search) next.set('q', search); else next.delete('q');
+    if (year !== '전체') next.set('year', year); else next.delete('year');
+    if (month !== '전체') next.set('month', month); else next.delete('month');
+    if (typeFilter !== '전체') next.set('type', typeFilter); else next.delete('type');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, search, year, month, typeFilter]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMonth, setBulkMonth] = useState(nowMonth);
   // 월말 배치 준비용 일괄 예약 지급월 — 반드시 조기 반환(로딩)보다 위에 선언 (React 훅 규칙, 오류 #300 방지)
@@ -113,8 +129,14 @@ export function PaymentsPage() {
   // (예전에 같은 [tab] 효과가 둘로 나뉘어, 앞에서 현재월을 넣어도 뒤에서 '월 전체'로 덮어쓰던 문제)
   // 완료 탭은 과거 지급분이 모두 쌓여 목록이 과도해지므로 '지금 이 시점의 연·월'을 기본으로 한다.
   // 해당 월에 지급 내역이 없으면 데이터가 있는 최근 연도로 대신 맞춘다(빈 화면 방지).
+  // 2026-08-28: 최초 마운트 시(=URL에서 tab/year/month를 막 복원한 직후)에는 아래 자동
+  // 재설정을 건너뛴다 — 안 그러면 복원된 year/month를 이 effect가 곧바로 덮어써서
+  // "뒤로가기해도 필터가 유지 안 되는" 문제가 그대로 재발한다. 사용자가 실제로 탭을
+  // 눌러 바꿀 때만(두 번째 실행부터) 기존의 '탭별 기본값' 로직이 동작한다.
+  const skippedFirstTabEffect = useRef(false);
   useEffect(() => {
     setSelected(new Set());
+    if (!skippedFirstTabEffect.current) { skippedFirstTabEffect.current = true; return; }
     if (tab === 'done') {
       const now = new Date();
       const y = String(now.getFullYear());
