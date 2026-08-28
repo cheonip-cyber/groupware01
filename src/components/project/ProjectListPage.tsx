@@ -203,6 +203,36 @@ export function ProjectListPage() {
           autoExpandIds={hasActiveQuery ? autoExpandIds : undefined}
           sort={f.sort} sortDir={f.sortDir}
           onSort={(key) => set(f.sort === key ? { sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' } : { sort: key, sortDir: 'asc' })} />
+        {/* 하단 페이지 번호 넘버링(2026-08-28 신설) — 상단 우측의 이전/다음 버튼은 그대로 유지하고,
+            표 아래에 클릭 가능한 페이지 번호를 추가로 제공. 페이지가 많을 때는 현재 페이지
+            주변 ±2 + 처음/끝만 보여주고 중간은 "…"로 생략. */}
+        {totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-center gap-1 border-t border-slate-100 px-4 py-3">
+            <button onClick={() => setPage(1)} disabled={safePage <= 1}
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 disabled:opacity-40 hover:bg-slate-50">처음</button>
+            {(() => {
+              const nums: (number | '…')[] = [];
+              for (let n = 1; n <= totalPages; n++) {
+                if (n === 1 || n === totalPages || Math.abs(n - safePage) <= 2) nums.push(n);
+                else if (nums[nums.length - 1] !== '…') nums.push('…');
+              }
+              return nums.map((n, i) =>
+                n === '…' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-xs text-slate-300">…</span>
+                ) : (
+                  <button key={n} onClick={() => setPage(n)}
+                    className={`h-7 min-w-[28px] rounded px-2 text-xs font-medium ${
+                      n === safePage ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100'
+                    }`}>
+                    {n}
+                  </button>
+                ),
+              );
+            })()}
+            <button onClick={() => setPage(totalPages)} disabled={safePage >= totalPages}
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 disabled:opacity-40 hover:bg-slate-50">끝</button>
+          </div>
+        )}
       </Card>
 
       {createOpen && (
