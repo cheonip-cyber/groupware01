@@ -8,7 +8,6 @@ import { projectYear, activeProjects } from '../../utils/filters';
 import { BarChart3 } from 'lucide-react';
 import { PageSkeleton } from '../common/Skeleton';
 import { ClientPaymentLagSection } from './ClientPaymentLagSection';
-import { RiskEarlyWarning } from '../insights/RiskEarlyWarning';
 import { ProgramDemandTrend } from '../insights/ProgramDemandTrend';
 import { MarginHeatmap } from '../insights/MarginHeatmap';
 import type { Project } from '../../types';
@@ -17,8 +16,10 @@ import { eff } from '../../utils/calculations';
 // 리포트 (2026-08-27 매출 중심 → 고객사/강사/업체 인사이트 중심으로 재편)
 // — 확정/예상 매출 요약카드, 월별 매출 현황 차트, 프로젝트 상태 분포 파이차트는 홈 Dashboard와
 //   완전히 중복되는 내용이라 제거(같은 숫자를 두 화면에서 각자 계산해 이원화되는 문제도 있었음).
-// — 대신 경영현황(관리자 전용)에 있던 리스크조기경보/프로그램수요트렌드/마진율히트맵을 공용
+// — 대신 경영현황(관리자 전용)에 있던 프로그램수요트렌드/마진율히트맵을 공용
 //   컴포넌트(src/components/insights/)로 분리해 여기서도 씀 — 코드 중복 없이 재사용.
+// — 리스크조기경보는 업무관리 화면 상단으로 이동함(2026-08-27, 매출과 무관한 업무성
+//   알림이라 리포트보다 업무관리에 더 어울린다는 판단).
 // — "고객사별 매출 랭킹"은 Dashboard에 없는 이 페이지만의 고유 콘텐츠라 유지.
 
 export function ReportsPage() {
@@ -85,8 +86,6 @@ export function ReportsPage() {
       <MarginHeatmap year={year} />
 
       <ProgramDemandTrend year={year} />
-
-      <RiskEarlyWarning year={year} />
 
       <ClientPaymentLagSection />
     </div>

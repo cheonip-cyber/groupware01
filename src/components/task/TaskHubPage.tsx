@@ -1,3 +1,5 @@
+import { useAppData } from '../../store/appData';
+import { RiskEarlyWarning } from '../insights/RiskEarlyWarning';
 import { InstructorEngagementStatus } from '../admin/InstructorEngagementStatus';
 
 // 업무관리 (2026-08-21 신설)
@@ -7,13 +9,17 @@ import { InstructorEngagementStatus } from '../admin/InstructorEngagementStatus'
 //   항목이라 Dashboard에 그대로 유지(검토 후 제외 결정, 2026-08-21).
 // — 업무 체크리스트는 별도 카드로 뒀다가, 박스를 나눌 필요 없다는 피드백으로 강사 섭외 현황
 //   카드 안(각 강사 블록 오른쪽 끝)에 통합함(2026-08-21).
+// — 리스크 조기경보를 리포트에서 이곳 상단으로 이동(2026-08-27) — 매출 분석용이 아니라
+//   "지금 확인·처리해야 할 업무" 성격이라 업무관리 쪽이 더 어울린다는 판단.
 export function TaskHubPage() {
+  const { globalYear } = useAppData();
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-bold text-slate-800">업무관리</h1>
         <p className="mt-0.5 text-xs text-slate-400">프로젝트 운영에 필요한 참고·감사용 현황을 모아봅니다.</p>
       </div>
+      <RiskEarlyWarning year={globalYear} />
       <InstructorEngagementStatus />
     </div>
   );
