@@ -151,6 +151,7 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     // 2026-08-26: 강사료 지급 항목(예산/비용 탭)이 아직 없어도, 노션 "강사섭외"에 값이 있으면
     // 그걸 대신 보여준다 — 진행/배정 탭에서 "미확정"으로 나오던 문제 수정.
     trainerNames: costTrainerNames.length > 0 ? costTrainerNames : (notionTrainerNames ?? []),
+    trainerNamesSource: costTrainerNames.length > 0 ? 'cost' : ((notionTrainerNames?.length ?? 0) > 0 ? 'notion' : undefined),
     prepItems,
     prepChecklist: (row.prep_checklist ?? {}) as Record<string, boolean>,
     clientRequest: undefined,

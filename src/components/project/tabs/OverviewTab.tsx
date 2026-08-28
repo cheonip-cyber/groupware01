@@ -174,7 +174,16 @@ export function OverviewTab({ project, instructors, clients, onUpdate, onRecover
         <Field label="강사">
           <span className="flex flex-wrap items-center gap-2">
             <span>{trainerNames.length ? trainerNames.join(', ') : <span className="text-red-500">미확정</span>}</span>
-            {onGoBudgetTab && (
+            {/* 2026-08-27: 강사명이 노션 섭외 정보로 대신 표시되는 경우("지급 등록 전")에도
+                '예산/비용 탭에서 배정' 문구가 그대로 나와 헷갈렸음 — 실제로는 지급 미등록
+                상태라는 걸 명확히 하고, 버튼은 그 등록을 하러 가는 액션으로 통일. */}
+            {onGoBudgetTab && project.trainerNamesSource === 'notion' && (
+              <span className="flex items-center gap-1 text-xs">
+                <span className="text-slate-400">(노션 섭외 정보 · 지급 미등록)</span>
+                <button type="button" onClick={onGoBudgetTab} className="text-blue-500 hover:underline">예산/비용 탭에서 지급 등록</button>
+              </span>
+            )}
+            {onGoBudgetTab && project.trainerNamesSource !== 'notion' && (
               <button type="button" onClick={onGoBudgetTab} className="text-xs text-blue-500 hover:underline">예산/비용 탭에서 배정</button>
             )}
           </span>
