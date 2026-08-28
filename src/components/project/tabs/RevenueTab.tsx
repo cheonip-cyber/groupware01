@@ -89,15 +89,19 @@ export function RevenueTab({ project, onUpdate }:
         {/* 2026-08-25: '매출분배(distribution)' 유형만 마스터의 세금계산서/수금 입력을 숨기고
             있었는데, '회차 추가(recurring)' 유형도 회차별로 각자 처리하는 게 맞아서 같은 이유로
             숨겨야 했음. 이게 빠져있어서 담당자가 마스터에도 직접 입력할 수 있었고, 실제로 회차별
-            값과 무관한 잔재 데이터가 마스터에 남아있던 사례가 발견되어 함께 정리함(4건). */}
-        {project.groupType === 'distribution' ? (
+            값과 무관한 잔재 데이터가 마스터에 남아있던 사례가 발견되어 함께 정리함(4건).
+            2026-08-28 수정: 위 조건이 project.groupType만 보고 있었는데, 회차(자식) 프로젝트도
+            마스터와 같은 groupType이 그대로 붙어있어서, 정작 회차 자신의 화면에서도 이 숨김이
+            잘못 적용되어 세금계산서/수금 입력 자체를 할 수 없게 되는 결함이 있었음. "마스터
+            자신"일 때만(!project.parentId) 숨기도록 조건 보강 — 회차는 항상 정상 입력 가능. */}
+        {project.groupType === 'distribution' && !project.parentId ? (
           <Field label="세금계산서 · 수금">
             <p className="text-xs text-slate-500">
               계열사별로 관리됩니다. 아래 <b>매출분배(계열사)</b> 섹션에서 확인·처리하세요.
               전 계열사가 완료되면 이 값이 자동으로 채워지고 노션에도 반영됩니다.
             </p>
           </Field>
-        ) : project.groupType === 'recurring' ? (
+        ) : project.groupType === 'recurring' && !project.parentId ? (
           <Field label="세금계산서 · 수금">
             <p className="text-xs text-slate-500">
               회차별로 관리됩니다. 아래 <b>회차별 프로젝트</b> 목록에서 각 회차를 열어 확인·처리하세요.
