@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../store/appData';
-import { applyProjectFilters, defaultFilterState, projectYear, STATUSES } from '../../utils/filters';
+import { applyProjectFilters, defaultFilterState, projectYear, sortProjects, STATUSES } from '../../utils/filters';
 import type { ProjectFilterState } from '../../utils/filters';
 import { ProjectTable } from './ProjectTable';
 import { Card } from '../common/Card';
@@ -89,8 +89,12 @@ export function ProjectListPage() {
       const top = p.parentId ? byId.get(p.parentId) ?? p : p;
       if (!seen.has(top.id)) { seen.add(top.id); out.push(top); }
     }
-    return out;
-  }, [filtered, projects]);
+    // 2026-08-27 수정: 위 루프는 "정렬된 filtered 배열에서 자식이 먼저 등장한 위치"에 마스터를
+    // 끼워넣는 방식이라, 마스터가 화면에 표시되는 자기 자신의 값(예: 이익률)이 아니라 우연히
+    // 먼저 걸린 회차의 값 위치에 배치되는 결함이 있었음(정렬이 뒤죽박죽으로 보이는 원인).
+    // 그룹핑 후 최상위 항목만 다시 한번 정렬 기준(f.sort/sortDir)으로 정렬해 바로잡는다.
+    return sortProjects(out, f);
+  }, [filtered, projects, f.sort, f.sortDir]);
 
   // 검색/필터가 자식에 매칭되면 마스터를 자동 펼침 + 해당 자식 하이라이트
   // ("(N회차)" 검색 시 접힌 마스터만 보여 '안 묶인 것처럼' 보이던 혼란 해소)

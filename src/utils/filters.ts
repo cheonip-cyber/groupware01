@@ -106,6 +106,21 @@ export const defaultFilterState: ProjectFilterState = {
   sort: 'startDate', sortDir: 'desc',
 };
 
+export const sortProjects = (projects: Project[], f: Pick<ProjectFilterState, 'sort' | 'sortDir'>): Project[] =>
+  [...projects].sort((a, b) => {
+    let av: number | string = '';
+    let bv: number | string = '';
+    if (f.sort === 'contractAmount') { av = a.contractAmount; bv = b.contractAmount; }
+    else if (f.sort === 'updatedAt') { av = a.updatedAt; bv = b.updatedAt; }
+    else if (f.sort === 'revenueMonth') { av = a.revenueMonth ?? ''; bv = b.revenueMonth ?? ''; }
+    else if (f.sort === 'profitRate') { av = a.profitRate ?? -Infinity; bv = b.profitRate ?? -Infinity; }
+    else if (f.sort === 'managerName') { av = a.managerName ?? ''; bv = b.managerName ?? ''; }
+    else { av = a.startDate; bv = b.startDate; }
+    if (av < bv) return f.sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return f.sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
 export const applyProjectFilters = (projects: Project[], f: ProjectFilterState): Project[] => {
   let out = projects.filter((p) => {
     if (f.search) {
@@ -132,18 +147,5 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
     return true;
   });
 
-  out = [...out].sort((a, b) => {
-    let av: number | string = '';
-    let bv: number | string = '';
-    if (f.sort === 'contractAmount') { av = a.contractAmount; bv = b.contractAmount; }
-    else if (f.sort === 'updatedAt') { av = a.updatedAt; bv = b.updatedAt; }
-    else if (f.sort === 'revenueMonth') { av = a.revenueMonth ?? ''; bv = b.revenueMonth ?? ''; }
-    else if (f.sort === 'profitRate') { av = a.profitRate ?? -Infinity; bv = b.profitRate ?? -Infinity; }
-    else if (f.sort === 'managerName') { av = a.managerName ?? ''; bv = b.managerName ?? ''; }
-    else { av = a.startDate; bv = b.startDate; }
-    if (av < bv) return f.sortDir === 'asc' ? -1 : 1;
-    if (av > bv) return f.sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
-  return out;
+  return sortProjects(out, f);
 };
