@@ -245,7 +245,12 @@ class SupabaseDataSource implements DataSource {
       buildProject(
         r,
         r.clients?.name ?? '',
-        r.users?.name ?? r.users?.email ?? '',
+        // 2026-08-28 수정: manager_user_id(그룹웨어 내부 담당자 지정)는 552건 중 0건으로
+        // 전혀 안 쓰이고 있어서, 목록 필터의 '담당자' 드롭다운이 항상 비어있었음. 그룹웨어에서
+        // 명시적으로 지정한 담당자가 있으면 그걸 우선하고, 없으면 노션 '업무 담당자'(71건에
+        // 실데이터 있음)로 대체 표시 — 목록 필터/정렬/화면 표시가 전부 이 값을 그대로 쓰므로
+        // 여기 한 곳만 고치면 자동으로 일관되게 반영된다.
+        r.users?.name ?? r.users?.email ?? r.notion_manager ?? '',
         costMap.get(r.id) ?? [],
         instructorNameMap,
         companyNameMap,
@@ -328,7 +333,7 @@ class SupabaseDataSource implements DataSource {
     const costMap = await fetchCostsByProjectIds([r.id]);
     const { instructorNameMap, companyNameMap } = await fetchNameMaps();
     const notionTrainerMap = await fetchNotionTrainerNamesByProjectId();
-    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap, notionTrainerMap.get(r.id));
+    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? r.notion_manager ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap, notionTrainerMap.get(r.id));
   }
 
   // 수기 프로젝트 신규 생성 (기존에는 노션 pull·그룹 회차 생성만 가능해 화면에서 프로젝트를 만들 수 없었음)
