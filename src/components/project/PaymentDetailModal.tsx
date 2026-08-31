@@ -105,7 +105,13 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
   }, [pendingPayee, pendingEntity]);
 
   // 실제 화면에 표시할 지급처 정보: 재검색으로 임시 선택한 대상이 있으면 그걸 우선 표시(저장 전 미리보기)
-  const displayPayee = pendingPayee ?? (currentPayee ? { id: r.payeeId!, label: resolvedIsPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName, sub: '' } : null);
+  // 2026-08-28: 업체 지급처는 회사명만 보여서 대표자명이 맞는지 바로 확인이 안 됐음 —
+  // 재검색 후보 목록과 동일하게 대표자명을 sub에 채워 함께 표시.
+  const displayPayee = pendingPayee ?? (currentPayee ? {
+    id: r.payeeId!,
+    label: resolvedIsPerson ? (currentPayee as Instructor).name : (currentPayee as Company).companyName,
+    sub: !resolvedIsPerson && (currentPayee as Company).ceoName ? `대표 ${(currentPayee as Company).ceoName}` : '',
+  } : null);
   const linked = !!displayPayee;
 
   const buildPatch = (extra: Partial<PaymentRequest> = {}): Partial<PaymentRequest> => ({
@@ -188,7 +194,14 @@ export function PaymentDetailModal({ r, onClose, onUpdateRequest }: {
         {/* 기본 정보 (요청 디자인: 단순 항목 나열) */}
         <div className="mb-4 space-y-2 text-sm">
           <Row label="지급처">
-            {displayPayee ? <>{displayPayee.label} <span className="text-xs text-slate-400">({r.payeeType})</span></> : <span className="text-amber-600">대상 미연결</span>}
+            {displayPayee ? (
+              <>
+                {displayPayee.label} <span className="text-xs text-slate-400">({r.payeeType})</span>
+                {displayPayee.sub && displayPayee.sub !== '업체' && displayPayee.sub !== '강사' && (
+                  <span className="ml-1.5 text-xs text-slate-500">· {displayPayee.sub}</span>
+                )}
+              </>
+            ) : <span className="text-amber-600">대상 미연결</span>}
           </Row>
           {r.projectName && <Row label="프로젝트">{r.projectName}</Row>}
           <Row label="은행 / 계좌">

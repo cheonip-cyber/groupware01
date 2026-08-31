@@ -1,16 +1,12 @@
-// notion-sync Edge Function (v30 - restrict auto-relink to recently-created rows only)
-// 변경점(v28→v29): "이름 중복 가드"에서 기존 행의 notion_page_id가 채워져 있으면 무조건
-// 생성을 보류하던 결함 수정. 노션에서 페이지를 만들었다가 삭제하고 다시 같은 이름으로
-// 만들면, 옛 페이지는 트래시로 가서 일반 pull 쿼리 결과에 아예 안 잡히고(그래서 옛 DB
-// 행이 방치됨), 새 페이지는 이름이 같아서 생성이 보류되어 조용히 무시되던 문제
-// (2026-08-27). 이름이 겹치면 기존 행의 링크가 실제로 죽었는지 확인해 죽어있으면 자동
-// 재연결하도록 했음.
-// 변경점(v29→v30): 위 자동 재연결이 위험할 수 있다는 지적 반영 — 매년 유사한 이름의
-// 프로젝트가 반복 진행되는데(예: "행복한 인문학당" 매년), 작년에 완료된 프로젝트의
-// 노션 페이지를 정리 차원에서 나중에 지우면, 그 "죽은 링크"를 올해 신규 프로젝트가
-// 이름만 같다는 이유로 자동 재연결해서 작년 완료 실적을 올해 데이터로 덮어써버릴
-// 위험이 있었음. 이제 "기존 행이 최근(30일 이내)에 생성된 경우"에만 자동 재연결하고,
-// 오래된 행이면(과거 연도 반복 프로젝트일 가능성) 절대 건드리지 않고 새 행을 생성한다.
+// notion-sync Edge Function (v32 - archive_notion_page callable by logged-in frontend users)
+// 변경점(v30→v31): 그룹웨어에서 프로젝트/강사를 삭제해도 노션 원본 페이지는 그대로 살아있으면,
+// 다음 pull 때 그 페이지가 다시 감지되어 "새 페이지"로 재생성(부활)되는 구조적 결함 발견
+// (2026-08-28, 사용자가 그룹웨어에서 삭제한 프로젝트가 다시 나타나는 걸 발견해 신고).
+// 원인: deleteProject()는 그룹웨어 DB만 지우고 노션 페이지는 안 건드림 → 노션 원본이 살아있는
+// 채로 남아 다음 동기화 때 notion_page_id로 기존 행을 못 찾아(이미 삭제됐으니) 새로 INSERT됨.
+// 수정: archive_notion_page 액션 신설 — 그룹웨어 삭제 직전에 프론트에서 이 액션을 먼저 호출해
+// 노션 페이지를 archived:true(휴지통)로 만든다. 이러면 이후 pull 쿼리 결과에서 자동 제외되어
+// 다시는 재생성되지 않는다.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const RECENT_RELINK_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30일
@@ -70,6 +66,28 @@ async function checkPageAlive(pageId: string): Promise<boolean> {
   } catch (e: any) {
     if (e?.status === 404) return false;
     throw e;
+  }
+}
+
+async function archiveNotionPage(entityType: string, id: number) {
+  const cfg = ENTITY_CONFIG[entityType];
+  if (!cfg) return { error: `unknown entity_type: ${entityType}` };
+  const { data: row, error } = await supabase.from(cfg.table).select('id, notion_page_id').eq('id', id).maybeSingle();
+  if (error || !row) return { skipped: true, reason: 'row not found' };
+  if (!row.notion_page_id) return { skipped: true, reason: 'not linked to notion' };
+  try {
+    const alive = await checkPageAlive(row.notion_page_id);
+    if (!alive) {
+      await logSync(entityType, id, 'to_notion', 'success', `노션 페이지 이미 삭제 상태 확인(${row.notion_page_id})`);
+      return { alreadyGone: true };
+    }
+    await notionFetch(`/pages/${row.notion_page_id}`, { method: 'PATCH', body: JSON.stringify({ archived: true }) });
+    await logSync(entityType, id, 'to_notion', 'success', `그룹웨어 삭제에 따라 노션 페이지 휴지통 이동(${row.notion_page_id})`);
+    return { archived: true };
+  } catch (e) {
+    const msg = errMsg(e);
+    await logSync(entityType, id, 'to_notion', 'error', `노션 페이지 휴지통 이동 실패: ${msg}`);
+    return { error: msg };
   }
 }
 
@@ -588,12 +606,16 @@ async function processQueue(limit = 15) {
 
 Deno.serve(async (req: Request) => {
   const secret = Deno.env.get('SYNC_SECRET');
-  if (secret && req.headers.get('x-sync-secret') !== secret) {
+  const body = await req.json().catch(() => ({}));
+  const action = body.action ?? 'pull';
+  // 2026-08-28: archive_notion_page는 그룹웨어 프론트엔드(로그인된 사용자)가 직접 호출한다 —
+  // x-sync-secret(크론 전용 비밀값)을 프론트 코드에 넣으면 브라우저 번들에 노출되므로, 이
+  // 액션만 예외로 두고 verify_jwt(Supabase 플랫폼 표준 인증, 로그인 세션/anon key)만으로
+  // 호출 가능하게 한다. 나머지 액션(pull/push/verify_links 등 대량 작업)은 기존처럼 보호.
+  if (secret && action !== 'archive_notion_page' && req.headers.get('x-sync-secret') !== secret) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
   try {
-    const body = await req.json().catch(() => ({}));
-    const action = body.action ?? 'pull';
     const entityType = body.entityType ?? 'project';
 
     if (action === 'whoami') {
@@ -628,6 +650,10 @@ Deno.serve(async (req: Request) => {
       const results = [];
       for (const et of Object.keys(ENTITY_CONFIG)) results.push(await pullEntity(et));
       return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+    }
+    if (action === 'archive_notion_page') {
+      const result = await archiveNotionPage(entityType, Number(body.entityId ?? body.projectId));
+      return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
     }
     if (action === 'verify_links') {
       const result = await verifyLinks(Number(body.limit ?? 25));

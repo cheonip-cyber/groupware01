@@ -762,6 +762,21 @@ class SupabaseDataSource implements DataSource {
   // 그룹 자식·지급이력이 참조 중이면 DB 제약이 막으므로 오류 메시지로 안내된다.
   // 삭제 권한: 활성 로그인 사용자 전체(관리자 한정 아님, 2026-07-16 정책 변경)
   async deleteProject(id: string): Promise<void> {
+    // 2026-08-28: 노션 연동된 프로젝트를 그룹웨어에서 지울 때, 노션 원본이 그대로 살아있으면
+    // 다음 동기화 때 다시 감지되어 "새 프로젝트"로 재생성(부활)되는 구조적 위험이 있다 —
+    // DB 삭제 전에 노션 원본도 함께 휴지통으로 이동시킨다. best-effort: 이 과정이 실패해도
+    // (이미 지워졌거나 권한 문제 등) 그룹웨어 삭제 자체는 그대로 진행한다.
+    try {
+      const { data: row } = await supabase.from('projects').select('notion_page_id').eq('id', Number(id)).maybeSingle();
+      if (row?.notion_page_id) {
+        await supabase.functions.invoke('notion-sync', {
+          body: { action: 'archive_notion_page', entityType: 'project', entityId: Number(id) },
+        });
+      }
+    } catch (_e) {
+      // 노션 정리 실패는 무시 — 그룹웨어 쪽 삭제는 아래에서 계속 진행
+    }
+
     // .select('id')로 실제 삭제된 행을 받아온다 — RLS 정책에 걸리면 Supabase는 에러 없이
     // "0건 삭제"로 조용히 넘어가서, 화면은 성공한 것처럼 보이지만 실제로는 아무것도 지워지지
     // 않고 다음에 다시 열면 그대로 남아있는 문제가 있었다(2026-07-16 발견 및 수정).
