@@ -38,6 +38,20 @@ interface CostRow {
   is_cost_recognized: boolean; remarks: string | null;
 }
 
+// 2026-08-28: 노션 '업무 담당자'는 여러 명이 선택되면 ", "로 합쳐진 텍스트로 들어온다
+// (예: "Jeon ikpyo, 이도용, Gia"). 실제 팀원 3명뿐이라 표시용 이름으로 깔끔하게 바꾼다 —
+// 매핑에 없는 이름은 원문 그대로 통과시켜 데이터 유실을 방지한다(향후 팀원 추가 대비).
+const MANAGER_DISPLAY_NAME: Record<string, string> = {
+  'Gia': 'Gia',
+  '이도용': 'Daran',
+  'Jeon ikpyo': 'Jay',
+};
+function toManagerDisplayName(raw: string): string {
+  if (!raw) return raw;
+  return raw.split(',').map((s) => s.trim()).filter(Boolean)
+    .map((name) => MANAGER_DISPLAY_NAME[name] ?? name).join(', ');
+}
+
 function buildProject(row: any, clientName: string, managerName: string, costs: CostRow[],
   instructorNameMap?: Map<number, string>, companyNameMap?: Map<number, { name: string; ceo: string | null }>,
   notionTrainerNames?: string[]): Project {
@@ -250,7 +264,7 @@ class SupabaseDataSource implements DataSource {
         // 명시적으로 지정한 담당자가 있으면 그걸 우선하고, 없으면 노션 '업무 담당자'(71건에
         // 실데이터 있음)로 대체 표시 — 목록 필터/정렬/화면 표시가 전부 이 값을 그대로 쓰므로
         // 여기 한 곳만 고치면 자동으로 일관되게 반영된다.
-        r.users?.name ?? r.users?.email ?? r.notion_manager ?? '',
+        toManagerDisplayName(r.users?.name ?? r.users?.email ?? r.notion_manager ?? ''),
         costMap.get(r.id) ?? [],
         instructorNameMap,
         companyNameMap,
@@ -333,7 +347,7 @@ class SupabaseDataSource implements DataSource {
     const costMap = await fetchCostsByProjectIds([r.id]);
     const { instructorNameMap, companyNameMap } = await fetchNameMaps();
     const notionTrainerMap = await fetchNotionTrainerNamesByProjectId();
-    return buildProject(r, r.clients?.name ?? '', r.users?.name ?? r.users?.email ?? r.notion_manager ?? '', costMap.get(r.id) ?? [], instructorNameMap, companyNameMap, notionTrainerMap.get(r.id));
+    return buildProject(r, r.clients?.name ?? '', toManagerDisplayName(r.users?.name ?? r.users?.email ?? r.notion_manager ?? ''), costMap.get(r.id) ?? [], instructorNameMap, companyNameMap, notionTrainerMap.get(r.id));
   }
 
   // 수기 프로젝트 신규 생성 (기존에는 노션 pull·그룹 회차 생성만 가능해 화면에서 프로젝트를 만들 수 없었음)

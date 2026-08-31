@@ -130,7 +130,7 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
     }
     if (!f.statuses.includes(p.projectStatus)) return false;
     if (f.clientId && p.clientId !== f.clientId) return false;
-    if (f.manager && p.managerName !== f.manager) return false;
+    if (f.manager && !p.managerName.split(',').map((s) => s.trim()).includes(f.manager)) return false;
     if (f.priority && p.priority !== f.priority) return false;
     if (f.year && f.year !== '전체') {
       const y = projectYear(p);

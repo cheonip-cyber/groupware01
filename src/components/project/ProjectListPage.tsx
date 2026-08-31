@@ -88,7 +88,13 @@ export function ProjectListPage() {
     finally { setCreating(false); }
   };
 
-  const managers = useMemo(() => [...new Set(projects.map((p) => p.managerName))], [projects]);
+  // 2026-08-28: 담당자는 여러 명이 ", "로 묶인 문자열로 저장돼 있어(예: "Jay, Daran, Gia"),
+  // 그 조합 자체를 옵션으로 보여주면 같은 사람이 여러 옵션으로 중복되어 지저분해진다.
+  // 콤마로 쪼개서 개별 이름만 옵션으로 제공한다.
+  const managers = useMemo(
+    () => [...new Set(projects.flatMap((p) => p.managerName.split(',').map((s) => s.trim()).filter(Boolean)))].sort(),
+    [projects],
+  );
   const years = useMemo(() => {
     const ys = [...new Set(projects.map(projectYear).filter((y): y is string => !!y))].sort().reverse();
     const hasUnknown = projects.some((p) => !projectYear(p));
