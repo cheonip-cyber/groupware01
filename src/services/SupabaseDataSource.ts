@@ -43,7 +43,7 @@ interface CostRow {
 // 매핑에 없는 이름은 원문 그대로 통과시켜 데이터 유실을 방지한다(향후 팀원 추가 대비).
 const MANAGER_DISPLAY_NAME: Record<string, string> = {
   'Gia': 'Gia',
-  '이도용': 'Daran',
+  '이도용': 'Darren',
   'Jeon ikpyo': 'Jay',
 };
 function toManagerDisplayName(raw: string): string {
