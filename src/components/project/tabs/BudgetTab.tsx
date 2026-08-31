@@ -334,9 +334,11 @@ export function BudgetTab({ project, allProjects, requests, instructors, compani
                   <td className="px-3 py-2.5 font-medium text-slate-800">{r.payeeName}</td>
                   <td className="px-3 py-2.5 text-right"><MoneyText value={r.amount} /></td>
                   <td className="px-3 py-2.5 text-xs text-slate-500">
-                    {r.status === '지급완료' && r.paidMonth
-                      ? <span className="font-medium text-emerald-600">{r.paidMonth} 지급</span>
-                      : r.status}
+                    {r.isCardPayment
+                      ? <span className="text-slate-400">카드결제 (지급요청 제외)</span>
+                      : r.status === '지급완료' && r.paidMonth
+                        ? <span className="font-medium text-emerald-600">{r.paidMonth} 지급</span>
+                        : r.status}
                   </td>
                   <td className="px-3 py-2.5">
                     {r.status !== '지급완료' && (

@@ -460,7 +460,14 @@ export function PaymentsPage() {
                       <td className="max-w-[200px] truncate px-3 py-3 text-xs" onClick={(e) => e.stopPropagation()}>
                         <Link to={`/projects/${r.projectId}`} className="text-slate-500 hover:text-blue-600 hover:underline">{r.projectName}</Link>
                       </td>
-                      <td className="px-2 py-3 text-center text-xs" title="프로젝트 고객 입금(정산) 여부">{r.projectPaymentReceived ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}</td>
+                      <td className="px-2 py-3 text-center text-xs" title="프로젝트 고객 입금(정산) 여부">
+                        {r.projectPaymentDistribution ? (
+                          <span className={`font-bold ${r.projectPaymentDistribution.done === r.projectPaymentDistribution.total ? 'text-emerald-600' : 'text-amber-600'}`}
+                            title="매출분배(계열사) 입금 진행률">
+                            {r.projectPaymentDistribution.done}/{r.projectPaymentDistribution.total}
+                          </span>
+                        ) : r.projectPaymentReceived ? <span className="font-bold text-emerald-600">✓</span> : <span className="font-bold text-red-400">✗</span>}
+                      </td>
                       <td className="px-2 py-3 text-center text-xs" onClick={(e) => e.stopPropagation()}>
                         {r.payeeType !== '업체' ? (
                           <span className="text-slate-300" title="개인(강사)은 세금계산서 발행 대상이 아닙니다 — 3.3%/8.8% 원천징수로 처리">-</span>

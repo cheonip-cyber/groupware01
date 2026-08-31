@@ -17,6 +17,9 @@ export interface PaymentRequest {
   manualResidentTax?: number;
   /** 프로젝트의 고객 입금 여부 (구 지급확인 '입금' 컬럼) */
   projectPaymentReceived?: boolean;
+  /** 매출분배(distribution) 프로젝트 전용 — 계열사별 입금 진행률(완료/전체). 있으면 '정산'
+      컬럼에서 단순 O/X 대신 이 값으로 정확한 진행 상황을 보여준다(2026-08-28). */
+  projectPaymentDistribution?: { done: number; total: number };
   /** 프로젝트의 세금계산서 발행 여부 (구 지급확인 '세발' 컬럼) */
   projectTaxInvoiceIssued?: boolean;
   /** 프로젝트 교육일정(1차수 시작일, YYYY-MM-DD) — 지급대상 대시보드 판정 기준 */

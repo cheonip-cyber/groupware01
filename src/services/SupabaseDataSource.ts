@@ -611,6 +611,27 @@ class SupabaseDataSource implements DataSource {
     const instructorMap = new Map((instructors ?? []).map((i: any) => [i.id, i]));
     const companyMap = new Map((companies ?? []).map((c: any) => [c.id, c]));
 
+    // 2026-08-28 신설: '매출분배(distribution)' 프로젝트는 계열사 전부가 입금완료돼야
+    // client_payment_received가 true가 되는 구조라, 지급관리의 '정산' 컬럼이 단순 O/X만
+    // 보여주면 "계열사 3곳은 이미 입금됐는데 1곳 때문에 전부 X로 보인다"는 오해를 준다.
+    // 매출분배 프로젝트에 한해 계열사별 입금 진행률(완료/전체)을 함께 조회해 붙여준다.
+    const distributionProjectIds = [...new Set(
+      rows.filter((r) => r.projects?.group_type === 'distribution').map((r) => r.project_id),
+    )];
+    const distributionProgress = new Map<number, { done: number; total: number }>();
+    if (distributionProjectIds.length > 0) {
+      const { data: dist } = await supabase
+        .from('revenue_distributions')
+        .select('project_id, payment_received')
+        .in('project_id', distributionProjectIds);
+      for (const d of dist ?? []) {
+        const cur = distributionProgress.get(d.project_id) ?? { done: 0, total: 0 };
+        cur.total += 1;
+        if (d.payment_received) cur.done += 1;
+        distributionProgress.set(d.project_id, cur);
+      }
+    }
+
     return rows.map((r: any) => {
       const isInst = !!r.payee_instructor_id;
       const isComp = !!r.payee_company_id;
@@ -623,6 +644,7 @@ class SupabaseDataSource implements DataSource {
         clientName: r.projects?.clients?.name ?? undefined,
         // 구 지급확인 '입금/세발' 컬럼: 지급 판단에 필수인 프로젝트 수금·계산서 상태
         projectPaymentReceived: !!r.projects?.client_payment_received,
+        projectPaymentDistribution: distributionProgress.get(r.project_id),
         projectTaxInvoiceIssued: !!r.projects?.is_tax_invoice_issued,
         projectStartDate: r.projects?.session_1_date ?? undefined,
         payeeType: isInst ? '강사' : isComp ? '업체' : '기타',
@@ -667,7 +689,7 @@ class SupabaseDataSource implements DataSource {
   async getPaymentRequests(): Promise<PaymentRequest[]> {
     const { data, error } = await supabase
       .from('project_costs')
-      .select('*, projects(project_name, session_1_date, client_payment_received, is_tax_invoice_issued, clients(name))')
+      .select('*, projects(project_name, session_1_date, client_payment_received, is_tax_invoice_issued, group_type, clients(name))')
       // 카드/비지급 제외는 화면별 정책이 달라(예산탭=표시, 지급관리=제외) 프론트에서 필터한다
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -742,7 +764,7 @@ class SupabaseDataSource implements DataSource {
       await SupabaseDataSource.updateChecked('project_costs', dbPatch, { column: 'id', value: Number(id) }, '지급 정보 수정');
     }
     const { data: r, error: fetchErr } = await supabase
-      .from('project_costs').select('*, projects(project_name, session_1_date, client_payment_received, is_tax_invoice_issued, clients(name))').eq('id', Number(id)).maybeSingle();
+      .from('project_costs').select('*, projects(project_name, session_1_date, client_payment_received, is_tax_invoice_issued, group_type, clients(name))').eq('id', Number(id)).maybeSingle();
     if (fetchErr) throw fetchErr;
     if (!r) return undefined;
     const [built] = await this.buildPaymentRequests([r]);
