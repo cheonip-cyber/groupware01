@@ -28,7 +28,7 @@ export function GlobalSearch() {
     const out: { kind: string; label: string; sub: string; go: () => void }[] = [];
     for (const p of projects) {
       if (out.length >= 12) break;
-      if (`${p.projectName} ${p.clientName ?? ''}`.toLowerCase().includes(query))
+      if (`${p.projectName} ${p.clientName ?? ''} ${p.distributionClientNames?.join(' ') ?? ''}`.toLowerCase().includes(query))
         out.push({ kind: '프로젝트', label: p.projectName, sub: `${p.clientName ?? ''} · ${p.projectStatus}`, go: () => navigate(`/projects/${p.id}`) });
     }
     for (const c of clients) {
@@ -52,7 +52,7 @@ export function GlobalSearch() {
   const projectMatchCount = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (query.length < 2) return 0;
-    return projects.filter((p) => `${p.projectName} ${p.clientName ?? ''}`.toLowerCase().includes(query)).length;
+    return projects.filter((p) => `${p.projectName} ${p.clientName ?? ''} ${p.distributionClientNames?.join(' ') ?? ''}`.toLowerCase().includes(query)).length;
   }, [q, projects]);
 
   const goToAllResults = () => {

@@ -122,6 +122,9 @@ export interface Project extends NotionSyncFields {
   groupType?: 'distribution' | 'recurring' | 'merged';
   distributionRatio?: number;   // distribution 자식의 분배 비율(%)
   groupChildCount?: number;     // 마스터: 자식 수 (데이터 계층에서 계산)
+  /** 매출분배(distribution) 마스터 전용 — revenue_distributions의 계열사명 목록.
+      projects 테이블엔 별도 행이 없는 이름이라 검색 매칭용으로만 사용(2026-08-28). */
+  distributionClientNames?: string[];
   groupTotalAmount?: number;    // 마스터: 그룹 합계 금액 (데이터 계층에서 계산)
   distributions?: RevenueDistribution[]; // 마스터: 계열사 매출분배 목록 (group_type='distribution')
   effectiveAmount?: number;     // 통계용 유효 매출 — 자식이 금액을 가지면 마스터는 0 (이중계상 방지)

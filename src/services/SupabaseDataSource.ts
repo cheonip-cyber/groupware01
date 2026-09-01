@@ -277,11 +277,12 @@ class SupabaseDataSource implements DataSource {
     const distMasterIds = enriched.filter((p) => p.groupType === 'distribution' && p.isMaster).map((p) => Number(p.id));
     if (distMasterIds.length > 0) {
       const { data: dist } = await supabase.from('revenue_distributions')
-        .select('project_id, amount').in('project_id', distMasterIds);
-      const agg = new Map<number, { count: number; total: number }>();
+        .select('project_id, amount, client_name').in('project_id', distMasterIds);
+      const agg = new Map<number, { count: number; total: number; clients: string[] }>();
       for (const d of dist ?? []) {
-        const cur = agg.get(d.project_id) ?? { count: 0, total: 0 };
+        const cur = agg.get(d.project_id) ?? { count: 0, total: 0, clients: [] };
         cur.count += 1; cur.total += Number(d.amount ?? 0);
+        if (d.client_name) cur.clients.push(d.client_name);
         agg.set(d.project_id, cur);
       }
       for (const p of enriched) {
@@ -289,6 +290,10 @@ class SupabaseDataSource implements DataSource {
           const a = agg.get(Number(p.id));
           p.groupChildCount = a?.count ?? 0;
           p.groupTotalAmount = a?.total ?? 0;
+          // 2026-08-28 신설: '동원페이퍼' 같은 계열사명은 projects 테이블에 별도 행이 없어서
+          // (revenue_distributions 안에만 텍스트로 존재) 프로젝트 검색에서 전혀 안 걸리던
+          // 문제 — 검색 매칭용으로 마스터 프로젝트에 계열사명 목록을 붙여준다.
+          p.distributionClientNames = a?.clients ?? [];
         }
       }
     }

@@ -125,7 +125,7 @@ export const applyProjectFilters = (projects: Project[], f: ProjectFilterState):
   let out = projects.filter((p) => {
     if (f.search) {
       const q = f.search.toLowerCase();
-      const hay = `${p.projectName} ${p.clientName} ${p.courseName} ${p.managerName} ${p.topic}`.toLowerCase();
+      const hay = `${p.projectName} ${p.clientName} ${p.courseName} ${p.managerName} ${p.topic} ${p.distributionClientNames?.join(' ') ?? ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (!f.statuses.includes(p.projectStatus)) return false;
