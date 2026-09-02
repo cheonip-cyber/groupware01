@@ -100,8 +100,13 @@ function buildProject(row: any, clientName: string, managerName: string, costs: 
     }).filter(Boolean),
   )];
 
+  // 2026-09-01: 리포트/업무관리의 '세금계산서 미발행' 카드(taxPending)에는 이미 회차형(recurring)
+  // 마스터 제외 처리가 되어 있는데, 여기(위험 플래그, "riskFlags")에는 같은 제외가 빠져있어서
+  // 일관성이 없었음 — 회차형 마스터는 세금계산서를 하위 회차별로 처리하므로(RevenueTab에서도
+  // 마스터 입력 UI 자체를 숨김) 여기서도 동일하게 제외한다.
+  const isRecurringMaster = row.group_type === 'recurring' && !row.parent_id;
   const riskFlags: string[] = [];
-  if (!row.is_tax_invoice_issued && row.status === '보고/정산') riskFlags.push('세금계산서 미발행');
+  if (!row.is_tax_invoice_issued && row.status === '보고/정산' && !isRecurringMaster) riskFlags.push('세금계산서 미발행');
   if (row.status === '확정/준비' && costs.length === 0) riskFlags.push('지출 예산 미등록(예산/비용 탭)');
 
   return {
