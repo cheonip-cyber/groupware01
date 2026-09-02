@@ -1,12 +1,10 @@
-// notion-sync Edge Function (v32 - archive_notion_page callable by logged-in frontend users)
-// 변경점(v30→v31): 그룹웨어에서 프로젝트/강사를 삭제해도 노션 원본 페이지는 그대로 살아있으면,
-// 다음 pull 때 그 페이지가 다시 감지되어 "새 페이지"로 재생성(부활)되는 구조적 결함 발견
-// (2026-08-28, 사용자가 그룹웨어에서 삭제한 프로젝트가 다시 나타나는 걸 발견해 신고).
-// 원인: deleteProject()는 그룹웨어 DB만 지우고 노션 페이지는 안 건드림 → 노션 원본이 살아있는
-// 채로 남아 다음 동기화 때 notion_page_id로 기존 행을 못 찾아(이미 삭제됐으니) 새로 INSERT됨.
-// 수정: archive_notion_page 액션 신설 — 그룹웨어 삭제 직전에 프론트에서 이 액션을 먼저 호출해
-// 노션 페이지를 archived:true(휴지통)로 만든다. 이러면 이후 pull 쿼리 결과에서 자동 제외되어
-// 다시는 재생성되지 않는다.
+// notion-sync Edge Function (v33 - instructor-before-project pull order + unmatched instructor logging)
+// 변경점(v32→v33): 노션에서 신규 강사와 그 강사를 쓰는 신규/수정 프로젝트를 비슷한 시점에
+// 등록하면, pull_all이 project를 instructor보다 먼저 처리해서 프로젝트 pull 시점에 그 강사가
+// 아직 instructors 테이블에 없어 project_instructors 매칭이 조용히 누락되는 문제 발견
+// (2026-09-02, 강사섭외 3명 중 1명이 프로젝트 강사 목록/강사 섭외 현황에 안 보이는 걸 발견해 신고).
+// 수정: pull_all에서 instructor를 project보다 먼저 pull. syncProjectInstructors()에 매칭
+// 실패한 강사가 있으면 notion_sync_log에 남기도록 개선(향후 재발 시 빠른 발견용).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const RECENT_RELINK_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30일
@@ -248,9 +246,18 @@ async function syncProjectInstructors(projectRowId: number, instructorPageIds: s
     if (instructorPageIds.length > 0) {
       const { data: rows } = await supabase
         .from('instructors')
-        .select('id')
+        .select('id, notion_page_id')
         .in('notion_page_id', instructorPageIds);
       instructorIds = (rows ?? []).map((r: any) => r.id);
+      // 2026-09-02 신설: 노션 강사섭외에 있는데 instructors 테이블에 아직 없는(=강사 엔티티
+      // 자체가 아직 동기화 안 된) 페이지가 있으면 조용히 누락시키지 않고 로그로 남긴다 —
+      // 실제로 이 케이스로 강사 3명 중 1명이 프로젝트에서 빠지는 문제가 있었음(2026-09-02).
+      const matchedPageIds = new Set((rows ?? []).map((r: any) => r.notion_page_id));
+      const unmatched = instructorPageIds.filter((id) => !matchedPageIds.has(id));
+      if (unmatched.length > 0) {
+        await logSync('project', projectRowId, 'from_notion', 'error',
+          `강사섭외 중 ${unmatched.length}명이 아직 instructors에 동기화되지 않아 연결 누락(다음 강사 pull 후 재동기화 필요): ${unmatched.join(', ')}`);
+      }
     }
     await supabase.from('project_instructors').delete().eq('project_id', projectRowId);
     if (instructorIds.length > 0) {
@@ -647,8 +654,14 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
     }
     if (action === 'pull_all') {
+      // 2026-09-02 수정: project를 instructor보다 먼저 pull하면, 노션에서 신규 강사와 그 강사를
+      // 쓰는 신규 프로젝트를 동시에(또는 비슷한 시점에) 등록했을 때 프로젝트 pull 시점에 그
+      // 강사가 아직 instructors 테이블에 없어 project_instructors 매칭이 조용히 누락되는
+      // 문제가 있었음(실제 사례로 확인: 노션 강사섭외 3명 중 1명이 매칭 실패). instructor를
+      // 먼저 pull해서 이 레이스 컨디션을 줄인다.
+      const order = ['instructor', 'project', ...Object.keys(ENTITY_CONFIG).filter((k) => k !== 'instructor' && k !== 'project')];
       const results = [];
-      for (const et of Object.keys(ENTITY_CONFIG)) results.push(await pullEntity(et));
+      for (const et of order) results.push(await pullEntity(et));
       return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
     }
     if (action === 'archive_notion_page') {
