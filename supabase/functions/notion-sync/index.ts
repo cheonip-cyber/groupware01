@@ -249,14 +249,37 @@ async function syncProjectInstructors(projectRowId: number, instructorPageIds: s
         .select('id, notion_page_id')
         .in('notion_page_id', instructorPageIds);
       instructorIds = (rows ?? []).map((r: any) => r.id);
-      // 2026-09-02 신설: 노션 강사섭외에 있는데 instructors 테이블에 아직 없는(=강사 엔티티
-      // 자체가 아직 동기화 안 된) 페이지가 있으면 조용히 누락시키지 않고 로그로 남긴다 —
-      // 실제로 이 케이스로 강사 3명 중 1명이 프로젝트에서 빠지는 문제가 있었음(2026-09-02).
+
       const matchedPageIds = new Set((rows ?? []).map((r: any) => r.notion_page_id));
       const unmatched = instructorPageIds.filter((id) => !matchedPageIds.has(id));
+      // 2026-09-02 신설(1차): notion_page_id로 매칭 안 되면 조용히 누락시키지 않고 로그로 남김.
+      // 2026-09-02 신설(2차, 근본 보강): 노션 강사 DB에 동명이인/중복 페이지가 실제로 31건
+      // 발견됨(예: "반병현" 페이지가 2개 — 하나는 정보가 상세한 진짜 프로필, 하나는 거의 빈
+      // 페이지인데 그룹웨어와는 하필 빈 쪽이 연결되어 있었음). notion_page_id 매칭이 실패한
+      // 페이지는 그 노션 페이지의 제목(이름)을 가져와서 instructors.name으로 재시도 매칭한다
+      // — 완벽한 해법은 아니지만(진짜 동명이인이면 오매칭 가능), 화면에는 어차피 이름만
+      // 보여지므로 실무적으로 "그 강사가 프로젝트에서 안 보이는" 문제를 크게 줄여준다.
       if (unmatched.length > 0) {
-        await logSync('project', projectRowId, 'from_notion', 'error',
-          `강사섭외 중 ${unmatched.length}명이 아직 instructors에 동기화되지 않아 연결 누락(다음 강사 pull 후 재동기화 필요): ${unmatched.join(', ')}`);
+        const fallbackIds: number[] = [];
+        const stillUnmatched: string[] = [];
+        for (const pageId of unmatched) {
+          try {
+            const name = (await fetchPageTitle(pageId)).trim();
+            if (!name) { stillUnmatched.push(pageId); continue; }
+            const { data: byName } = await supabase.from('instructors').select('id').eq('name', name).limit(1);
+            if (byName && byName.length > 0) fallbackIds.push(byName[0].id);
+            else stillUnmatched.push(pageId);
+          } catch { stillUnmatched.push(pageId); }
+        }
+        instructorIds = [...new Set([...instructorIds, ...fallbackIds])];
+        if (fallbackIds.length > 0) {
+          await logSync('project', projectRowId, 'from_notion', 'success',
+            `강사섭외 중 ${fallbackIds.length}명을 notion_page_id 불일치(동명이인/중복 노션 페이지 추정)로 이름 기준 재매칭함`);
+        }
+        if (stillUnmatched.length > 0) {
+          await logSync('project', projectRowId, 'from_notion', 'error',
+            `강사섭외 중 ${stillUnmatched.length}명이 이름으로도 매칭 안 되어 연결 누락(신규 강사일 수 있음, 다음 강사 pull 후 재동기화 필요): ${stillUnmatched.join(', ')}`);
+        }
       }
     }
     await supabase.from('project_instructors').delete().eq('project_id', projectRowId);
