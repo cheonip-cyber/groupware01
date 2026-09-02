@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../../services/supabaseClient';
 import { useAuth } from '../../auth/AuthContext';
 import { Card, CardHeader } from '../common/Card';
-import { Mic, MessageSquare, MessageSquareText } from 'lucide-react';
+import { Mic, MessageSquare, MessageSquareText, Search } from 'lucide-react';
 
 // 강사 섭외 현황 (2026-08-19 신설, 2026-08-21 표 형태로 전면 재구성)
 // — 노션 "강사섭외" 관계형 필드를 groupware.project_instructors 정션 테이블로 동기화한 결과를
@@ -69,6 +69,11 @@ export function InstructorEngagementStatus() {
   const [memoSaving, setMemoSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 2026-09-01 신설: 강사/프로젝트 검색 + 상태 태그별 보기 토글.
+  // 상태 필터는 "기본 전체 활성화(전부 표시), 클릭하면 그 상태만 숨김" 방식 —
+  // hiddenStatuses에 담긴 상태만 목록에서 제외한다(빈 Set이면 전체 표시).
+  const [search, setSearch] = useState('');
+  const [hiddenStatuses, setHiddenStatuses] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -142,9 +147,26 @@ export function InstructorEngagementStatus() {
     setOpenMemoKey(null);
   };
 
+  // 실데이터에 실제로 존재하는 상태만 버튼으로 노출(정의되어 있어도 지금 아무도 없으면 안 보임)
+  const availableStatuses = [...new Set(rows.map((r) => r.project_status ?? '미지정'))];
+  const toggleStatus = (status: string) => {
+    setHiddenStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status); else next.add(status);
+      return next;
+    });
+  };
+
+  const q = search.trim().toLowerCase();
+  const filteredRows = rows.filter((r) => {
+    if (hiddenStatuses.has(r.project_status ?? '미지정')) return false;
+    if (q && !`${r.instructor_name} ${r.project_name}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   // 강사별 그룹핑 (뷰가 이미 강사명순 정렬되어 있어 순서만 보존) — rowSpan에 사용
   const grouped: { instructorId: number; instructorName: string; items: EngagementRow[] }[] = [];
-  for (const row of rows) {
+  for (const row of filteredRows) {
     const last = grouped[grouped.length - 1];
     if (last && last.instructorName === row.instructor_name) last.items.push(row);
     else grouped.push({ instructorId: row.instructor_id, instructorName: row.instructor_name, items: [row] });
@@ -154,12 +176,36 @@ export function InstructorEngagementStatus() {
     <Card>
       <CardHeader title="강사 섭외 현황" icon={<Mic className="h-4 w-4 text-slate-400" />}
         action={<span className="text-[11px] text-slate-400">지급완료 건 제외 · 강사순</span>} />
+      {!loading && !error && rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-50 px-5 pb-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-300" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="강사·프로젝트 검색"
+              className="w-52 rounded-lg border border-slate-200 py-1.5 pl-7 pr-2 text-xs outline-none focus:border-blue-400" />
+          </div>
+          <span className="h-4 w-px bg-slate-200" />
+          {availableStatuses.map((status) => {
+            const active = !hiddenStatuses.has(status);
+            return (
+              <button key={status} onClick={() => toggleStatus(status)}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  active ? (STATUS_COLOR[status] ?? 'bg-slate-100 text-slate-600') : 'bg-slate-50 text-slate-300 line-through'
+                }`}>
+                {status}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {loading ? (
         <div className="px-5 pb-4 text-sm text-slate-400">불러오는 중...</div>
       ) : error ? (
         <div className="px-5 pb-4 text-sm text-red-500">불러오기 실패: {error}</div>
       ) : grouped.length === 0 ? (
-        <div className="px-5 pb-4 text-sm text-slate-400">표시할 항목이 없습니다.</div>
+        <div className="px-5 pb-4 text-sm text-slate-400">
+          {rows.length === 0 ? '표시할 항목이 없습니다.' : '검색·필터 조건에 맞는 항목이 없습니다.'}
+        </div>
       ) : (
         <div className="px-2 pb-2">
           <table className="w-full border-collapse text-sm">
