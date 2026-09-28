@@ -92,12 +92,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!trimmed.endsWith(ALLOWED_DOMAIN)) {
       return { error: `회사 이메일(${ALLOWED_DOMAIN})로만 로그인할 수 있습니다.` };
     }
-    // shouldCreateUser: false — 등록되지 않은 주소로는 계정이 새로 만들어지지 않는다.
-    // (도메인 검사만으로는 부족하다. 회사 도메인 형태의 아무 주소나 넣어도 계정이 생기면 안 되며,
-    //  최종 차단은 DB 트리거 handle_new_auth_user 에서도 이중으로 이뤄진다.)
+    // 2026-09-28 수정: 기존엔 shouldCreateUser:false 하나로 미등록 주소를 막았는데, 이러면 '등록은 됐지만
+    // 아직 계정이 없는 신규 입사자'의 첫 로그인까지 막혀버렸다(8/1 보안 강화 이후 첫 신규 입사자에서 발견).
+    // 그래서 ① 등록(allowed_signups) 또는 기존 사용자인지 DB 함수로 먼저 확인해 미등록 주소는 메일 발송 없이
+    // 차단하고, ② 등록된 주소만 shouldCreateUser:true 로 첫 로그인 시 계정 생성을 허용한다.
+    // 그룹웨어 사용자 행 생성/권한 부여는 그대로 DB 트리거 handle_new_auth_user 가 사전 등록 명단 기준으로 처리한다.
+    const { data: allowed, error: checkError } = await supabase.rpc('can_request_login', { p_email: trimmed });
+    if (checkError) return { error: checkError.message };
+    if (!allowed) return { error: '등록되지 않은 계정입니다. 관리자에게 계정 등록을 요청해주세요.' };
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
     });
     if (error) {
       // 미등록 주소는 Supabase가 'Signups not allowed for otp' 계열 메시지를 반환한다 — 사유를 알기 쉽게 바꿔준다
