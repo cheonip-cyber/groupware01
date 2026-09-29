@@ -250,6 +250,24 @@ export function AdminCardPage() {
     } finally { setAddingUser(false); }
   };
 
+  // 카드앱 사용자 삭제 — card_transactions.user_id가 app_users.id를 참조하는 외래키라
+  // 사용 내역이 하나라도 있으면 DB가 삭제를 거부한다. 원시 FK 오류를 그대로 보여주지 않고,
+  // 먼저 내역 건수를 확인해 있으면 명확한 안내로 막는다(2026-09-28).
+  const removeAppUser = async (u: AppUser) => {
+    const { count, error: cntErr } = await cardSupabase.from('card_transactions')
+      .select('id', { count: 'exact', head: true }).eq('user_id', u.id);
+    if (cntErr) { toast.error(`확인 실패: ${cntErr.message}`); return; }
+    if ((count ?? 0) > 0) {
+      toast.error(`'${u.name}'의 카드 사용내역이 ${count}건 있어 삭제할 수 없습니다. 내역을 먼저 정리해야 합니다.`);
+      return;
+    }
+    if (!await dialog.confirm(`'${u.name}'을(를) 카드앱 사용자 목록에서 삭제할까요?`, { tone: 'danger', confirmText: '삭제' })) return;
+    const { error: err } = await cardSupabase.from('app_users').delete().eq('id', u.id);
+    if (err) { toast.error(`삭제 실패: ${err.message}`); return; }
+    setAppUsers((prev) => prev.filter((x) => x.id !== u.id));
+    toast.success(`'${u.name}'을(를) 삭제했습니다`);
+  };
+
   // 카드앱에 보여지는 노출 순서 변경 — 인접한 사용자와 display_order를 맞바꾼다.
   const moveAppUser = async (idx: number, dir: -1 | 1) => {
     const target = idx + dir;
@@ -303,6 +321,10 @@ export function AdminCardPage() {
                   <button onClick={() => moveAppUser(idx, 1)} disabled={idx === appUsers.length - 1}
                     className="rounded p-0.5 text-slate-400 hover:bg-slate-200 disabled:opacity-30" title="뒤로">
                     <ArrowDown className="h-3 w-3" />
+                  </button>
+                  <button onClick={() => removeAppUser(u)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-500" title="삭제">
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </span>
               </span>
