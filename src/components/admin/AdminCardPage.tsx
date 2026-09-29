@@ -43,6 +43,12 @@ export function AdminCardPage() {
   const [error, setError] = useState<string | null>(null);
   const [cardTxns, setCardTxns] = useState<CardTxn[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  // 2026-09-28 수정: 이름을 직접 입력해서 ilike로 그룹웨어 계정과 '추정 매칭'하던 방식은
+  // 표기 차이(예: '이도용' vs 'Daren')로 조용히 실패할 위험이 있었음 — 계정관리에 등록된
+  // 그룹웨어 로그인 사용자 목록을 직접 보여주고 그중에서 고르게 해 매칭을 확정적으로 만든다.
+  const [gwUsers, setGwUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [newUserSource, setNewUserSource] = useState<'gw' | 'none'>('gw'); // 'none' = Team처럼 인물이 아닌 항목
+  const [selectedGwUserId, setSelectedGwUserId] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -71,16 +77,18 @@ export function AdminCardPage() {
       }
       // 판관비(manual_expenses)·고정비 정의는 각각 판관비 관리·경영 현황에서 관리한다.
       // 이 화면은 카드 거래 전용이므로 불필요한 조회를 하지 않는다. (2026-08-03 화면 역할 정리)
-      const [txnRes, catRes, userRes, appUserRes] = await Promise.all([
+      const [txnRes, catRes, userRes, appUserRes, gwUserRes] = await Promise.all([
         txnQuery,
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
         cardSupabase.from('app_users').select('id, name, display_order, groupware_user_id').order('display_order', { ascending: true, nullsFirst: false }),
+        supabase.from('users').select('id, name, email').eq('is_active', true).order('name'),
       ]);
       if (txnRes.error) throw txnRes.error;
       if (userRes.error) throw userRes.error;
       if (appUserRes.error) throw appUserRes.error;
       setAppUsers(appUserRes.data ?? []);
+      if (!gwUserRes.error) setGwUsers(gwUserRes.data ?? []);
 
       const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
       const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
@@ -216,27 +224,27 @@ export function AdminCardPage() {
     toast.success('카드 내역이 삭제되었습니다');
   };
 
-  // 2026-09-28 신설: 카드 사용자 등록 — 성명만 입력하면 groupware_user_id는 메인 그룹웨어
-  // 계정명과 자동 매칭(대소문자 무관 일치)하고, 못 찾으면 비워둔다(기존 "Team"처럼 인물이 아닌
-  // 항목도 있어 매칭 실패가 오류는 아님). 노출 순서(display_order)는 맨 끝에 추가.
+  // 2026-09-28 수정: 이름 추정 매칭(ilike) 대신, 등록된 그룹웨어 로그인 사용자 목록에서
+  // 직접 고르게 해 매칭을 확정한다. 인물이 아닌 항목(예: Team류)은 '연결 안 함'을 고르면
+  // 기존처럼 groupware_user_id 없이 이름만으로 등록된다.
+  const alreadyLinkedIds = new Set(appUsers.map((u) => u.groupware_user_id).filter(Boolean));
   const addAppUser = async () => {
-    const name = newUserName.trim();
+    const isGw = newUserSource === 'gw';
+    const gwUser = isGw ? gwUsers.find((u) => u.id === selectedGwUserId) : null;
+    if (isGw && !gwUser) { toast.error('그룹웨어 계정을 선택하세요'); return; }
+    const name = (isGw ? (gwUser!.name || gwUser!.email.split('@')[0]) : newUserName).trim();
     if (!name) { toast.error('이름을 입력하세요'); return; }
     if (appUsers.some((u) => u.name.toLowerCase() === name.toLowerCase())) { toast.error('이미 등록된 이름입니다'); return; }
     setAddingUser(true);
     try {
-      const { data: matched } = await supabase.from('users').select('id').ilike('name', name).limit(1);
-      const groupwareUserId = matched?.[0]?.id ?? null;
       const nextOrder = (appUsers.reduce((max, u) => Math.max(max, u.display_order ?? 0), 0)) + 1;
       const { data, error: err } = await cardSupabase.from('app_users')
-        .insert({ name, groupware_user_id: groupwareUserId, display_order: nextOrder })
+        .insert({ name, groupware_user_id: gwUser?.id ?? null, display_order: nextOrder })
         .select('id, name, display_order, groupware_user_id').single();
       if (err) throw err;
       setAppUsers((prev) => [...prev, data as AppUser]);
-      setNewUserName('');
-      toast.success(groupwareUserId
-        ? `'${name}' 등록 완료 — 그룹웨어 계정과 자동 연결됨`
-        : `'${name}' 등록 완료 — 동일 이름의 그룹웨어 계정을 찾지 못해 미연결 상태입니다`);
+      setNewUserName(''); setSelectedGwUserId('');
+      toast.success(gwUser ? `'${name}' 등록 완료 — ${gwUser.email} 계정과 연결됨` : `'${name}' 등록 완료(그룹웨어 계정 미연결)`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '등록하지 못했습니다');
     } finally { setAddingUser(false); }
@@ -285,7 +293,7 @@ export function AdminCardPage() {
               <span key={u.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-xs text-slate-700">
                 {u.name}
                 {!u.groupware_user_id && u.name !== 'Team' && (
-                  <span className="text-[10px] text-amber-500" title="동일 이름의 그룹웨어 계정을 찾지 못해 미연결 상태">미연결</span>
+                  <span className="text-[10px] text-slate-400" title="그룹웨어 계정과 연결되지 않은 항목">계정 미연결</span>
                 )}
                 <span className="ml-0.5 flex">
                   <button onClick={() => moveAppUser(idx, -1)} disabled={idx === 0}
@@ -300,9 +308,24 @@ export function AdminCardPage() {
               </span>
             ))}
           </div>
-          <form onSubmit={(e) => { e.preventDefault(); addAppUser(); }} className="flex gap-1.5 pt-1">
-            <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)} placeholder="이름 (예: 홍길동)"
-              className="w-48 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400" />
+          <form onSubmit={(e) => { e.preventDefault(); addAppUser(); }} className="flex flex-wrap items-center gap-1.5 pt-1">
+            <select value={newUserSource} onChange={(e) => { setNewUserSource(e.target.value as 'gw' | 'none'); setSelectedGwUserId(''); setNewUserName(''); }}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+              <option value="gw">그룹웨어 계정에서 선택</option>
+              <option value="none">계정 연결 안 함(Team류)</option>
+            </select>
+            {newUserSource === 'gw' ? (
+              <select value={selectedGwUserId} onChange={(e) => setSelectedGwUserId(e.target.value)}
+                className="w-56 rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none">
+                <option value="">-- 사용자 선택 --</option>
+                {gwUsers.filter((u) => !alreadyLinkedIds.has(u.id)).map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                ))}
+              </select>
+            ) : (
+              <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)} placeholder="이름 (예: Team)"
+                className="w-40 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400" />
+            )}
             <button type="submit" disabled={addingUser}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
               {addingUser ? '등록 중…' : '등록'}
