@@ -110,7 +110,13 @@ export function AdminUsersPage() {
   }
 
   const inputCls = 'rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400';
-  const pending = allowed.filter((a) => !a.used_at);
+  // 2026-09-28 수정: used_at만 보고 '대기중' 판정하면, allowed_signups 도입(8/1) 이전에
+  // 이미 계정이 만들어진 사람(예: doyong, gia — 7/8 생성, 8/3에 뒤늦게 allowed_signups에도
+  // 등록됨)이 실제로는 매일 로그인 중인데도 영원히 대기 목록에 남는다 — used_at은 신규 가입
+  // 시점에 트리거가 채우는데, 이미 계정이 있던 사람은 그 트리거가 다시 실행될 일이 없기 때문.
+  // users 목록에 이미 같은 이메일 계정이 있으면 대기 목록에서 제외한다.
+  const registeredEmails = new Set(users.map((u) => u.email.toLowerCase()));
+  const pending = allowed.filter((a) => !a.used_at && !registeredEmails.has(a.email.toLowerCase()));
 
   return (
     <div className="space-y-4">
