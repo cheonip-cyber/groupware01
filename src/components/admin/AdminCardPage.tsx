@@ -89,6 +89,7 @@ export function AdminCardPage() {
       if (appUserRes.error) throw appUserRes.error;
       setAppUsers(appUserRes.data ?? []);
       if (!gwUserRes.error) setGwUsers(gwUserRes.data ?? []);
+      else toast.error(`그룹웨어 계정 목록을 불러오지 못했습니다: ${gwUserRes.error.message}`);
 
       const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
       const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
