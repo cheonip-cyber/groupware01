@@ -117,7 +117,11 @@ export function AdminCardPage() {
   useEffect(() => { load(); }, [month]);
 
   const categories = useMemo(() => [...new Set(cardTxns.map((t) => t.category_name ?? '미분류'))], [cardTxns]);
-  const users = useMemo(() => [...new Set(cardTxns.map((t) => t.user_name ?? '미지정'))], [cardTxns]);
+  // 2026-09-29 수정: 기존엔 '현재 로드된 거래내역에 등장한 이름'만 추출해서, 신규 등록했지만
+  // 아직 카드를 한 번도 안 쓴 사람(또는 이번 달엔 안 썼지만 예전엔 쓴 사람)이 검색 드롭다운에서
+  // 아예 사라지는 문제가 있었음(cjk 사례로 발견). 등록된 전체 카드앱 사용자 명단(appUsers) 기준으로
+  // 바꿔, 거래 유무와 무관하게 항상 검색·필터할 수 있게 한다.
+  const users = useMemo(() => appUsers.map((u) => u.name), [appUsers]);
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
     return cardTxns.filter((t) => {
