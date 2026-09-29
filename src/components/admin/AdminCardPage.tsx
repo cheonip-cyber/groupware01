@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cardSupabase } from '../../services/cardSupabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { Card, CardHeader } from '../common/Card';
 import { MoneyText } from '../common/MoneyText';
 import { useToast } from '../common/toast';
 import { YearMonthPicker } from '../common/YearMonthPicker';
 import { EmptyState } from '../common/EmptyState';
 import { formatDate } from '../../utils/formatters';
-import { CreditCard, RefreshCw, AlertTriangle, Search, Trash2 } from 'lucide-react';
+import { CreditCard, RefreshCw, AlertTriangle, Search, Trash2, UserPlus, ArrowUp, ArrowDown } from 'lucide-react';
 import { useDialog } from '../common/dialog';
 
 interface CardTxn {
@@ -21,6 +22,17 @@ interface CardTxn {
   project_linked?: boolean;
 }
 
+// 카드앱(별도 외부 앱)에 노출되는 사용자 목록 — CARD 프로젝트 app_users 테이블.
+// 2026-09-28 신설: display_order 컬럼으로 노출 순서 관리. 이 관리자 화면에서 등록/순서변경한
+// 내용은 DB에는 즉시 반영되지만, 실제 화면 순서가 바뀌려면 카드앱(이 저장소 밖의 별도 앱) 쪽에서도
+// app_users를 display_order 기준으로 정렬해 보여줘야 한다 — 그 앱은 이 코드베이스에 없어 확인 불가.
+interface AppUser {
+  id: number;
+  name: string;
+  display_order: number | null;
+  groupware_user_id: string | null;
+}
+
 // 프로젝트 원가와 중복 계상될 수 있는 카테고리(이전 실데이터 분석에서 확인됨)
 const DUPLICATE_RISK_KEYWORD = '플젝중복';
 
@@ -30,6 +42,9 @@ export function AdminCardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cardTxns, setCardTxns] = useState<CardTxn[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
+  const [newUserName, setNewUserName] = useState('');
+  const [addingUser, setAddingUser] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [userFilter, setUserFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -56,13 +71,16 @@ export function AdminCardPage() {
       }
       // 판관비(manual_expenses)·고정비 정의는 각각 판관비 관리·경영 현황에서 관리한다.
       // 이 화면은 카드 거래 전용이므로 불필요한 조회를 하지 않는다. (2026-08-03 화면 역할 정리)
-      const [txnRes, catRes, userRes] = await Promise.all([
+      const [txnRes, catRes, userRes, appUserRes] = await Promise.all([
         txnQuery,
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
+        cardSupabase.from('app_users').select('id, name, display_order, groupware_user_id').order('display_order', { ascending: true, nullsFirst: false }),
       ]);
       if (txnRes.error) throw txnRes.error;
       if (userRes.error) throw userRes.error;
+      if (appUserRes.error) throw appUserRes.error;
+      setAppUsers(appUserRes.data ?? []);
 
       const catMap = new Map((catRes.data ?? []).map((c: any) => [c.id, c.name]));
       const userMap = new Map((userRes.data ?? []).map((u: any) => [u.id, u.name]));
@@ -198,6 +216,54 @@ export function AdminCardPage() {
     toast.success('카드 내역이 삭제되었습니다');
   };
 
+  // 2026-09-28 신설: 카드 사용자 등록 — 성명만 입력하면 groupware_user_id는 메인 그룹웨어
+  // 계정명과 자동 매칭(대소문자 무관 일치)하고, 못 찾으면 비워둔다(기존 "Team"처럼 인물이 아닌
+  // 항목도 있어 매칭 실패가 오류는 아님). 노출 순서(display_order)는 맨 끝에 추가.
+  const addAppUser = async () => {
+    const name = newUserName.trim();
+    if (!name) { toast.error('이름을 입력하세요'); return; }
+    if (appUsers.some((u) => u.name.toLowerCase() === name.toLowerCase())) { toast.error('이미 등록된 이름입니다'); return; }
+    setAddingUser(true);
+    try {
+      const { data: matched } = await supabase.from('users').select('id').ilike('name', name).limit(1);
+      const groupwareUserId = matched?.[0]?.id ?? null;
+      const nextOrder = (appUsers.reduce((max, u) => Math.max(max, u.display_order ?? 0), 0)) + 1;
+      const { data, error: err } = await cardSupabase.from('app_users')
+        .insert({ name, groupware_user_id: groupwareUserId, display_order: nextOrder })
+        .select('id, name, display_order, groupware_user_id').single();
+      if (err) throw err;
+      setAppUsers((prev) => [...prev, data as AppUser]);
+      setNewUserName('');
+      toast.success(groupwareUserId
+        ? `'${name}' 등록 완료 — 그룹웨어 계정과 자동 연결됨`
+        : `'${name}' 등록 완료 — 동일 이름의 그룹웨어 계정을 찾지 못해 미연결 상태입니다`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '등록하지 못했습니다');
+    } finally { setAddingUser(false); }
+  };
+
+  // 카드앱에 보여지는 노출 순서 변경 — 인접한 사용자와 display_order를 맞바꾼다.
+  const moveAppUser = async (idx: number, dir: -1 | 1) => {
+    const target = idx + dir;
+    if (target < 0 || target >= appUsers.length) return;
+    const a = appUsers[idx], b = appUsers[target];
+    const aOrder = a.display_order ?? idx + 1, bOrder = b.display_order ?? target + 1;
+    const reordered = [...appUsers];
+    [reordered[idx], reordered[target]] = [
+      { ...b, display_order: aOrder }, { ...a, display_order: bOrder },
+    ];
+    setAppUsers(reordered); // 낙관적 반영
+    const [r1, r2] = await Promise.all([
+      cardSupabase.from('app_users').update({ display_order: aOrder }).eq('id', b.id),
+      cardSupabase.from('app_users').update({ display_order: bOrder }).eq('id', a.id),
+    ]);
+    if (r1.error || r2.error) {
+      setAppUsers(appUsers); // 실패 시 원복
+      toast.error(`순서 변경 실패: ${(r1.error ?? r2.error)?.message}`);
+    }
+  };
+
+
   if (loading) return <div className="py-20 text-center text-slate-400">불러오는 중…</div>;
   if (error) return <div className="py-20 text-center text-sm text-red-500">CARD DB 연결 오류: {error}</div>;
 
@@ -209,6 +275,41 @@ export function AdminCardPage() {
           <RefreshCw className="h-3.5 w-3.5" /> 새로고침
         </button>
       </div>
+
+      <Card>
+        <CardHeader title="카드 사용자 관리" icon={<UserPlus className="h-4 w-4 text-slate-400" />}
+          action={<span className="text-[11px] text-slate-400">카드앱에 보여지는 이름 · 순서는 위 화살표로 변경</span>} />
+        <div className="space-y-2 p-4">
+          <div className="flex flex-wrap gap-1.5">
+            {appUsers.map((u, idx) => (
+              <span key={u.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-xs text-slate-700">
+                {u.name}
+                {!u.groupware_user_id && u.name !== 'Team' && (
+                  <span className="text-[10px] text-amber-500" title="동일 이름의 그룹웨어 계정을 찾지 못해 미연결 상태">미연결</span>
+                )}
+                <span className="ml-0.5 flex">
+                  <button onClick={() => moveAppUser(idx, -1)} disabled={idx === 0}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-200 disabled:opacity-30" title="앞으로">
+                    <ArrowUp className="h-3 w-3" />
+                  </button>
+                  <button onClick={() => moveAppUser(idx, 1)} disabled={idx === appUsers.length - 1}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-200 disabled:opacity-30" title="뒤로">
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </span>
+              </span>
+            ))}
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); addAppUser(); }} className="flex gap-1.5 pt-1">
+            <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)} placeholder="이름 (예: 홍길동)"
+              className="w-48 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400" />
+            <button type="submit" disabled={addingUser}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              {addingUser ? '등록 중…' : '등록'}
+            </button>
+          </form>
+        </div>
+      </Card>
 
       {duplicateRiskTxns.length > 0 && (
         <Card className="border-amber-200 bg-amber-50">
