@@ -79,7 +79,15 @@ export function AdminCardPage() {
           if (month) {
             const [y, m] = month.split('-').map(Number);
             const from = `${month}-01`;
-            const to = new Date(y, m, 1).toISOString().slice(0, 10); // 다음 달 1일(미포함)
+            // 2026-09-30 수정: new Date(y, m, 1).toISOString()은 로컬 타임존(KST, UTC+9) 기준
+            // 자정을 UTC로 변환하면서 9시간이 앞당겨져("10월 1일 00시 KST" -> "9월 30일 15시 UTC"),
+            // slice(0,10)로 자르면 '다음 달 1일'이 아니라 '이번 달 30일'이 되어버림. 그 결과
+            // lt() 경계가 하루 당겨져서 매달 마지막 날 데이터가 통째로 조회에서 빠지고 있었다
+            // (실제로 9/30 데이터가 하나도 안 보이는 걸로 발견). 타임존이 절대 개입하지 않는
+            // 순수 문자열 연산으로 '다음 달 1일'을 직접 계산한다.
+            const nextY = m === 12 ? y + 1 : y;
+            const nextM = m === 12 ? 1 : m + 1;
+            const to = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
             q = q.gte('transaction_date', from).lt('transaction_date', to);
           }
           const { data, error: err } = await q;
