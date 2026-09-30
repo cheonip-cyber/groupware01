@@ -65,20 +65,34 @@ export function AdminCardPage() {
     try {
       // 선택한 월을 서버 조회 조건으로 넘긴다.
       // 예전에는 전체에서 최신 200건만 받아와, 최근 몇 달치에서 잘려 그 이전 월이 아예 표시되지 않았다.
-      let txnQuery = cardSupabase.from('card_transactions').select('*').eq('status', 'active')
-        .order('transaction_date', { ascending: false });
-      if (month) {
-        const [y, m] = month.split('-').map(Number);
-        const from = `${month}-01`;
-        const to = new Date(y, m, 1).toISOString().slice(0, 10); // 다음 달 1일(미포함)
-        txnQuery = txnQuery.gte('transaction_date', from).lt('transaction_date', to);
-      } else {
-        txnQuery = txnQuery.limit(2000); // '전체' 선택 시 상한(현재 778건)
-      }
+      // 2026-09-29 수정: 특정 월을 선택했을 때 이 쿼리에 명시적 limit이 전혀 없어서, 한 달 건수가
+      // Supabase 프로젝트의 기본 응답 상한을 넘으면(실제로 99건 이후가 안 보이는 문제로 발견) 뒷부분이
+      // 조용히 잘려나갔다. range()로 페이지를 끝까지 순회해 전량을 받아오도록 근본적으로 고친다
+      // ('전체' 선택 시의 기존 limit(2000)도 향후 2000건을 넘길 미래를 대비해 동일하게 페이지네이션으로 교체).
+      const fetchAllTxns = async () => {
+        const PAGE = 1000;
+        const all: any[] = [];
+        for (let page = 0; ; page++) {
+          let q = cardSupabase.from('card_transactions').select('*').eq('status', 'active')
+            .order('transaction_date', { ascending: false })
+            .range(page * PAGE, page * PAGE + PAGE - 1);
+          if (month) {
+            const [y, m] = month.split('-').map(Number);
+            const from = `${month}-01`;
+            const to = new Date(y, m, 1).toISOString().slice(0, 10); // 다음 달 1일(미포함)
+            q = q.gte('transaction_date', from).lt('transaction_date', to);
+          }
+          const { data, error: err } = await q;
+          if (err) return { data: null, error: err };
+          all.push(...(data ?? []));
+          if (!data || data.length < PAGE) break; // 이 페이지가 꽉 안 찼으면 마지막 페이지
+        }
+        return { data: all, error: null };
+      };
       // 판관비(manual_expenses)·고정비 정의는 각각 판관비 관리·경영 현황에서 관리한다.
       // 이 화면은 카드 거래 전용이므로 불필요한 조회를 하지 않는다. (2026-08-03 화면 역할 정리)
       const [txnRes, catRes, userRes, appUserRes, gwUserRes] = await Promise.all([
-        txnQuery,
+        fetchAllTxns(),
         cardSupabase.from('expense_categories').select('*'),
         cardSupabase.from('app_users').select('id, name'),
         cardSupabase.from('app_users').select('id, name, display_order, groupware_user_id').order('display_order', { ascending: true, nullsFirst: false }),
